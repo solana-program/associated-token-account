@@ -1,0 +1,28 @@
+{
+  "private": true,
+  "scripts": {
+    "programs:build": "zx ./scripts/rust/build-sbf.mjs program",
+    "programs:test": "zx ./scripts/rust/test-sbf.mjs program",
+    "programs:format": "zx ./scripts/rust/format.mjs program",
+    "programs:lint": "zx ./scripts/rust/lint.mjs program",
+    "interface:test": "zx ./scripts/rust/test.mjs interface",
+    "interface:format": "zx ./scripts/rust/format.mjs interface",
+    "interface:lint": "zx ./scripts/rust/lint.mjs interface",
+    "template:upgrade": "zx ./scripts/upgrade-template.mjs",
+    "rust:spellcheck": "cargo spellcheck --code 1",
+    "rust:audit": "zx ./scripts/rust/audit.mjs",
+    "rust:semver": "cargo semver-checks"
+  },
+  "devDependencies": {
+    "@codama/renderers-js": "^1.1.0",
+    "@codama/renderers-rust": "^1.0.4",
+    "@iarna/toml": "^2.2.5",
+    "codama": "^1.1.0",
+    "typescript": "^5.7.2",
+    "zx": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=v20.0.0"
+  },
+  "packageManager": "pnpm@9.1.0"
+}

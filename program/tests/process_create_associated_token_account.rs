@@ -28,7 +28,7 @@ async fn test_associated_token_address() {
     );
 
     let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address, true).start().await;
+        program_test_2022(token_mint_address).start().await;
     let rent = banks_client.get_rent().await.unwrap();
 
     let expected_token_account_len =
@@ -79,7 +79,7 @@ async fn test_create_with_fewer_lamports() {
     );
 
     let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address, true).start().await;
+        program_test_2022(token_mint_address).start().await;
     let rent = banks_client.get_rent().await.unwrap();
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
@@ -140,7 +140,7 @@ async fn test_create_with_excess_lamports() {
     );
 
     let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address, true).start().await;
+        program_test_2022(token_mint_address).start().await;
     let rent = banks_client.get_rent().await.unwrap();
 
     let expected_token_account_len =
@@ -201,7 +201,7 @@ async fn test_create_account_mismatch() {
     );
 
     let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address, true).start().await;
+        program_test_2022(token_mint_address).start().await;
 
     let mut instruction = create_associated_token_account(
         &payer.pubkey(),
@@ -272,7 +272,7 @@ async fn test_create_associated_token_account_using_legacy_implicit_instruction(
     );
 
     let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address, true).start().await;
+        program_test_2022(token_mint_address).start().await;
     let rent = banks_client.get_rent().await.unwrap();
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])

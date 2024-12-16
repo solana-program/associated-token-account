@@ -210,7 +210,7 @@ async fn check_same_mint(context: &mut ProgramTestContext, program_id: &Pubkey) 
 #[tokio::test]
 async fn success_same_mint_2022() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_same_mint(&mut context, &spl_token_2022::id()).await;
 }
@@ -218,7 +218,7 @@ async fn success_same_mint_2022() {
 #[tokio::test]
 async fn success_same_mint() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint, true);
+    let pt = program_test(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_same_mint(&mut context, &spl_token::id()).await;
 }
@@ -273,7 +273,7 @@ async fn check_different_mints(context: &mut ProgramTestContext, program_id: &Pu
 #[tokio::test]
 async fn success_different_mints() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint, true);
+    let pt = program_test(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_different_mints(&mut context, &spl_token::id()).await;
 }
@@ -281,7 +281,7 @@ async fn success_different_mints() {
 #[tokio::test]
 async fn success_different_mints_2022() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_different_mints(&mut context, &spl_token_2022::id()).await;
 }
@@ -331,7 +331,7 @@ async fn check_missing_wallet_signature(context: &mut ProgramTestContext, progra
 #[tokio::test]
 async fn fail_missing_wallet_signature_2022() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_missing_wallet_signature(&mut context, &spl_token_2022::id()).await;
 }
@@ -339,7 +339,7 @@ async fn fail_missing_wallet_signature_2022() {
 #[tokio::test]
 async fn fail_missing_wallet_signature() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint, true);
+    let pt = program_test(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_missing_wallet_signature(&mut context, &spl_token::id()).await;
 }
@@ -392,7 +392,7 @@ async fn check_wrong_signer(context: &mut ProgramTestContext, program_id: &Pubke
 #[tokio::test]
 async fn fail_wrong_signer_2022() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_wrong_signer(&mut context, &spl_token_2022::id()).await;
 }
@@ -400,7 +400,7 @@ async fn fail_wrong_signer_2022() {
 #[tokio::test]
 async fn fail_wrong_signer() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint, true);
+    let pt = program_test(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_wrong_signer(&mut context, &spl_token::id()).await;
 }
@@ -448,7 +448,7 @@ async fn check_not_nested(context: &mut ProgramTestContext, program_id: &Pubkey)
 #[tokio::test]
 async fn fail_not_nested_2022() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_not_nested(&mut context, &spl_token_2022::id()).await;
 }
@@ -456,7 +456,7 @@ async fn fail_not_nested_2022() {
 #[tokio::test]
 async fn fail_not_nested() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint, true);
+    let pt = program_test(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_not_nested(&mut context, &spl_token::id()).await;
 }
@@ -511,7 +511,7 @@ async fn check_wrong_address_derivation_owner(
 #[tokio::test]
 async fn fail_wrong_address_derivation_owner_2022() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_wrong_address_derivation_owner(&mut context, &spl_token_2022::id()).await;
 }
@@ -519,7 +519,7 @@ async fn fail_wrong_address_derivation_owner_2022() {
 #[tokio::test]
 async fn fail_wrong_address_derivation_owner() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint, true);
+    let pt = program_test(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_wrong_address_derivation_owner(&mut context, &spl_token::id()).await;
 }
@@ -571,7 +571,7 @@ async fn check_owner_account_does_not_exist(context: &mut ProgramTestContext, pr
 #[tokio::test]
 async fn fail_owner_account_does_not_exist() {
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let mut context = pt.start_with_context().await;
     check_owner_account_does_not_exist(&mut context, &spl_token_2022::id()).await;
 }
@@ -580,7 +580,7 @@ async fn fail_owner_account_does_not_exist() {
 async fn fail_wrong_spl_token_program() {
     let wallet = Keypair::new();
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let mut context = pt.start_with_context().await;
     let program_id = spl_token_2022::id();
     let wrong_program_id = spl_token::id();
@@ -631,7 +631,7 @@ async fn fail_destination_not_wallet_ata() {
     let wallet = Keypair::new();
     let wrong_wallet = Pubkey::new_unique();
     let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint, true);
+    let pt = program_test_2022(dummy_mint);
     let program_id = spl_token_2022::id();
     let mut context = pt.start_with_context().await;
     let (mint, mint_authority) = create_mint(&mut context, &program_id).await;

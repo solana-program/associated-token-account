@@ -5,22 +5,12 @@ use {
 };
 
 #[allow(dead_code)]
-pub fn program_test(token_mint_address: Pubkey, use_latest_spl_token: bool) -> ProgramTest {
+pub fn program_test(token_mint_address: Pubkey) -> ProgramTest {
     let mut pc = ProgramTest::new(
         "spl_associated_token_account",
         id(),
         processor!(process_instruction),
     );
-
-    if use_latest_spl_token {
-        pc.prefer_bpf(false);
-        // TODO: Remove when spl-token is available by default in program-test
-        pc.add_program(
-            "spl_token",
-            spl_token::id(),
-            processor!(spl_token::processor::Processor::process),
-        );
-    }
 
     // Add a token mint account
     //
@@ -43,25 +33,12 @@ pub fn program_test(token_mint_address: Pubkey, use_latest_spl_token: bool) -> P
 }
 
 #[allow(dead_code)]
-pub fn program_test_2022(
-    token_mint_address: Pubkey,
-    use_latest_spl_token_2022: bool,
-) -> ProgramTest {
+pub fn program_test_2022(token_mint_address: Pubkey) -> ProgramTest {
     let mut pc = ProgramTest::new(
         "spl_associated_token_account",
         id(),
         processor!(process_instruction),
     );
-
-    if use_latest_spl_token_2022 {
-        pc.prefer_bpf(false);
-        // TODO: Remove when spl-token-2022 is available by default in program-test
-        pc.add_program(
-            "spl_token_2022",
-            spl_token_2022::id(),
-            processor!(spl_token_2022::processor::Processor::process),
-        );
-    }
 
     // Add a token mint account
     //

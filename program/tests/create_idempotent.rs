@@ -40,7 +40,7 @@ async fn success_account_exists() {
     );
 
     let (mut banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address, true).start().await;
+        program_test_2022(token_mint_address).start().await;
     let rent = banks_client.get_rent().await.unwrap();
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
@@ -151,7 +151,7 @@ async fn fail_account_exists_with_wrong_owner() {
         close_authority: COption::None,
     };
     Account::pack(token_account, &mut associated_token_account.data).unwrap();
-    let mut pt = program_test_2022(token_mint_address, true);
+    let mut pt = program_test_2022(token_mint_address);
     pt.add_account(associated_token_address, associated_token_account);
     let (banks_client, payer, recent_blockhash) = pt.start().await;
 
@@ -186,7 +186,7 @@ async fn fail_account_exists_with_wrong_owner() {
 async fn fail_non_ata() {
     let token_mint_address = Pubkey::new_unique();
     let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address, true).start().await;
+        program_test_2022(token_mint_address).start().await;
 
     let rent = banks_client.get_rent().await.unwrap();
     let token_account_len =

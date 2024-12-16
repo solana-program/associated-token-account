@@ -30,7 +30,7 @@ async fn test_associated_token_account_with_transfer_fees() {
     let wallet_address_sender = wallet_sender.pubkey();
     let wallet_address_receiver = Pubkey::new_unique();
     let (mut banks_client, payer, recent_blockhash) =
-        program_test_2022(Pubkey::new_unique(), true).start().await;
+        program_test_2022(Pubkey::new_unique()).start().await;
     let rent = banks_client.get_rent().await.unwrap();
 
     // create extended mint

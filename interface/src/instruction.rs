@@ -35,7 +35,7 @@ fn build_associated_token_account_instruction(
     }
 }
 
-/// Creates Create instruction
+/// Creates `Create` instruction
 pub fn create_associated_token_account(
     funding_address: &Pubkey,
     wallet_address: &Pubkey,
@@ -51,7 +51,7 @@ pub fn create_associated_token_account(
     )
 }
 
-/// Creates CreateIdempotent instruction
+/// Creates `CreateIdempotent` instruction
 pub fn create_associated_token_account_idempotent(
     funding_address: &Pubkey,
     wallet_address: &Pubkey,

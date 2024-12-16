@@ -3,7 +3,7 @@
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use spl_associated_token_account_client::instruction::*;
 
-/// Instructions supported by the AssociatedTokenAccount program
+/// Instructions supported by the `AssociatedTokenAccount` program
 #[derive(Clone, Debug, PartialEq, BorshDeserialize, BorshSerialize, BorshSchema)]
 pub enum AssociatedTokenAccountInstruction {
     /// Creates an associated token account for the given wallet address and

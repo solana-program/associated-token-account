@@ -8,7 +8,7 @@ permissions:
 jobs:
   dependabot:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'solana-program/memo'
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository_owner == 'solana-program'
     steps:
       - name: Enable auto-merge
         run: gh pr merge --auto --squash "$PR_URL"

@@ -12,8 +12,8 @@ importers:
         specifier: ^1.2.5
         version: 1.2.5(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)
       '@codama/renderers-rust':
-        specifier: ^1.0.14
-        version: 1.0.14(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)
+        specifier: ^1.0.15
+        version: 1.0.15(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)
       '@iarna/toml':
         specifier: ^2.2.5
         version: 2.2.5
@@ -36,8 +36,15 @@ packages:
     resolution: {integrity: sha512-KPO9a0ysLr9LQ+zdDqjW0+kOqGa++AlRijsPcFKB2COC/+zII23xJEcTWqL/CY2rlFXaS9Z88jAf/xzqgtd6eQ==}
     hasBin: true
 
+  '@codama/errors@1.2.7':
+    resolution: {integrity: sha512-/lrBW+XG/sGniiTFyDmwdBXgxvDniQWoJrrUzb2maywZRpivKPknE+XKgXpPWNe/85G/mMEdtcMnYlmbJoknOA==}
+    hasBin: true
+
   '@codama/node-types@1.2.6':
     resolution: {integrity: sha512-31qFzCx6imwJYiQYx2qEReTVK7AbnpERUbK0aZBOCui7PQBUX7loltZlkl3Z49ou4GKPryd90/GASkxb7ggGsQ==}
+
+  '@codama/node-types@1.2.7':
+    resolution: {integrity: sha512-9OSil9u3tKssSuzGLQ3bOJzwzUrEjnCCZpxOtXgcitrqDAbRQ1GEFbpkyPvIHvRvUFhn/pRzPhQd6D8j+ljCag==}
 
   '@codama/nodes-from-anchor@1.1.6':
     resolution: {integrity: sha512-z1aqzPVW8XRnVTAo0gaDGrIW5cS7502yd67bDbDdZQ5b6uebd+wAvHb8mHmkOPlqniMTDdisgrRRgmw6FWBXiQ==}
@@ -45,8 +52,14 @@ packages:
   '@codama/nodes@1.2.6':
     resolution: {integrity: sha512-2DRHFp+8tjkkfhVFaMbQweOpS8ihgW95IuFdExGp/AuaShGC7wlvS0HilpyyStinOAeQWKA9sPaMuiXtWC69ag==}
 
+  '@codama/nodes@1.2.7':
+    resolution: {integrity: sha512-MIxvIl9iEj2MuxZGZVOAolcuGW2vTPwLdzEE6LgvzRT0O/c3fxOcIknKUwHwI7Zc90OhHVwJ0rRmhKLwnJ5WgA==}
+
   '@codama/renderers-core@1.0.8':
     resolution: {integrity: sha512-+j1WMBWYUm+ep5V/Gr1i/MDljLfwExxiV7BwslCqGZQfJmwQLwTj4LmUnwinIr0j9gL1SCmTc+WqMFsbyvGv0w==}
+
+  '@codama/renderers-core@1.0.9':
+    resolution: {integrity: sha512-GcNV1YMhhMdNJT5tTs6ygJ4Mm6CoqsOOwSs9QhWDi0w8x9LjMcIcHGs0rXvciqT1EIXdMHLZnsd4vEzOH2EPRg==}
 
   '@codama/renderers-js-umi@1.1.7':
     resolution: {integrity: sha512-dR2UXuLOWfS51l6wS7DVZrGhFr+LNSR82yMkn1Xl/WwDVSMKnGh0NjNVxlRuOILHOMo3VB7XyKWyAw7jBt+/CA==}
@@ -57,6 +70,9 @@ packages:
   '@codama/renderers-rust@1.0.14':
     resolution: {integrity: sha512-HqMsemllMmqKkl5oN1aef4Q3M4GKusp6D3K6QNzdCRh6gJwujmuptK13TflYPwoDx6Nik+GBJpyE8HwkWw8ckw==}
 
+  '@codama/renderers-rust@1.0.15':
+    resolution: {integrity: sha512-NsLjTPL/T8hZwemg3OvUBcW3cd7e74FN06WXLmLl9A3BPDQRLZhDpz2dk+lSb3pbjPLgatwHBMk5eH35vpaiBQ==}
+
   '@codama/renderers@1.0.14':
     resolution: {integrity: sha512-d0jmE5bwJyCunNkGvf4PPHC7NnqknDLLVB7j5n4uYALyYmeQ48yvMQLGHby9PgDz1vKTMyfKi2u/LvefZ4R7HQ==}
 
@@ -65,6 +81,9 @@ packages:
 
   '@codama/visitors-core@1.2.6':
     resolution: {integrity: sha512-Xap+/jWeZe1DBEKLInkzMiFFUgA1n34bsSYAOYdTFKu42H/keWg7wIO9W7FyTwqSxxkb2GTl7+31YAqvopk6ug==}
+
+  '@codama/visitors-core@1.2.7':
+    resolution: {integrity: sha512-ySH1BUdTmw3uDhm85nMh40skoKZXaAxtTS7qFcXQz2DnRl9Nz42ymY7W+BQLd0W/98FxriEbB/BiaOkN7B/zFA==}
 
   '@codama/visitors@1.2.6':
     resolution: {integrity: sha512-ZxFGphlEnZ2aTTrbnNCzfjg0pCJSrcUhX8mv4HUKabhTTRj18yfsfF8+hZTQXbleBnWlr6fQFG461TOa9x7g2A==}
@@ -219,8 +238,8 @@ packages:
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
 
-  get-intrinsic@1.2.7:
-    resolution: {integrity: sha512-VW6Pxhsrk0KAOqs3WEd0klDiF/+V7gQOpAvY1jVU/LHmaD/kQO4523aiJuikX/QAKYiW6x8Jh+RJej1almdtCA==}
+  get-intrinsic@1.3.0:
+    resolution: {integrity: sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==}
     engines: {node: '>= 0.4'}
 
   get-proto@1.0.1:
@@ -329,7 +348,15 @@ snapshots:
       chalk: 5.4.1
       commander: 13.1.0
 
+  '@codama/errors@1.2.7':
+    dependencies:
+      '@codama/node-types': 1.2.7
+      chalk: 5.4.1
+      commander: 13.1.0
+
   '@codama/node-types@1.2.6': {}
+
+  '@codama/node-types@1.2.7': {}
 
   '@codama/nodes-from-anchor@1.1.6(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)':
     dependencies:
@@ -347,11 +374,22 @@ snapshots:
       '@codama/errors': 1.2.6
       '@codama/node-types': 1.2.6
 
+  '@codama/nodes@1.2.7':
+    dependencies:
+      '@codama/errors': 1.2.7
+      '@codama/node-types': 1.2.7
+
   '@codama/renderers-core@1.0.8':
     dependencies:
       '@codama/errors': 1.2.6
       '@codama/nodes': 1.2.6
       '@codama/visitors-core': 1.2.6
+
+  '@codama/renderers-core@1.0.9':
+    dependencies:
+      '@codama/errors': 1.2.7
+      '@codama/nodes': 1.2.7
+      '@codama/visitors-core': 1.2.7
 
   '@codama/renderers-js-umi@1.1.7(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)':
     dependencies:
@@ -396,6 +434,19 @@ snapshots:
       - fastestsmallesttextencoderdecoder
       - typescript
 
+  '@codama/renderers-rust@1.0.15(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)':
+    dependencies:
+      '@codama/errors': 1.2.7
+      '@codama/nodes': 1.2.7
+      '@codama/renderers-core': 1.0.9
+      '@codama/visitors-core': 1.2.7
+      '@solana/codecs-strings': 2.0.0-rc.4(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)
+      nunjucks: 3.2.4
+    transitivePeerDependencies:
+      - chokidar
+      - fastestsmallesttextencoderdecoder
+      - typescript
+
   '@codama/renderers@1.0.14(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)':
     dependencies:
       '@codama/renderers-js': 1.2.5(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.7.3)
@@ -416,6 +467,12 @@ snapshots:
     dependencies:
       '@codama/errors': 1.2.6
       '@codama/nodes': 1.2.6
+      json-stable-stringify: 1.2.1
+
+  '@codama/visitors-core@1.2.7':
+    dependencies:
+      '@codama/errors': 1.2.7
+      '@codama/nodes': 1.2.7
       json-stable-stringify: 1.2.1
 
   '@codama/visitors@1.2.6':
@@ -536,13 +593,13 @@ snapshots:
     dependencies:
       call-bind-apply-helpers: 1.0.2
       es-define-property: 1.0.1
-      get-intrinsic: 1.2.7
+      get-intrinsic: 1.3.0
       set-function-length: 1.2.2
 
   call-bound@1.0.3:
     dependencies:
       call-bind-apply-helpers: 1.0.2
-      get-intrinsic: 1.2.7
+      get-intrinsic: 1.3.0
 
   chalk@5.4.1: {}
 
@@ -588,7 +645,7 @@ snapshots:
 
   function-bind@1.1.2: {}
 
-  get-intrinsic@1.2.7:
+  get-intrinsic@1.3.0:
     dependencies:
       call-bind-apply-helpers: 1.0.2
       es-define-property: 1.0.1
@@ -654,7 +711,7 @@ snapshots:
       define-data-property: 1.1.4
       es-errors: 1.3.0
       function-bind: 1.1.2
-      get-intrinsic: 1.2.7
+      get-intrinsic: 1.3.0
       gopd: 1.2.0
       has-property-descriptors: 1.0.2
 

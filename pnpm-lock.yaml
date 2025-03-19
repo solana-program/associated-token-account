@@ -12,8 +12,8 @@ importers:
         specifier: ^1.2.9
         version: 1.2.9(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.2)
       '@codama/renderers-rust':
-        specifier: ^1.0.16
-        version: 1.0.16(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.2)
+        specifier: ^1.0.18
+        version: 1.0.18(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.2)
       '@iarna/toml':
         specifier: ^2.2.5
         version: 2.2.5
@@ -36,27 +36,14 @@ packages:
     resolution: {integrity: sha512-QWhngQ7bND7/bsUS6jgDTxFBIC/lhZPlmjwS+5y5KMSvqA6g4ltOV77mvxX+eTYsR7IW64Jg99JD11vtKYN64w==}
     hasBin: true
 
-  '@codama/errors@1.2.8':
-    resolution: {integrity: sha512-TVPf7oJpbHtxdu52ruftJX+DlTNWi7D65tasysqs7mfRKoiZKzmkatr5hqidBz/M9WzCddUeFAHL9ZiW6g9Ccg==}
-    hasBin: true
-
   '@codama/node-types@1.2.10':
     resolution: {integrity: sha512-3GuQNII/w/HA08DUtxaNkBEo9DMEkgHBJMH+WxVOb0JmU4BEk9guUyVJQaOZLn6GJmuNlaNRQ6IA31RTiuE6vg==}
-
-  '@codama/node-types@1.2.8':
-    resolution: {integrity: sha512-PEvPLMN3QGJvkwsQ7R9DmAtdazQXN0RD9WYlmHyeiR4nathV0qy9nZGFDoRh5nbNfPkbeLTgL5o3zAoeeRP6GQ==}
 
   '@codama/nodes-from-anchor@1.1.10':
     resolution: {integrity: sha512-/FqsiZSw0n4TcRcgk5sBM2kcQ09R17FbcH3n1CF4MnQVjRwFWi2e8L2P/bxcI8KqImp+rt4My+b4ojHP01tKcA==}
 
   '@codama/nodes@1.2.10':
     resolution: {integrity: sha512-ZQWYkKEuD3fj3Aj6r3KB1QvT8C6XGO8BG1B8VyGdiej6S19VZ6feadR9Ehk2AxfjHjmhVGoIhTxHla+SjPm0iA==}
-
-  '@codama/nodes@1.2.8':
-    resolution: {integrity: sha512-tCi7KErG2ChQr5n3Nj3dwciFmUo3O8RQ+S4Qv23w1zvYLaGwhEvdg3KRtgCGEI0wr9uvm2QtTBM670kdLntZiQ==}
-
-  '@codama/renderers-core@1.0.10':
-    resolution: {integrity: sha512-7NwoyP2j1cZKgHCrd1RRn891gtxpZeiXNSP3aCFdVsRPW8dDNUL1sJ1SNOF9ILHfNP77clCBtL3eoZIFdeNQAg==}
 
   '@codama/renderers-core@1.0.12':
     resolution: {integrity: sha512-C/xvfjdEqo2JQ7bSGLhGvKrq4/pgF+NWgWWJfBD5PO9br6yJLb0BBgxZRSc9YsN6NrzhAJhTVYuXswpt/IDXkg==}
@@ -66,9 +53,6 @@ packages:
 
   '@codama/renderers-js@1.2.9':
     resolution: {integrity: sha512-k/4H1d9vT8NZLxGJcL7gEF3vX/Vmh+uRpbSLeglyvLcTeh6+pHnU0jJocpw/EXRLGg5MlYaQOq2c8WaUxmXMoA==}
-
-  '@codama/renderers-rust@1.0.16':
-    resolution: {integrity: sha512-pFHwHN6X4Yuk26Yfh+VT9Ps1i/QEjuK3EoT8BpsCTATOk6ntJNqyD5aQngG2lE4KWx3uQrCYYbQEAN4vG6v+EA==}
 
   '@codama/renderers-rust@1.0.18':
     resolution: {integrity: sha512-SrohRhXScNXY8+x2ehFBKXidp6VTdHXtaD4TfIVIzIrYtvMzUKHtzEleWfwsTd/9JE+XXwwIk8ztQgbehMmVEw==}
@@ -81,9 +65,6 @@ packages:
 
   '@codama/visitors-core@1.2.10':
     resolution: {integrity: sha512-F/TcJLra8teyjc72GJU+oPvg8gI3B7s3DToAsG++8fqJnHPqF2AUGqpojSnMlUdpiwKYlnQckJp3qC1yXnZBtw==}
-
-  '@codama/visitors-core@1.2.8':
-    resolution: {integrity: sha512-sYmZT2Z6Goacgr/HrAhjLSGtu2Udcal10tEfYN8ZJBXs34PGPu0oWOC8kFx7CxvmAvt/6mw8NhKIPtg/UaIKHw==}
 
   '@codama/visitors@1.2.10':
     resolution: {integrity: sha512-Y94kFc17MtZy7oW19QdhNO0sVkMvE+nSPefnhtexNiiIXUaDDNu/fu1BVDRw5t9j/nr3oNKHxJqm8S4OzDYUhg==}
@@ -179,8 +160,8 @@ packages:
     resolution: {integrity: sha512-oKlSFMcMwpUg2ednkhQ454wfWiU/ul3CkJe/PEHcTKuiX6RpbehUiFMXu13HalGZxfUwCQzZG747YXBn1im9ww==}
     engines: {node: '>= 0.4'}
 
-  call-bound@1.0.3:
-    resolution: {integrity: sha512-YTd+6wGlNlPxSuri7Y6X8tY2dmm12UMH66RpKMhiX6rsk5wXXnYgbUcOt8kiS31/AjfoTOvCsE+w8nZQLQnzHA==}
+  call-bound@1.0.4:
+    resolution: {integrity: sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==}
     engines: {node: '>= 0.4'}
 
   chalk@5.4.1:
@@ -339,15 +320,7 @@ snapshots:
       chalk: 5.4.1
       commander: 13.1.0
 
-  '@codama/errors@1.2.8':
-    dependencies:
-      '@codama/node-types': 1.2.8
-      chalk: 5.4.1
-      commander: 13.1.0
-
   '@codama/node-types@1.2.10': {}
-
-  '@codama/node-types@1.2.8': {}
 
   '@codama/nodes-from-anchor@1.1.10(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.2)':
     dependencies:
@@ -364,17 +337,6 @@ snapshots:
     dependencies:
       '@codama/errors': 1.2.10
       '@codama/node-types': 1.2.10
-
-  '@codama/nodes@1.2.8':
-    dependencies:
-      '@codama/errors': 1.2.8
-      '@codama/node-types': 1.2.8
-
-  '@codama/renderers-core@1.0.10':
-    dependencies:
-      '@codama/errors': 1.2.8
-      '@codama/nodes': 1.2.8
-      '@codama/visitors-core': 1.2.8
 
   '@codama/renderers-core@1.0.12':
     dependencies:
@@ -407,19 +369,6 @@ snapshots:
       '@solana/codecs-strings': 2.0.0-rc.4(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.2)
       nunjucks: 3.2.4
       prettier: 3.5.3
-    transitivePeerDependencies:
-      - chokidar
-      - fastestsmallesttextencoderdecoder
-      - typescript
-
-  '@codama/renderers-rust@1.0.16(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.2)':
-    dependencies:
-      '@codama/errors': 1.2.8
-      '@codama/nodes': 1.2.8
-      '@codama/renderers-core': 1.0.10
-      '@codama/visitors-core': 1.2.8
-      '@solana/codecs-strings': 2.0.0-rc.4(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.2)
-      nunjucks: 3.2.4
     transitivePeerDependencies:
       - chokidar
       - fastestsmallesttextencoderdecoder
@@ -458,12 +407,6 @@ snapshots:
     dependencies:
       '@codama/errors': 1.2.10
       '@codama/nodes': 1.2.10
-      json-stable-stringify: 1.2.1
-
-  '@codama/visitors-core@1.2.8':
-    dependencies:
-      '@codama/errors': 1.2.8
-      '@codama/nodes': 1.2.8
       json-stable-stringify: 1.2.1
 
   '@codama/visitors@1.2.10':
@@ -571,7 +514,7 @@ snapshots:
       get-intrinsic: 1.3.0
       set-function-length: 1.2.2
 
-  call-bound@1.0.3:
+  call-bound@1.0.4:
     dependencies:
       call-bind-apply-helpers: 1.0.2
       get-intrinsic: 1.3.0
@@ -655,7 +598,7 @@ snapshots:
   json-stable-stringify@1.2.1:
     dependencies:
       call-bind: 1.0.8
-      call-bound: 1.0.3
+      call-bound: 1.0.4
       isarray: 2.0.5
       jsonify: 0.0.1
       object-keys: 1.1.1

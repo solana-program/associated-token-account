@@ -14,7 +14,7 @@
     "rust:semver": "cargo semver-checks"
   },
   "devDependencies": {
-    "@codama/renderers-js": "^1.2.10",
+    "@codama/renderers-js": "^1.2.11",
     "@codama/renderers-rust": "^1.0.19",
     "@iarna/toml": "^2.2.5",
     "codama": "^1.2.11",

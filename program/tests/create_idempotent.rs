@@ -1,5 +1,3 @@
-#![cfg(feature = "test-sbf")]
-
 mod program_test;
 
 use {

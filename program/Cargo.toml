@@ -1,6 +1,6 @@
 [package]
 name = "spl-associated-token-account"
-version = "6.0.0"
+version = "7.0.0"
 description = "Solana Program Library Associated Token Account"
 authors = ["Anza Maintainers <maintainers@anza.xyz>"]
 repository = "https://github.com/solana-program/associated-token-account"

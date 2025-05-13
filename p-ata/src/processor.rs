@@ -3,7 +3,7 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         instruction::{AccountMeta, Instruction, Seed, Signer},
-        program::{get_return_data, invoke, invoke_signed},
+        program::{invoke, invoke_signed},
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
         sysvars::rent::Rent,
@@ -54,7 +54,7 @@ pub fn process_create(
         return Ok(());
     }
 
-    if unsafe { ata_acc.owner() } != system_prog.key() && unsafe { ata_acc.lamports() } > 0 {
+    if unsafe { ata_acc.owner() } != system_prog.key() && ata_acc.lamports() > 0 {
         return Err(ProgramError::IllegalOwner);
     }
 
@@ -104,7 +104,7 @@ pub fn process_create(
     ];
     create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
 
-    invoke(&init_ix, &[&ata_acc, &mint_account, &wallet, &rent_sysvar])?;
+    invoke(&init_ix, &[ata_acc, mint_account, wallet, rent_sysvar])?;
 
     Ok(())
 }
@@ -238,11 +238,11 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     invoke_signed(
         &ix_transfer,
         &[
-            &nested_ata,
-            &nested_mint_account,
-            &dest_ata,
-            &owner_ata,
-            &token_prog,
+            nested_ata,
+            nested_mint_account,
+            dest_ata,
+            owner_ata,
+            token_prog,
         ],
         &[pda_signer.clone()],
     )?;
@@ -275,7 +275,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
 
     invoke_signed(
         &ix_close,
-        &[&nested_ata, &wallet, &owner_ata, &token_prog],
+        &[nested_ata, wallet, owner_ata, token_prog],
         &[pda_signer],
     )
 }

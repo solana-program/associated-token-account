@@ -1,8 +1,10 @@
+#![allow(unexpected_cfgs)]
+
 use {
     crate::processor::{process_create, process_recover},
     pinocchio::{
         account_info::AccountInfo,
-        msg, no_allocator, nostd_panic_handler, program_entrypoint,
+        no_allocator, nostd_panic_handler, program_entrypoint,
         program_error::{ProgramError, ToStr},
         pubkey::Pubkey,
         ProgramResult,

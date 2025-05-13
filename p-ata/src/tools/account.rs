@@ -32,9 +32,8 @@ pub fn create_pda_account(
     ];
     let pda_signer = Signer::from(&seed_array);
 
-    let acct_lamports = unsafe { acct.lamports() };
-    if acct_lamports > 0 {
-        let needed_lamports = rent.minimum_balance(space).saturating_sub(acct_lamports);
+    if acct.lamports() > 0 {
+        let needed_lamports = rent.minimum_balance(space).saturating_sub(acct.lamports());
         if needed_lamports > 0 {
             // Transfer SOL from payer to the PDA account (acct)
             SystemTransfer {
@@ -53,7 +52,7 @@ pub fn create_pda_account(
 
         Assign {
             account: acct,
-            owner: owner,
+            owner,
         }
         .invoke_signed(&[pda_signer.clone()])?;
     } else {
@@ -62,7 +61,7 @@ pub fn create_pda_account(
             to: acct,
             lamports: rent.minimum_balance(space),
             space: space as u64,
-            owner: owner,
+            owner,
         }
         .invoke_signed(&[pda_signer])?; // PDA signs for CreateAccount (payer funds)
     }
@@ -83,7 +82,7 @@ mod tests {
         let acct_account: AccountInfo = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
 
         let owner_key = Pubkey::default();
-        let rent = Rent::default(); 
+        let rent = Rent::default();
         let space = 100;
         let seeds_too_few: &[&[u8]] = &[&[1], &[2], &[3]];
 
@@ -96,6 +95,4 @@ mod tests {
             seeds_too_few,
         );
     }
-    // Note: Comprehensive unit testing of create_pda_account is challenging due to direct CPIs
-    // and Pinocchio's AccountInfo structure. Integration testing is more effective for full validation.
 }

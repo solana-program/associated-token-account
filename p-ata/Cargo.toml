@@ -3,24 +3,35 @@ name = "pinocchio-ata-program"
 version = "0.0.0"
 description = "A pinocchio-based Associated Token Account (aka 'p-ata') program"
 readme = "./README.md"
+autobenches = false
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
 
 [features]
 logging = []
+test-bpf = []
 
 [dependencies]
-pinocchio = "0.8.4"
+pinocchio = { version = "0.8.4", default-features = false }
 pinocchio-log = { version = "0.4", default-features = false }
 pinocchio-system = "0.2.3"
 pinocchio-token = "0.3.0"
 spl-token-interface = { version = "^0", path = "interface" }
 
 [dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
 assert_matches = "1.5.0"
 num-traits = "0.2"
 solana-program-test = "2.1"
 solana-sdk = "2.1"
+solana-logger = "2.1"
 spl-token = { version="^4", features=["no-entrypoint"] }
 spl-token-2022 = { version="^7", features=["no-entrypoint"] }
+mollusk-svm = { version = "0.1.5", features = ["all-builtins"] }
+mollusk-svm-bencher = "0.1.5"
+
+[[bench]]
+name = "ata_instruction_benches"
+harness = false

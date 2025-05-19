@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["MAX_SEEDS","MAX_SEED_LEN","PUBKEY_BYTES"],"fn":["checked_create_program_address","create_program_address","find_program_address","log","try_find_program_address"],"type":["Pubkey"]};

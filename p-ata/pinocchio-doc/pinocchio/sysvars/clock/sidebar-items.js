@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["CLOCK_ID","DEFAULT_MS_PER_SLOT","DEFAULT_TICKS_PER_SECOND","DEFAULT_TICKS_PER_SLOT"],"struct":["Clock"],"type":["Epoch","Slot","UnixTimestamp"]};

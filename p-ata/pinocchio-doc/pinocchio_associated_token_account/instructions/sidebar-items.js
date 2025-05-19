@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["create","create_idempotent","recover_nested"],"struct":["Create","CreateIdempotent","RecoverNested"]};

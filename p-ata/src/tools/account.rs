@@ -41,14 +41,14 @@ pub fn create_pda_account(
                 to: acct,
                 lamports: needed_lamports,
             }
-            .invoke()?; // This invoke is on pinocchio_system::Transfer, payer must sign
+            .invoke()?;
         }
 
         Allocate {
             account: acct,
             space: space as u64,
         }
-        .invoke_signed(&[pda_signer.clone()])?; // PDA signs for Allocate
+        .invoke_signed(&[pda_signer.clone()])?;
 
         Assign {
             account: acct,
@@ -78,7 +78,9 @@ mod tests {
     fn test_create_pda_account_panic_on_invalid_seed_length() {
         // For this panic test, AccountInfo contents are not dereferenced before the seed length check.
         // Using uninitialized AccountInfo via MaybeUninit to satisfy type signatures.
+        #[allow(invalid_value)]
         let payer_account: AccountInfo = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+        #[allow(invalid_value)]
         let acct_account: AccountInfo = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
 
         let owner_key = Pubkey::default();

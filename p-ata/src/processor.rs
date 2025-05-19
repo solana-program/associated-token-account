@@ -289,6 +289,7 @@ mod tests {
     use spl_token_interface::instruction::TokenInstruction;
 
     #[derive(Default)]
+    #[allow(dead_code)]
     struct MockPinocchioAccountData {
         key: Pubkey,
         owner: Pubkey,

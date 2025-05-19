@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["DATA_MASK","DATA_SHIFT","GET_LEN_MASK","LAMPORTS_MASK","LAMPORTS_SHIFT","MAX_PERMITTED_DATA_INCREASE","SET_LEN_MASK"],"enum":["BorrowState"],"struct":["Account","AccountInfo","Ref","RefMut"]};

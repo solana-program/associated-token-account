@@ -1,0 +1,190 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Pinocchio"><title>pinocchio - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-6c3ea77c.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="pinocchio" data-themes="" data-resource-suffix="" data-rustdoc-version="1.86.0 (05f9846f8 2025-03-31)" data-channel="1.86.0" data-search-js="search-581efc7a.js" data-settings-js="settings-6dad6058.js" ><script src="../static.files/storage-3a5871a4.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-4d63596a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-893ab5e7.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button></nav><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../pinocchio/index.html">pinocchio</a><span class="version">0.8.4</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#pinocchio" title="Pinocchio">Pinocchio</a><ul><li><a href="#defining-the-program-entrypoint" title="Defining the program entrypoint">Defining the program entrypoint</a></li><li><a href="#std-crate-feature" title="`std` crate feature"><code>std</code> crate feature</a></li><li><a href="#advanced-entrypoint-configuration" title="Advanced entrypoint configuration">Advanced entrypoint configuration</a></li></ul></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#macros" title="Macros">Macros</a></li><li><a href="#constants" title="Constants">Constants</a></li><li><a href="#types" title="Type Aliases">Type Aliases</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>pinocchio</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/pinocchio/lib.rs.html#1-266">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="pinocchio"><a class="doc-anchor" href="#pinocchio">§</a>Pinocchio</h2>
+<p>Pinocchio is a zero-dependency library to create Solana programs in Rust.
+It takes advantage of the way SVM loaders serialize the program input parameters
+into a byte array that is then passed to the program’s entrypoint to define
+zero-copy types to read the input – these types are defined in an efficient way
+taking into consideration that they will be used in on-chain programs.</p>
+<p>It is intended to be used by on-chain programs only; for off-chain programs,
+use instead the <a href="https://docs.rs/solana-sdk/latest/solana_sdk/"><code>solana-sdk</code></a> crate.</p>
+<h3 id="defining-the-program-entrypoint"><a class="doc-anchor" href="#defining-the-program-entrypoint">§</a>Defining the program entrypoint</h3>
+<p>A Solana program needs to define an entrypoint, which will be called by the
+runtime to begin the program execution. The <code>entrypoint!</code> macro emits the common
+boilerplate to set up the program entrypoint. The macro will also set up <a href="https://doc.rust-lang.org/stable/core/alloc/trait.GlobalAlloc.html">global
+allocator</a>
+and <a href="https://doc.rust-lang.org/nomicon/panic-handler.html">panic handler</a> using
+the <a href="macro.default_allocator.html" title="macro pinocchio::default_allocator"><code>default_allocator!</code></a> and <a href="macro.default_panic_handler.html" title="macro pinocchio::default_panic_handler"><code>default_panic_handler!</code></a> macros.</p>
+<p>The <a href="macro.entrypoint.html" title="macro pinocchio::entrypoint"><code>entrypoint!</code></a> is a convenience macro that invokes three other macros to set
+all symbols required for a program execution:</p>
+<ul>
+<li><a href="macro.program_entrypoint.html" title="macro pinocchio::program_entrypoint"><code>program_entrypoint!</code></a>: declares the program entrypoint</li>
+<li><a href="macro.default_allocator.html" title="macro pinocchio::default_allocator"><code>default_allocator!</code></a>: declares the default (bump) global allocator</li>
+<li><a href="macro.default_panic_handler.html" title="macro pinocchio::default_panic_handler"><code>default_panic_handler!</code></a>: declares the default panic handler</li>
+</ul>
+<p>To use the <code>entrypoint!</code> macro, use the following in your entrypoint definition:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>pinocchio::{
+  account_info::AccountInfo,
+  entrypoint,
+  msg,
+  ProgramResult,
+  pubkey::Pubkey
+};
+
+<span class="macro">entrypoint!</span>(process_instruction);
+
+<span class="kw">pub fn </span>process_instruction(
+  program_id: <span class="kw-2">&amp;</span>Pubkey,
+  accounts: <span class="kw-2">&amp;</span>[AccountInfo],
+  instruction_data: <span class="kw-2">&amp;</span>[u8],
+) -&gt; ProgramResult {
+  <span class="macro">msg!</span>(<span class="string">"Hello from my program!"</span>);
+  <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+<p>The information from the input is parsed into their own entities:</p>
+<ul>
+<li><code>program_id</code>: the <code>ID</code> of the program being called</li>
+<li><code>accounts</code>: the accounts received</li>
+<li><code>instruction_data</code>: data for the instruction</li>
+</ul>
+<p>Pinocchio also offers variations of the program entrypoint
+(<a href="macro.lazy_program_entrypoint.html" title="macro pinocchio::lazy_program_entrypoint"><code>lazy_program_entrypoint</code></a>) and global allocator (<a href="macro.no_allocator.html" title="macro pinocchio::no_allocator"><code>no_allocator</code></a>). In
+order to use these, the program needs to specify the program entrypoint,
+global allocator and panic handler individually. The <a href="macro.entrypoint.html" title="macro pinocchio::entrypoint"><code>entrypoint!</code></a> macro
+is equivalent to writing:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="macro">program_entrypoint!</span>(process_instruction);
+<span class="macro">default_allocator!</span>();
+<span class="macro">default_panic_handler!</span>();</code></pre></div>
+<p>Any of these macros can be replaced by other implementations and Pinocchio
+offers a couple of variants for this.</p>
+<h4 id="lazy_program_entrypoint"><a class="doc-anchor" href="#lazy_program_entrypoint">§</a><a href="macro.lazy_program_entrypoint.html" title="macro pinocchio::lazy_program_entrypoint"><code>lazy_program_entrypoint!</code></a></h4>
+<p>The <a href="macro.entrypoint.html" title="macro pinocchio::entrypoint"><code>entrypoint!</code></a> macro looks similar to the “standard” one found in
+<a href="https://docs.rs/solana-program-entrypoint/latest/solana_program_entrypoint/macro.entrypoint.html"><code>solana-program</code></a>.
+It parses the whole input and provides the <code>program_id</code>, <code>accounts</code> and
+<code>instruction_data</code> separately. This consumes compute units before the program
+begins its execution. In some cases, it is beneficial for a program to have
+more control when the input parsing is happening, even whether the parsing
+is needed or not — this is the purpose of the <a href="macro.lazy_program_entrypoint.html" title="macro pinocchio::lazy_program_entrypoint"><code>lazy_program_entrypoint!</code></a>
+macro. This macro only wraps the program input and provides methods to parse
+the input on-demand.</p>
+<p>The <a href="macro.lazy_program_entrypoint.html" title="macro pinocchio::lazy_program_entrypoint"><code>lazy_program_entrypoint</code></a> is suitable for programs that have a single
+or very few instructions, since it requires the program to handle the parsing,
+which can become complex as the number of instructions increases. For <em>larger</em>
+programs, the <a href="macro.program_entrypoint.html" title="macro pinocchio::program_entrypoint"><code>program_entrypoint!</code></a> will likely be easier and more efficient
+to use.</p>
+<p>To use the <a href="macro.lazy_program_entrypoint.html" title="macro pinocchio::lazy_program_entrypoint"><code>lazy_program_entrypoint!</code></a> macro, use the following in your
+entrypoint definition:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>pinocchio::{
+  default_allocator,
+  default_panic_handler,
+  entrypoint::InstructionContext,
+  lazy_program_entrypoint,
+  msg,
+  ProgramResult
+};
+
+<span class="macro">lazy_program_entrypoint!</span>(process_instruction);
+<span class="macro">default_allocator!</span>();
+<span class="macro">default_panic_handler!</span>();
+
+<span class="kw">pub fn </span>process_instruction(
+  <span class="kw-2">mut </span>context: InstructionContext
+) -&gt; ProgramResult {
+    <span class="macro">msg!</span>(<span class="string">"Hello from my lazy program!"</span>);
+    <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+<p>The <a href="entrypoint/lazy/struct.InstructionContext.html" title="struct pinocchio::entrypoint::lazy::InstructionContext"><code>InstructionContext</code></a> provides on-demand
+access to the information of the input:</p>
+<ul>
+<li><a href="entrypoint/lazy/struct.InstructionContext.html#method.available" title="method pinocchio::entrypoint::lazy::InstructionContext::available"><code>available()</code></a>: number of available
+accounts.</li>
+<li><a href="entrypoint/lazy/struct.InstructionContext.html#method.next_account" title="method pinocchio::entrypoint::lazy::InstructionContext::next_account"><code>next_account()</code></a>: parses the
+next available account (can be used as many times as accounts available).</li>
+<li><a href="entrypoint/lazy/struct.InstructionContext.html#method.instruction_data" title="method pinocchio::entrypoint::lazy::InstructionContext::instruction_data"><code>instruction_data()</code></a>: parses
+the instruction data.</li>
+<li><a href="entrypoint/lazy/struct.InstructionContext.html#method.program_id" title="method pinocchio::entrypoint::lazy::InstructionContext::program_id"><code>program_id()</code></a>: parses the
+program id.</li>
+</ul>
+<p>💡 The <a href="macro.lazy_program_entrypoint.html" title="macro pinocchio::lazy_program_entrypoint"><code>lazy_program_entrypoint!</code></a> does not set up a global allocator nor a panic
+handler. A program should explicitly use one of the provided macros to set them
+up or include its own implementation.</p>
+<h4 id="no_allocator"><a class="doc-anchor" href="#no_allocator">§</a><a href="macro.no_allocator.html" title="macro pinocchio::no_allocator"><code>no_allocator!</code></a></h4>
+<p>When writing programs, it can be useful to make sure the program does not attempt
+to make any allocations. For this cases, Pinocchio includes a <a href="macro.no_allocator.html" title="macro pinocchio::no_allocator"><code>no_allocator!</code></a>
+macro that set a global allocator just panics at any attempt to allocate memory.</p>
+<p>To use the <a href="macro.no_allocator.html" title="macro pinocchio::no_allocator"><code>no_allocator!</code></a> macro, use the following in your entrypoint definition:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>pinocchio::{
+  account_info::AccountInfo,
+  default_panic_handler,
+  msg,
+  no_allocator,
+  program_entrypoint,
+  ProgramResult,
+  pubkey::Pubkey
+};
+
+<span class="macro">program_entrypoint!</span>(process_instruction);
+<span class="macro">default_panic_handler!</span>();
+<span class="macro">no_allocator!</span>();
+
+<span class="kw">pub fn </span>process_instruction(
+  program_id: <span class="kw-2">&amp;</span>Pubkey,
+  accounts: <span class="kw-2">&amp;</span>[AccountInfo],
+  instruction_data: <span class="kw-2">&amp;</span>[u8],
+) -&gt; ProgramResult {
+  <span class="macro">msg!</span>(<span class="string">"Hello from `no_std` program!"</span>);
+  <span class="prelude-val">Ok</span>(())
+}</code></pre></div>
+<p>💡 The <a href="macro.no_allocator.html" title="macro pinocchio::no_allocator"><code>no_allocator!</code></a> macro can also be used in combination with the
+<a href="macro.lazy_program_entrypoint.html" title="macro pinocchio::lazy_program_entrypoint"><code>lazy_program_entrypoint!</code></a>.</p>
+<h3 id="std-crate-feature"><a class="doc-anchor" href="#std-crate-feature">§</a><code>std</code> crate feature</h3>
+<p>By default, Pinocchio is a <code>no_std</code> crate. This means that it does not use any
+code from the standard (<code>std</code>) library. While this does not affect how Pinocchio
+is used, there is a one particular apparent difference. In a <code>no_std</code> environment,
+the <a href="macro.msg.html" title="macro pinocchio::msg"><code>msg!</code></a> macro does not provide any formatting options since the <code>format!</code> macro
+requires the <code>std</code> library. In order to use <a href="macro.msg.html" title="macro pinocchio::msg"><code>msg!</code></a> with formatting, the <code>std</code>
+feature should be enable when adding Pinocchio as a dependency:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>pinocchio = { version = <span class="string">"0.7.0"</span>, features = [<span class="string">"std"</span>] }</code></pre></div>
+<p>Instead of enabling the <code>std</code> feature to be able to format log messages with <a href="macro.msg.html" title="macro pinocchio::msg"><code>msg!</code></a>,
+it is recommended to use the <a href="https://crates.io/crates/pinocchio-log"><code>pinocchio-log</code></a>
+crate. This crate provides a lightweight <code>log!</code> macro with better compute units
+consumption than the standard <code>format!</code> macro without requiring the <code>std</code> library.</p>
+<h3 id="advanced-entrypoint-configuration"><a class="doc-anchor" href="#advanced-entrypoint-configuration">§</a>Advanced entrypoint configuration</h3>
+<p>The symbols emitted by the entrypoint macros — program entrypoint, global
+allocator and default panic handler — can only be defined once globally. If
+the program crate is also intended to be used as a library, it is common practice
+to define a Cargo <a href="https://doc.rust-lang.org/cargo/reference/features.html">feature</a>
+in your program crate to conditionally enable the module that includes the <a href="macro.entrypoint.html" title="macro pinocchio::entrypoint"><code>entrypoint!</code></a>
+macro invocation. The convention is to name the feature <code>bpf-entrypoint</code>.</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="attr">#[cfg(feature = <span class="string">"bpf-entrypoint"</span>)]
+</span><span class="kw">mod </span>entrypoint {
+  <span class="kw">use </span>pinocchio::{
+    account_info::AccountInfo,
+    entrypoint,
+    msg,
+    ProgramResult,
+    pubkey::Pubkey
+  };
+
+  <span class="macro">entrypoint!</span>(process_instruction);
+
+  <span class="kw">pub fn </span>process_instruction(
+    program_id: <span class="kw-2">&amp;</span>Pubkey,
+    accounts: <span class="kw-2">&amp;</span>[AccountInfo],
+    instruction_data: <span class="kw-2">&amp;</span>[u8],
+  ) -&gt; ProgramResult {
+    <span class="macro">msg!</span>(<span class="string">"Hello from my program!"</span>);
+    <span class="prelude-val">Ok</span>(())
+  }
+}</code></pre></div>
+<p>When building the program binary, you must enable the <code>bpf-entrypoint</code> feature:</p>
+
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code>cargo build-sbf --features bpf-entrypoint</code></pre></div>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.lazy_entrypoint"><code>pub use entrypoint::<a class="mod" href="entrypoint/lazy/index.html" title="mod pinocchio::entrypoint::lazy">lazy</a> as lazy_entrypoint;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="account_info/index.html" title="mod pinocchio::account_info">account_<wbr>info</a></dt><dd>Data structures to represent account information.</dd><dt><a class="mod" href="cpi/index.html" title="mod pinocchio::cpi">cpi</a></dt><dd>Cross-program invocation helpers.</dd><dt><a class="mod" href="entrypoint/index.html" title="mod pinocchio::entrypoint">entrypoint</a></dt><dd>Macros and functions for defining the program entrypoint and setting up
+global handlers.</dd><dt><a class="mod" href="instruction/index.html" title="mod pinocchio::instruction">instruction</a></dt><dd>Instruction types.</dd><dt><a class="mod" href="log/index.html" title="mod pinocchio::log">log</a></dt><dd>Logging utilities for Rust-based Solana programs.</dd><dt><a class="mod" href="memory/index.html" title="mod pinocchio::memory">memory</a></dt><dd>Basic low-level memory operations.</dd><dt><a class="mod" href="program/index.html" title="mod pinocchio::program">program</a><wbr><span class="stab deprecated" title="">Deprecated</span></dt><dt><a class="mod" href="program_error/index.html" title="mod pinocchio::program_error">program_<wbr>error</a></dt><dd>Errors generated by programs.</dd><dt><a class="mod" href="pubkey/index.html" title="mod pinocchio::pubkey">pubkey</a></dt><dd>Public key type and functions.</dd><dt><a class="mod" href="syscalls/index.html" title="mod pinocchio::syscalls">syscalls</a></dt><dd>Syscall functions.</dd><dt><a class="mod" href="sysvars/index.html" title="mod pinocchio::sysvars">sysvars</a></dt><dd>Provides access to cluster system accounts.</dd></dl><h2 id="macros" class="section-header">Macros<a href="#macros" class="anchor">§</a></h2><dl class="item-table"><dt><a class="macro" href="macro.default_allocator.html" title="macro pinocchio::default_allocator">default_<wbr>allocator</a></dt><dd>Default global allocator.</dd><dt><a class="macro" href="macro.default_panic_handler.html" title="macro pinocchio::default_panic_handler">default_<wbr>panic_<wbr>handler</a></dt><dd>Default panic hook.</dd><dt><a class="macro" href="macro.entrypoint.html" title="macro pinocchio::entrypoint">entrypoint</a></dt><dd>Declare the program entrypoint and set up global handlers.</dd><dt><a class="macro" href="macro.impl_sysvar_get.html" title="macro pinocchio::impl_sysvar_get">impl_<wbr>sysvar_<wbr>get</a></dt><dd>Implements the <a href="sysvars/trait.Sysvar.html#method.get" title="associated function pinocchio::sysvars::Sysvar::get"><code>Sysvar::get</code></a> method for both SBF and host targets.</dd><dt><a class="macro" href="macro.lazy_entrypoint.html" title="macro pinocchio::lazy_entrypoint">lazy_<wbr>entrypoint</a><wbr><span class="stab deprecated" title="">Deprecated</span></dt><dd>Declare the lazy program entrypoint.</dd><dt><a class="macro" href="macro.lazy_program_entrypoint.html" title="macro pinocchio::lazy_program_entrypoint">lazy_<wbr>program_<wbr>entrypoint</a></dt><dd>Declare the lazy program entrypoint.</dd><dt><a class="macro" href="macro.msg.html" title="macro pinocchio::msg">msg</a></dt><dd>Print a message to the log.</dd><dt><a class="macro" href="macro.no_allocator.html" title="macro pinocchio::no_allocator">no_<wbr>allocator</a></dt><dd>A global allocator that does not dynamically allocate memory.</dd><dt><a class="macro" href="macro.nostd_panic_handler.html" title="macro pinocchio::nostd_panic_handler">nostd_<wbr>panic_<wbr>handler</a></dt><dd>A global <code>#[panic_handler]</code> for <code>no_std</code> programs.</dd><dt><a class="macro" href="macro.program_entrypoint.html" title="macro pinocchio::program_entrypoint">program_<wbr>entrypoint</a></dt><dd>Declare the program entrypoint.</dd><dt><a class="macro" href="macro.seeds.html" title="macro pinocchio::seeds">seeds</a></dt><dd>Convenience macro for constructing a <code>[Seed; N]</code> array from a list of seeds.</dd><dt><a class="macro" href="macro.signer.html" title="macro pinocchio::signer">signer</a><wbr><span class="stab deprecated" title="">Deprecated</span></dt><dd>Convenience macro for constructing a <code>Signer</code> from a list of seeds
+represented as byte slices.</dd></dl><h2 id="constants" class="section-header">Constants<a href="#constants" class="anchor">§</a></h2><dl class="item-table"><dt><a class="constant" href="constant.BPF_ALIGN_OF_U128.html" title="constant pinocchio::BPF_ALIGN_OF_U128">BPF_<wbr>ALIGN_<wbr>OF_<wbr>U128</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd><code>assert_eq(core::mem::align_of::&lt;u128&gt;(), 8)</code> is true for BPF but not
+for some host machines.</dd><dt><a class="constant" href="constant.MAX_TX_ACCOUNTS.html" title="constant pinocchio::MAX_TX_ACCOUNTS">MAX_<wbr>TX_<wbr>ACCOUNTS</a></dt><dd>Maximum number of accounts that a transaction may process.</dd><dt><a class="constant" href="constant.NON_DUP_MARKER.html" title="constant pinocchio::NON_DUP_MARKER">NON_<wbr>DUP_<wbr>MARKER</a><span title="Restricted Visibility">&nbsp;🔒</span> </dt><dd>Value used to indicate that a serialized account is not a duplicate.</dd><dt><a class="constant" href="constant.SUCCESS.html" title="constant pinocchio::SUCCESS">SUCCESS</a></dt><dd>Return value for a successful program execution.</dd></dl><h2 id="types" class="section-header">Type Aliases<a href="#types" class="anchor">§</a></h2><dl class="item-table"><dt><a class="type" href="type.ProgramResult.html" title="type pinocchio::ProgramResult">Program<wbr>Result</a></dt><dd>The result of a program execution.</dd></dl></section></div></main></body></html>

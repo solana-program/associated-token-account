@@ -1,27 +1,28 @@
 #![cfg(feature = "test-bpf")]
 
 use {
-    mollusk_svm::{program::loader_keys::LOADER_V4, Mollusk},
+    mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     mollusk_svm_bencher::MolluskComputeUnitBencher,
     solana_logger,
     solana_sdk::{
         account::Account,
         instruction::{AccountMeta, Instruction},
         pubkey::Pubkey,
+        signature::{Keypair, Signer},
         system_program,
         sysvar,
     },
     spl_token_interface::{
-        program::ID as TOKEN_PROGRAM_ID_BYTES,
         state::{account::Account as TokenAccount, mint::Mint, Transmutable},
     },
+    std::{fs, path::Path},
 };
 
 /// Build a zero-rent `Rent` sysvar account with correctly sized data buffer.
 fn rent_sysvar_account() -> Account {
     Account {
-        lamports: 0,
-        data: Vec::new(), // Rent sysvar data not inspected in program logic
+        lamports: 1,
+        data: vec![1u8; 17], // Minimal rent sysvar data
         owner: sysvar::rent::id(),
         executable: false,
         rent_epoch: 0,
@@ -55,22 +56,79 @@ fn build_mint_data(decimals: u8) -> Vec<u8> {
 }
 
 fn main() {
-    // Disable noisy logs in output.
-    let _ = solana_logger::setup_with("");
+    // Enable useful logs from Mollusk and Solana runtime so we can diagnose failures.
+    // Adjust the log filter as desired (e.g. "info", "debug", "trace").
+    let _ = solana_logger::setup_with("info,solana_runtime=info,solana_program_runtime=info,mollusk=debug");
 
     // Tell Mollusk where to locate the compiled SBF program ELF so it can be loaded.
     // Resolve relative to the project root (CARGO_MANIFEST_DIR).
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    println!("CARGO_MANIFEST_DIR: {}", manifest_dir);
+    
+    let sbf_out_dir = format!("{}/target/sbpf-solana-solana/release", manifest_dir);
+    println!("Setting SBF_OUT_DIR to: {}", sbf_out_dir);
+    
     std::env::set_var(
         "SBF_OUT_DIR",
-        format!("{}/target/sbpf-solana-solana/release", manifest_dir),
+        sbf_out_dir.clone(),
     );
+    
+    // Check if the directory exists and list its contents
+    if let Ok(entries) = std::fs::read_dir(&sbf_out_dir) {
+        println!("Contents of SBF_OUT_DIR:");
+        for entry in entries {
+            if let Ok(entry) = entry {
+                println!("  - {}", entry.file_name().to_string_lossy());
+            }
+        }
+    } else {
+        println!("ERROR: SBF_OUT_DIR does not exist or cannot be read!");
+    }
 
-    // Program id & Mollusk harness – assumes compiled .so is at target/deploy/pinocchio_ata_program.so
-    let program_id = Pubkey::new_unique();
+    // Copy pinocchio_token.so from programs/ to SBF_OUT_DIR if it doesn't exist
+    let programs_dir = format!("{}/programs", manifest_dir);
+    let token_so_src = Path::new(&programs_dir).join("pinocchio_token_program.so");
+    let token_so_dst = Path::new(&sbf_out_dir).join("pinocchio_token_program.so");
+    
+    if token_so_src.exists() {
+        if !token_so_dst.exists() {
+            println!("Copying pinocchio_token_program.so to SBF_OUT_DIR");
+            fs::copy(&token_so_src, &token_so_dst)
+                .expect("Failed to copy pinocchio_token_program.so to SBF_OUT_DIR");
+        }
+    } else {
+        panic!("pinocchio_token_program.so not found in programs/ directory");
+    }
 
-    // Token program id as Pubkey (convert from interface constant bytes)
-    let token_program_id = Pubkey::new_from_array(TOKEN_PROGRAM_ID_BYTES);
+    // List SBF_OUT_DIR contents again after copying
+    println!("\nContents of SBF_OUT_DIR after copying:");
+    if let Ok(entries) = std::fs::read_dir(&sbf_out_dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                println!("  - {}", entry.file_name().to_string_lossy());
+            }
+        }
+    }
+
+    // Load the program IDs from their keypair files
+    let ata_keypair_path = format!("{}/target/deploy/pinocchio_ata_program-keypair.json", manifest_dir);
+    let ata_keypair_data = fs::read_to_string(&ata_keypair_path)
+        .expect("Failed to read pinocchio_ata_program-keypair.json");
+    let ata_keypair_bytes: Vec<u8> = serde_json::from_str(&ata_keypair_data)
+        .expect("Failed to parse pinocchio_ata_program keypair JSON");
+    let ata_keypair = Keypair::from_bytes(&ata_keypair_bytes)
+        .expect("Invalid pinocchio_ata_program keypair");
+    let program_id = ata_keypair.pubkey();
+
+    // Read pinocchio_token keypair from programs/ directory
+    let token_keypair_path = format!("{}/programs/pinocchio_token_program-keypair.json", manifest_dir);
+    let token_keypair_data = fs::read_to_string(&token_keypair_path)
+        .expect("Failed to read pinocchio_token_program-keypair.json");
+    let token_keypair_bytes: Vec<u8> = serde_json::from_str(&token_keypair_data)
+        .expect("Failed to parse pinocchio_token_program keypair JSON");
+    let token_keypair = Keypair::from_bytes(&token_keypair_bytes)
+        .expect("Invalid pinocchio_token_program keypair");
+    let token_program_id = token_keypair.pubkey();
 
     /* ------------------------------- CREATE -------------------------------- */
     let payer = Pubkey::new_unique();
@@ -94,13 +152,13 @@ fn main() {
         (ata, Account::new(0, 0, &system_program::id())),
         // wallet
         (wallet, Account::new(0, 0, &system_program::id())),
-        // mint
+        // mint (owned by SPL Token ID since pinocchio-token expects it)
         (
             mint,
             Account {
                 lamports: 1_000_000_000,
                 data: build_mint_data(0),
-                owner: token_program_id,
+                owner: Pubkey::from(spl_token_interface::program::ID),
                 executable: false,
                 rent_epoch: 0,
             },
@@ -108,7 +166,13 @@ fn main() {
         // system program (dummy)
         (
             system_program::id(),
-            Account::new(0, 0, &system_program::id()),
+            Account {
+                lamports: 1,
+                data: vec![],
+                owner: solana_sdk::native_loader::id(),
+                executable: true,
+                rent_epoch: 0,
+            },
         ),
         // token program (marked executable true so invoke succeeds)
         (
@@ -116,7 +180,18 @@ fn main() {
             Account {
                 lamports: 0,
                 data: Vec::new(),
-                owner: token_program_id,
+                owner: LOADER_V3,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        // SPL Token program (points to same implementation as pinocchio-token)
+        (
+            Pubkey::from(spl_token_interface::program::ID),
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: LOADER_V3,
                 executable: true,
                 rent_epoch: 0,
             },
@@ -135,6 +210,7 @@ fn main() {
             AccountMeta::new_readonly(system_program::id(), false),
             AccountMeta::new_readonly(token_program_id, false),
             AccountMeta::new_readonly(sysvar::rent::id(), false),
+            AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
         ],
         data: vec![], // 0 => Create
     };
@@ -163,7 +239,7 @@ fn main() {
             Account {
                 lamports: 1_000_000_000,
                 data: build_token_account_data(&nested_mint, &owner_ata, 100),
-                owner: token_program_id,
+                owner: Pubkey::from(spl_token_interface::program::ID),
                 executable: false,
                 rent_epoch: 0,
             },
@@ -174,7 +250,7 @@ fn main() {
             Account {
                 lamports: 1_000_000_000,
                 data: build_mint_data(0),
-                owner: token_program_id,
+                owner: Pubkey::from(spl_token_interface::program::ID),
                 executable: false,
                 rent_epoch: 0,
             },
@@ -185,7 +261,7 @@ fn main() {
             Account {
                 lamports: 1_000_000_000,
                 data: build_token_account_data(&nested_mint, &wallet, 0),
-                owner: token_program_id,
+                owner: Pubkey::from(spl_token_interface::program::ID),
                 executable: false,
                 rent_epoch: 0,
             },
@@ -196,7 +272,7 @@ fn main() {
             Account {
                 lamports: 1_000_000_000,
                 data: build_token_account_data(&owner_mint, &wallet, 0),
-                owner: token_program_id,
+                owner: Pubkey::from(spl_token_interface::program::ID),
                 executable: false,
                 rent_epoch: 0,
             },
@@ -207,7 +283,7 @@ fn main() {
             Account {
                 lamports: 1_000_000_000,
                 data: build_mint_data(0),
-                owner: token_program_id,
+                owner: Pubkey::from(spl_token_interface::program::ID),
                 executable: false,
                 rent_epoch: 0,
             },
@@ -220,7 +296,18 @@ fn main() {
             Account {
                 lamports: 0,
                 data: Vec::new(),
-                owner: token_program_id,
+                owner: LOADER_V3,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        // SPL Token program (points to same implementation as pinocchio-token)
+        (
+            Pubkey::from(spl_token_interface::program::ID),
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: LOADER_V3,
                 executable: true,
                 rent_epoch: 0,
             },
@@ -235,8 +322,9 @@ fn main() {
             AccountMeta::new(dest_ata, false),
             AccountMeta::new(owner_ata, false),
             AccountMeta::new_readonly(owner_mint, false),
-            AccountMeta::new_readonly(wallet, true),
+            AccountMeta::new(wallet, true),
             AccountMeta::new_readonly(token_program_id, false),
+            AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
         ],
         data: vec![2u8], // 2 => RecoverNested
     };
@@ -244,11 +332,41 @@ fn main() {
     /* ------------------------------ BENCH -------------------------------- */
     // Start with a Mollusk instance that already contains the common builtin programs
     let mut mollusk = Mollusk::default();
-    // Add our program under test (p-ata)
-    mollusk.add_program(&program_id, "pinocchio_ata_program", &LOADER_V4);
-    // Add the compiled Pinocchio token program so CPIs execute successfully.
-    mollusk.add_program(&token_program_id, "pinocchio_token", &LOADER_V4);
 
+    // === DEBUG: show program ids and loader id being registered ===
+    println!("Registering p-ata program id: {} loader: {}", program_id, LOADER_V3);
+    println!("Registering pinocchio-token under SPL Token ID: {} loader: {}", 
+        Pubkey::from(spl_token_interface::program::ID), LOADER_V3);
+
+    // Add our program under test (p-ata)
+    mollusk.add_program(&program_id, "pinocchio_ata_program", &LOADER_V3);
+    // Add pinocchio-token under the SPL Token ID since that's what the instructions use
+    mollusk.add_program(&Pubkey::from(spl_token_interface::program::ID), "pinocchio_token_program", &LOADER_V3);
+
+    // Verify the instruction is using the correct program ID
+    println!("\n=== Verifying instruction setup ===");
+    println!("create_ix.program_id: {}", create_ix.program_id);
+    println!("Expected program_id: {}", program_id);
+    assert_eq!(create_ix.program_id, program_id, "Instruction program ID doesn't match!");
+
+    // Test a simple instruction first
+    println!("\n=== Testing simple instruction first ===");
+    println!("Accounts being passed:");
+    for (pubkey, account) in &accounts_create {
+        println!("  - {} (owner: {}, executable: {}, lamports: {})", 
+            pubkey, account.owner, account.executable, account.lamports);
+    }
+    let test_result = mollusk.process_instruction(&create_ix, &accounts_create);
+    println!("Test result: {:?}", test_result);
+
+    if !matches!(test_result.program_result, mollusk_svm::result::ProgramResult::Success) {
+        println!("ERROR: Test instruction failed!");
+        println!("Program result: {:?}", test_result.program_result);
+        println!("Compute units: {}", test_result.compute_units_consumed);
+        panic!("Unable to run test instruction");
+    }
+
+    println!("\n=== Running benchmarks ===");
     MolluskComputeUnitBencher::new(mollusk)
         .bench(("create", &create_ix, &accounts_create[..]))
         .bench(("recover", &recover_ix, &accounts_recover[..]))

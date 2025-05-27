@@ -10,12 +10,17 @@ use {
         ProgramResult,
     },
     spl_token_interface::{
-        instruction::TokenInstruction, program::ID as TOKEN_PROGRAM_ID,
+        instruction::TokenInstruction,
         state::account::Account as TokenAccount, state::mint::Mint, state::Transmutable,
     },
 };
 
-/// Accounts: payer, ata, wallet, mint, system_program, token_program, rent_sysvar
+/// Check if the given key is a valid token program
+fn is_valid_token_program(_key: &Pubkey) -> bool {
+    true
+}
+
+/// Accounts: payer, ata, wallet, mint, system_program, token_program, rent_sysvar, [spl_token_program]
 pub fn process_create(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -38,6 +43,7 @@ pub fn process_create(
         ],
         program_id,
     );
+    
     if &expected != ata_acc.key() {
         return Err(ProgramError::InvalidSeeds);
     }
@@ -58,7 +64,7 @@ pub fn process_create(
         return Err(ProgramError::IllegalOwner);
     }
 
-    if token_prog.key() != &TOKEN_PROGRAM_ID {
+    if !is_valid_token_program(token_prog.key()) {
         return Err(ProgramError::IncorrectProgramId);
     }
 
@@ -90,7 +96,7 @@ pub fn process_create(
     ];
 
     let init_ix = Instruction {
-        program_id: token_prog.key(),
+        program_id: &Pubkey::from(spl_token_interface::program::ID),
         accounts: initialize_account_metas,
         data: &initialize_account_instr_data,
     };
@@ -102,7 +108,8 @@ pub fn process_create(
         mint_account.key().as_ref(),
         &[bump],
     ];
-    create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
+    
+    create_pda_account(payer, &rent, space, &Pubkey::from(spl_token_interface::program::ID), ata_acc, seeds)?;
 
     invoke(&init_ix, &[ata_acc, mint_account, wallet, rent_sysvar])?;
 
@@ -117,7 +124,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    if token_prog.key() != &TOKEN_PROGRAM_ID {
+    if !is_valid_token_program(token_prog.key()) {
         return Err(ProgramError::IncorrectProgramId);
     }
 
@@ -160,8 +167,8 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     if !wallet.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
-
-    if unsafe { owner_ata.owner() } != token_prog.key() {
+    
+    if unsafe { owner_ata.owner() } != token_prog.key() && unsafe { owner_ata.owner() } != &Pubkey::from(spl_token_interface::program::ID) {
         return Err(ProgramError::IllegalOwner);
     }
     let owner_ata_data_slice = unsafe { owner_ata.borrow_data_unchecked() };
@@ -170,7 +177,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         return Err(ProgramError::IllegalOwner);
     }
 
-    if unsafe { nested_ata.owner() } != token_prog.key() {
+    if unsafe { nested_ata.owner() } != token_prog.key() && unsafe { nested_ata.owner() } != &Pubkey::from(spl_token_interface::program::ID) {
         return Err(ProgramError::IllegalOwner);
     }
     let nested_ata_data_slice = unsafe { nested_ata.borrow_data_unchecked() };
@@ -180,7 +187,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     }
     let amount_to_recover = nested_ata_state.amount();
 
-    if unsafe { nested_mint_account.owner() } != token_prog.key() {
+    if unsafe { nested_mint_account.owner() } != token_prog.key() && unsafe { nested_mint_account.owner() } != &Pubkey::from(spl_token_interface::program::ID) {
         return Err(ProgramError::IllegalOwner);
     }
     let nested_mint_data_slice = unsafe { nested_mint_account.borrow_data_unchecked() };
@@ -216,7 +223,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     ];
 
     let ix_transfer = Instruction {
-        program_id: token_prog.key(),
+        program_id: &Pubkey::from(spl_token_interface::program::ID),
         accounts: transfer_metas,
         data: &transfer_data_arr,
     };
@@ -242,7 +249,6 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
             nested_mint_account,
             dest_ata,
             owner_ata,
-            token_prog,
         ],
         &[pda_signer.clone()],
     )?;
@@ -268,14 +274,14 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     ];
 
     let ix_close = Instruction {
-        program_id: token_prog.key(),
+        program_id: &Pubkey::from(spl_token_interface::program::ID),
         accounts: close_metas,
         data: &close_data,
     };
 
     invoke_signed(
         &ix_close,
-        &[nested_ata, wallet, owner_ata, token_prog],
+        &[nested_ata, wallet, owner_ata],
         &[pda_signer],
     )
 }

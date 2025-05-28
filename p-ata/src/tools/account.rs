@@ -17,7 +17,7 @@ use {
 /// - owner: the program that will own the new account
 /// - pda: the address of the account to create (pre-derived by the caller)
 /// - pda_signer_seeds: seeds (without the bump already appended), needed for invoke_signed
-pub fn create_pda_account<'a>(
+pub fn create_pda_account(
     payer: &AccountInfo,
     rent: &Rent,
     space: usize,
@@ -27,15 +27,23 @@ pub fn create_pda_account<'a>(
 ) -> ProgramResult {
     pinocchio::msg!("create_pda_account: Starting");
     pinocchio::msg!("  space:");
-    unsafe { sol_log_64_(0, 0, 0, space as u64, 0); }
+    unsafe {
+        sol_log_64_(0, 0, 0, space as u64, 0);
+    }
     pinocchio::msg!("  owner:");
-    unsafe { sol_log_pubkey(owner as *const _ as *const u8); }
+    unsafe {
+        sol_log_pubkey(owner as *const _ as *const u8);
+    }
     pinocchio::msg!("  pda:");
-    unsafe { sol_log_pubkey(pda.key() as *const _ as *const u8); }
-    
+    unsafe {
+        sol_log_pubkey(pda.key() as *const _ as *const u8);
+    }
+
     let current_lamports = pda.lamports();
     pinocchio::msg!("  current_lamports:");
-    unsafe { sol_log_64_(0, 0, 0, current_lamports, 0); }
+    unsafe {
+        sol_log_64_(0, 0, 0, current_lamports, 0);
+    }
 
     // Convert seeds to Seed array - assuming we always have 4 seeds for PDAs in this program
     assert_eq!(pda_signer_seeds.len(), 4, "Expected 4 seeds for PDA");
@@ -50,13 +58,17 @@ pub fn create_pda_account<'a>(
     if current_lamports > 0 {
         let required_lamports = rent.minimum_balance(space).max(1); // make sure balance is at least 1
         pinocchio::msg!("  required_lamports:");
-        unsafe { sol_log_64_(0, 0, 0, required_lamports, 0); }
-        
+        unsafe {
+            sol_log_64_(0, 0, 0, required_lamports, 0);
+        }
+
         if required_lamports > current_lamports {
             let transfer_amount = required_lamports - current_lamports;
             pinocchio::msg!("create_pda_account: Transferring additional lamports");
-            unsafe { sol_log_64_(0, 0, 0, transfer_amount, 0); }
-            
+            unsafe {
+                sol_log_64_(0, 0, 0, transfer_amount, 0);
+            }
+
             Transfer {
                 from: payer,
                 to: pda,
@@ -65,14 +77,16 @@ pub fn create_pda_account<'a>(
             .invoke()?;
         }
         pinocchio::msg!("create_pda_account: Allocating space");
-        unsafe { sol_log_64_(0, 0, 0, space as u64, 0); }
-        
+        unsafe {
+            sol_log_64_(0, 0, 0, space as u64, 0);
+        }
+
         Allocate {
             account: pda,
             space: space as u64,
         }
         .invoke_signed(&[signer.clone()])?;
-        
+
         pinocchio::msg!("create_pda_account: Assigning owner");
         Assign {
             account: pda,

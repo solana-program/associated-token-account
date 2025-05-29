@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["DEFAULT_BURN_PERCENT","DEFAULT_TARGET_LAMPORTS_PER_SIGNATURE","DEFAULT_TARGET_SIGNATURES_PER_SLOT"],"struct":["FeeCalculator","FeeRateGovernor","Fees"]};

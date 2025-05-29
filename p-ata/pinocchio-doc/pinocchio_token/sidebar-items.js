@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["ID","UNINIT_BYTE"],"fn":["check_id","id","write_bytes"],"mod":["instructions","state"]};

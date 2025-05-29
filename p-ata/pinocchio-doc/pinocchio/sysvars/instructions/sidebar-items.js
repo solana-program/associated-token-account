@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["INSTRUCTIONS_ID","IS_SIGNER","IS_WRITABLE"],"struct":["Instructions","IntrospectedAccountMeta","IntrospectedInstruction"]};

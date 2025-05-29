@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["MaybeAccount"],"fn":["read_account"],"struct":["InstructionContext"]};

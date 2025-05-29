@@ -1,1 +1,0 @@
-searchState.loadedDescShard("pinocchio_pubkey", 0, "Convenience macro to define a static <code>Pubkey</code> value …\nDecode into a 32-byte array. Panic on error.\nCreate a <code>Pubkey</code> from a <code>&amp;str</code>.\nConvenience macro to define a static <code>Pubkey</code> value.")

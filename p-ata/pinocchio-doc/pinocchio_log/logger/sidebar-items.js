@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"constant":["TRUNCATED","TRUNCATED_SLICE","UNINIT_BYTE"],"enum":["Argument"],"fn":["log_message"],"macro":["impl_log_for_signed","impl_log_for_slice","impl_log_for_unsigned_integer"],"struct":["Logger"],"trait":["Log"]};

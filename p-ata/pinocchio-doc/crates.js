@@ -1,2 +1,0 @@
-window.ALL_CRATES = ["pinocchio","pinocchio_associated_token_account","pinocchio_log","pinocchio_log_macro","pinocchio_memo","pinocchio_pubkey","pinocchio_system","pinocchio_token"];
-//{"start":21,"fragment_lengths":[11,37,16,22,17,19,19,18]}

@@ -287,6 +287,11 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
             is_writable: false,
             is_signer: true,
         },
+        AccountMeta {
+            pubkey: token_prog.key(),
+            is_writable: false,
+            is_signer: false,
+        },
     ];
 
     let ix_close = Instruction {
@@ -295,7 +300,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         data: &close_data,
     };
 
-    invoke_signed(&ix_close, &[nested_ata, wallet, owner_ata], &[pda_signer])
+    invoke_signed(&ix_close, &[nested_ata, wallet, owner_ata, token_prog], &[pda_signer])
 }
 
 #[cfg(test)]
@@ -488,6 +493,11 @@ mod tests {
                 is_writable: false,
                 is_signer: true,
             },
+            AccountMeta {
+                pubkey: &token_prog_key,
+                is_writable: false,
+                is_signer: false,
+            },
         ];
         let actual_ix_close = Instruction {
             program_id: &token_prog_key,
@@ -495,7 +505,7 @@ mod tests {
             data: &expected_close_data,
         };
         assert_eq!(actual_ix_close.data, &expected_close_data[..]);
-        assert_eq!(actual_ix_close.accounts.len(), 3);
+        assert_eq!(actual_ix_close.accounts.len(), 4);
         assert_eq!(actual_ix_close.accounts[1].pubkey, &wallet_key);
         assert!(actual_ix_close.accounts[1].is_writable);
     }

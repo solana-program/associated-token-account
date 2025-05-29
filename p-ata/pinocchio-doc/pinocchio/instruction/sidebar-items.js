@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"fn":["offset"],"struct":["Account","AccountMeta","Instruction","ProcessedSiblingInstruction","Seed","Signer"]};

@@ -1,9 +1,10 @@
 use {
     pinocchio::{
         account_info::AccountInfo,
-        instruction::{Seed, Signer},
+        instruction::{AccountMeta, Instruction, Seed, Signer},
+        program::{invoke, get_return_data},
+        program_error::ProgramError,
         pubkey::Pubkey,
-        syscalls::{sol_log_64_, sol_log_pubkey},
         sysvars::rent::Rent,
         ProgramResult,
     },
@@ -25,25 +26,7 @@ pub fn create_pda_account(
     pda: &AccountInfo,
     pda_signer_seeds: &[&[u8]],
 ) -> ProgramResult {
-    pinocchio::msg!("create_pda_account: Starting");
-    pinocchio::msg!("  space:");
-    unsafe {
-        sol_log_64_(0, 0, 0, space as u64, 0);
-    }
-    pinocchio::msg!("  owner:");
-    unsafe {
-        sol_log_pubkey(owner as *const _ as *const u8);
-    }
-    pinocchio::msg!("  pda:");
-    unsafe {
-        sol_log_pubkey(pda.key() as *const _ as *const u8);
-    }
-
     let current_lamports = pda.lamports();
-    pinocchio::msg!("  current_lamports:");
-    unsafe {
-        sol_log_64_(0, 0, 0, current_lamports, 0);
-    }
 
     // Convert seeds to Seed array - assuming we always have 4 seeds for PDAs in this program
     assert_eq!(pda_signer_seeds.len(), 4, "Expected 4 seeds for PDA");
@@ -57,17 +40,9 @@ pub fn create_pda_account(
 
     if current_lamports > 0 {
         let required_lamports = rent.minimum_balance(space).max(1); // make sure balance is at least 1
-        pinocchio::msg!("  required_lamports:");
-        unsafe {
-            sol_log_64_(0, 0, 0, required_lamports, 0);
-        }
 
         if required_lamports > current_lamports {
             let transfer_amount = required_lamports - current_lamports;
-            pinocchio::msg!("create_pda_account: Transferring additional lamports");
-            unsafe {
-                sol_log_64_(0, 0, 0, transfer_amount, 0);
-            }
 
             Transfer {
                 from: payer,
@@ -76,10 +51,6 @@ pub fn create_pda_account(
             }
             .invoke()?;
         }
-        pinocchio::msg!("create_pda_account: Allocating space");
-        unsafe {
-            sol_log_64_(0, 0, 0, space as u64, 0);
-        }
 
         Allocate {
             account: pda,
@@ -87,14 +58,12 @@ pub fn create_pda_account(
         }
         .invoke_signed(&[signer.clone()])?;
 
-        pinocchio::msg!("create_pda_account: Assigning owner");
         Assign {
             account: pda,
             owner,
         }
         .invoke_signed(&[signer.clone()])?;
     } else {
-        pinocchio::msg!("create_pda_account: Creating new account");
         CreateAccount {
             from: payer,
             to: pda,
@@ -104,8 +73,49 @@ pub fn create_pda_account(
         }
         .invoke_signed(&[signer])?;
     }
-    pinocchio::msg!("create_pda_account: Success");
     Ok(())
+}
+
+/// Determines the required initial data length for a new token account based on
+/// the extensions initialized on the Mint
+pub fn get_account_len(
+    mint: &AccountInfo,
+    token_program: &AccountInfo,
+) -> Result<usize, ProgramError> {
+    // Instruction data for GetAccountDataSize (discriminator 21) with ImmutableOwner extension
+    // Format: [discriminator (1 byte), extension_type (2 bytes)]
+    // ImmutableOwner extension type = 7 (as u16 little-endian)
+    let get_size_data = [21u8, 7u8, 0u8]; // 21 = discriminator, [7, 0] = ImmutableOwner as u16 LE
+    
+    let get_size_metas = &[
+        AccountMeta {
+            pubkey: mint.key(),
+            is_writable: false,
+            is_signer: false,
+        },
+    ];
+
+    let get_size_ix = Instruction {
+        program_id: token_program.key(),
+        accounts: get_size_metas,
+        data: &get_size_data,
+    };
+
+    invoke(&get_size_ix, &[mint])?;
+    
+    get_return_data()
+        .ok_or(ProgramError::InvalidInstructionData)
+        .and_then(|return_data| {
+            if return_data.program_id() != token_program.key() {
+                return Err(ProgramError::IncorrectProgramId);
+            }
+            if return_data.as_slice().len() != 8 {
+                return Err(ProgramError::InvalidInstructionData);
+            }
+            // Convert little-endian u64 to usize
+            let size_bytes: [u8; 8] = return_data.as_slice().try_into().map_err(|_| ProgramError::InvalidInstructionData)?;
+            Ok(usize::from_le_bytes(size_bytes))
+        })
 }
 
 #[cfg(test)]

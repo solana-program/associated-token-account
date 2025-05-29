@@ -184,19 +184,6 @@ fn main() {
                 rent_epoch: 0,
             },
         ),
-        // SPL Token program (points to same implementation as pinocchio-token)
-        (
-            Pubkey::from(spl_token_interface::program::ID),
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: LOADER_V3,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        // rent sysvar
-        (sysvar::rent::id(), rent_sysvar_account()),
     ];
 
     let create_ix = Instruction {
@@ -208,8 +195,6 @@ fn main() {
             AccountMeta::new_readonly(mint, false),
             AccountMeta::new_readonly(system_program::id(), false),
             AccountMeta::new_readonly(token_program_id, false),
-            AccountMeta::new_readonly(sysvar::rent::id(), false),
-            AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
         ],
         data: vec![], // 0 => Create
     };

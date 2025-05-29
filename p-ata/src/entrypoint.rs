@@ -24,14 +24,17 @@ fn log_error(err: &ProgramError) {
 
 #[inline(always)]
 pub fn entry(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
-    // empty or [0,..] = Create
-    // [1,..]      = CreateIdempotent
-    // [2,..]      = RecoverNested
-    let instr = if data.is_empty() { 0 } else { data[0] };
+    let [discriminator, _instruction_data @ ..] = data else {
+        // Empty data defaults to Create (discriminator 0)
+        return process_create(program_id, accounts, false);
+    };
 
-    let res = match instr {
+    let res = match *discriminator {
+        // 0 - Create
         0 => process_create(program_id, accounts, false),
+        // 1 - CreateIdempotent  
         1 => process_create(program_id, accounts, true),
+        // 2 - RecoverNested
         2 => process_recover(program_id, accounts),
         _ => return Err(TokenError::InvalidInstruction.into()),
     };

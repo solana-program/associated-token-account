@@ -1,17 +1,17 @@
 use {
-    crate::tools::account::create_pda_account,
+    crate::tools::account::{create_pda_account, get_account_len},
     pinocchio::{
         account_info::AccountInfo,
         instruction::{AccountMeta, Instruction, Seed, Signer},
         program::{invoke, invoke_signed},
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
-        sysvars::rent::Rent,
+        sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
     spl_token_interface::{
-        instruction::TokenInstruction, state::account::Account as TokenAccount, state::mint::Mint,
-        state::Transmutable,
+        instruction::TokenInstruction,
+        state::account::Account as TokenAccount, state::mint::Mint,
     },
 };
 
@@ -20,13 +20,14 @@ fn is_valid_token_program(_key: &Pubkey) -> bool {
     true
 }
 
-/// Accounts: payer, ata, wallet, mint, system_program, token_program, rent_sysvar, [spl_token_program]
+/// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
 pub fn process_create(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     idempotent: bool,
 ) -> ProgramResult {
-    let [payer, ata_acc, wallet, mint_account, system_prog, token_prog, rent_sysvar, ..] = accounts
+    // Support original ATA 6-account layout
+    let [payer, ata_acc, wallet, mint_account, system_prog, token_prog] = accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -68,10 +69,42 @@ pub fn process_create(
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    let space = TokenAccount::LEN;
+    let space = get_account_len(mint_account, token_prog)?;
 
-    let initialize_account_instr_data = [TokenInstruction::InitializeAccount as u8];
+    let seeds: &[&[u8]] = &[
+        wallet.key().as_ref(),
+        token_prog.key().as_ref(),
+        mint_account.key().as_ref(),
+        &[bump],
+    ];
 
+    // Use Rent::get() like original ATA
+    let rent = Rent::get()?;
+    create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
+
+    // Initialize the Immutable Owner extension first
+    let init_immutable_owner_data = [22u8]; // TokenInstruction::InitializeImmutableOwner
+    let init_immutable_owner_metas = &[
+        AccountMeta {
+            pubkey: ata_acc.key(),
+            is_writable: true,
+            is_signer: false,
+        },
+    ];
+    
+    let init_immutable_owner_ix = Instruction {
+        program_id: token_prog.key(),
+        accounts: init_immutable_owner_metas,
+        data: &init_immutable_owner_data,
+    };
+
+    invoke(&init_immutable_owner_ix, &[ata_acc])?;
+
+    // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
+    let mut initialize_account_instr_data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
+    initialize_account_instr_data[0] = 18u8; // TokenInstruction::InitializeAccount3
+    initialize_account_instr_data[1..33].copy_from_slice(wallet.key().as_ref());
+    
     let initialize_account_metas = &[
         AccountMeta {
             pubkey: ata_acc.key(),
@@ -83,16 +116,6 @@ pub fn process_create(
             is_writable: false,
             is_signer: false,
         },
-        AccountMeta {
-            pubkey: wallet.key(),
-            is_writable: false,
-            is_signer: false,
-        },
-        AccountMeta {
-            pubkey: rent_sysvar.key(),
-            is_writable: false,
-            is_signer: false,
-        },
     ];
 
     let init_ix = Instruction {
@@ -101,17 +124,7 @@ pub fn process_create(
         data: &initialize_account_instr_data,
     };
 
-    let rent = Rent::from_account_info(rent_sysvar)?;
-    let seeds: &[&[u8]] = &[
-        wallet.key().as_ref(),
-        token_prog.key().as_ref(),
-        mint_account.key().as_ref(),
-        &[bump],
-    ];
-
-    create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
-
-    invoke(&init_ix, &[ata_acc, mint_account, wallet, rent_sysvar])?;
+    invoke(&init_ix, &[ata_acc, mint_account])?;
 
     Ok(())
 }
@@ -136,7 +149,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         ],
         program_id,
     );
-    if owner_pda != *owner_ata.key() {
+    if &owner_pda != owner_ata.key() {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -148,7 +161,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         ],
         program_id,
     );
-    if nested_pda != *nested_ata.key() {
+    if &nested_pda != nested_ata.key() {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -160,7 +173,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         ],
         program_id,
     );
-    if dest_pda != *dest_ata.key() {
+    if &dest_pda != dest_ata.key() {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -198,6 +211,10 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     let nested_mint_state = unsafe { &*(nested_mint_data_slice.as_ptr() as *const Mint) };
     let decimals = nested_mint_state.decimals;
 
+    // Create instruction data using copy_from_slice for optimal performance.
+    // Note: common zerocopy alternatives (array literals, unsafe pointer manipulation) 
+    // actually consume more compute units - compiler optimizations of copy_from_slice
+    // are very good.
     let mut transfer_data_arr = [0u8; 1 + 8 + 1];
     transfer_data_arr[0] = TokenInstruction::TransferChecked as u8;
     transfer_data_arr[1..9].copy_from_slice(&amount_to_recover.to_le_bytes());
@@ -447,7 +464,7 @@ mod tests {
         };
 
         assert_eq!(actual_ix_transfer.program_id, &token_prog_key);
-        assert_eq!(actual_ix_transfer.data, &expected_transfer_data[..]);
+        assert_eq!(actual_ix_transfer.data, &transfer_data_arr);
         assert_eq!(actual_ix_transfer.accounts.len(), 4);
         assert_eq!(actual_ix_transfer.accounts[0].pubkey, &nested_ata_key);
         assert!(actual_ix_transfer.accounts[0].is_writable);

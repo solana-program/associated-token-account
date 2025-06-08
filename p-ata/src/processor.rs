@@ -1,5 +1,5 @@
 use {
-    crate::tools::account::{create_pda_account, get_account_len},
+    crate::tools::account::create_pda_account,
     pinocchio::{
         account_info::AccountInfo,
         instruction::{AccountMeta, Instruction, Seed, Signer},
@@ -10,15 +10,9 @@ use {
         ProgramResult,
     },
     spl_token_interface::{
-        instruction::TokenInstruction,
-        state::account::Account as TokenAccount, state::mint::Mint,
+        instruction::TokenInstruction, state::account::Account as TokenAccount, state::Transmutable,
     },
 };
-
-/// Check if the given key is a valid token program
-fn is_valid_token_program(_key: &Pubkey) -> bool {
-    true
-}
 
 /// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
 pub fn process_create(
@@ -27,8 +21,7 @@ pub fn process_create(
     idempotent: bool,
 ) -> ProgramResult {
     // Support original ATA 6-account layout
-    let [payer, ata_acc, wallet, mint_account, system_prog, token_prog] = accounts
-    else {
+    let [payer, ata_acc, wallet, mint_account, system_prog, token_prog] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
@@ -65,11 +58,8 @@ pub fn process_create(
         return Err(ProgramError::IllegalOwner);
     }
 
-    if !is_valid_token_program(token_prog.key()) {
-        return Err(ProgramError::IncorrectProgramId);
-    }
-
-    let space = get_account_len(mint_account, token_prog)?;
+    // Fixed account size for a classic token account (no ImmutableOwner extension)
+    let space = TokenAccount::LEN;
 
     let seeds: &[&[u8]] = &[
         wallet.key().as_ref(),
@@ -82,29 +72,11 @@ pub fn process_create(
     let rent = Rent::get()?;
     create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
 
-    // Initialize the Immutable Owner extension first
-    let init_immutable_owner_data = [22u8]; // TokenInstruction::InitializeImmutableOwner
-    let init_immutable_owner_metas = &[
-        AccountMeta {
-            pubkey: ata_acc.key(),
-            is_writable: true,
-            is_signer: false,
-        },
-    ];
-    
-    let init_immutable_owner_ix = Instruction {
-        program_id: token_prog.key(),
-        accounts: init_immutable_owner_metas,
-        data: &init_immutable_owner_data,
-    };
-
-    invoke(&init_immutable_owner_ix, &[ata_acc])?;
-
     // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
     let mut initialize_account_instr_data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
     initialize_account_instr_data[0] = 18u8; // TokenInstruction::InitializeAccount3
     initialize_account_instr_data[1..33].copy_from_slice(wallet.key().as_ref());
-    
+
     let initialize_account_metas = &[
         AccountMeta {
             pubkey: ata_acc.key(),
@@ -136,10 +108,6 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
-
-    if !is_valid_token_program(token_prog.key()) {
-        return Err(ProgramError::IncorrectProgramId);
-    }
 
     let (owner_pda, bump) = find_program_address(
         &[
@@ -204,31 +172,15 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     }
     let amount_to_recover = nested_ata_state.amount();
 
-    if unsafe { nested_mint_account.owner() } != token_prog.key() {
-        return Err(ProgramError::IllegalOwner);
-    }
-    let nested_mint_data_slice = unsafe { nested_mint_account.borrow_data_unchecked() };
-    let nested_mint_state = unsafe { &*(nested_mint_data_slice.as_ptr() as *const Mint) };
-    let decimals = nested_mint_state.decimals;
-
-    // Create instruction data using copy_from_slice for optimal performance.
-    // Note: common zerocopy alternatives (array literals, unsafe pointer manipulation) 
-    // actually consume more compute units - compiler optimizations of copy_from_slice
-    // are very good.
-    let mut transfer_data_arr = [0u8; 1 + 8 + 1];
-    transfer_data_arr[0] = TokenInstruction::TransferChecked as u8;
+    let mut transfer_data_arr = [0u8; 1 + 8];
+    transfer_data_arr[0] = TokenInstruction::Transfer as u8;
     transfer_data_arr[1..9].copy_from_slice(&amount_to_recover.to_le_bytes());
-    transfer_data_arr[9] = decimals;
 
+    // Accounts: source (nested_ata), destination (dest_ata), authority (owner_ata)
     let transfer_metas = &[
         AccountMeta {
             pubkey: nested_ata.key(),
             is_writable: true,
-            is_signer: false,
-        },
-        AccountMeta {
-            pubkey: nested_mint_account.key(),
-            is_writable: false,
             is_signer: false,
         },
         AccountMeta {
@@ -265,7 +217,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
 
     invoke_signed(
         &ix_transfer,
-        &[nested_ata, nested_mint_account, dest_ata, owner_ata],
+        &[nested_ata, dest_ata, owner_ata],
         &[pda_signer.clone()],
     )?;
 
@@ -300,7 +252,11 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         data: &close_data,
     };
 
-    invoke_signed(&ix_close, &[nested_ata, wallet, owner_ata, token_prog], &[pda_signer])
+    invoke_signed(
+        &ix_close,
+        &[nested_ata, wallet, owner_ata, token_prog],
+        &[pda_signer],
+    )
 }
 
 #[cfg(test)]
@@ -427,22 +383,15 @@ mod tests {
         let wallet_key = pubkey_from_array([16; 32]);
 
         let amount_to_recover: u64 = 1000;
-        let decimals: u8 = 6;
 
-        let mut expected_transfer_data = [0u8; 1 + 8 + 1];
-        expected_transfer_data[0] = TokenInstruction::TransferChecked as u8;
-        expected_transfer_data[1..9].copy_from_slice(&amount_to_recover.to_le_bytes());
-        expected_transfer_data[9] = decimals;
+        let mut transfer_data_arr = [0u8; 1 + 8];
+        transfer_data_arr[0] = TokenInstruction::Transfer as u8;
+        transfer_data_arr[1..9].copy_from_slice(&amount_to_recover.to_le_bytes());
 
         let expected_transfer_metas = [
             AccountMeta {
                 pubkey: &nested_ata_key,
                 is_writable: true,
-                is_signer: false,
-            },
-            AccountMeta {
-                pubkey: &nested_mint_key,
-                is_writable: false,
                 is_signer: false,
             },
             AccountMeta {
@@ -457,11 +406,6 @@ mod tests {
             },
         ];
 
-        let mut transfer_data_arr = [0u8; 1 + 8 + 1];
-        transfer_data_arr[0] = TokenInstruction::TransferChecked as u8;
-        transfer_data_arr[1..9].copy_from_slice(&amount_to_recover.to_le_bytes());
-        transfer_data_arr[9] = decimals;
-
         let actual_ix_transfer = Instruction {
             program_id: &token_prog_key,
             accounts: &expected_transfer_metas,
@@ -470,11 +414,13 @@ mod tests {
 
         assert_eq!(actual_ix_transfer.program_id, &token_prog_key);
         assert_eq!(actual_ix_transfer.data, &transfer_data_arr);
-        assert_eq!(actual_ix_transfer.accounts.len(), 4);
+        assert_eq!(actual_ix_transfer.accounts.len(), 3);
         assert_eq!(actual_ix_transfer.accounts[0].pubkey, &nested_ata_key);
         assert!(actual_ix_transfer.accounts[0].is_writable);
-        assert_eq!(actual_ix_transfer.accounts[3].pubkey, &owner_ata_key);
-        assert!(actual_ix_transfer.accounts[3].is_signer);
+        assert_eq!(actual_ix_transfer.accounts[1].pubkey, &dest_ata_key);
+        assert!(actual_ix_transfer.accounts[1].is_writable);
+        assert_eq!(actual_ix_transfer.accounts[2].pubkey, &owner_ata_key);
+        assert!(actual_ix_transfer.accounts[2].is_signer);
 
         let expected_close_data = [TokenInstruction::CloseAccount as u8];
         let expected_close_metas = [

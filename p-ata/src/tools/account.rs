@@ -1,9 +1,7 @@
 use {
     pinocchio::{
         account_info::AccountInfo,
-        instruction::{AccountMeta, Instruction, Seed, Signer},
-        program::{invoke, get_return_data},
-        program_error::ProgramError,
+        instruction::{Seed, Signer},
         pubkey::Pubkey,
         sysvars::rent::Rent,
         ProgramResult,
@@ -29,7 +27,7 @@ pub fn create_pda_account(
     let current_lamports = pda.lamports();
 
     // Convert seeds to Seed array - assuming we always have 4 seeds for PDAs in this program
-    assert_eq!(pda_signer_seeds.len(), 4, "Expected 4 seeds for PDA");
+    debug_assert!(pda_signer_seeds.len() == 4, "Expected 4 seeds for PDA");
     let seed_array: [Seed; 4] = [
         Seed::from(pda_signer_seeds[0]),
         Seed::from(pda_signer_seeds[1]),
@@ -74,48 +72,6 @@ pub fn create_pda_account(
         .invoke_signed(&[signer])?;
     }
     Ok(())
-}
-
-/// Determines the required initial data length for a new token account based on
-/// the extensions initialized on the Mint
-pub fn get_account_len(
-    mint: &AccountInfo,
-    token_program: &AccountInfo,
-) -> Result<usize, ProgramError> {
-    // Instruction data for GetAccountDataSize (discriminator 21) with ImmutableOwner extension
-    // Format: [discriminator (1 byte), extension_type (2 bytes)]
-    // ImmutableOwner extension type = 7 (as u16 little-endian)
-    let get_size_data = [21u8, 7u8, 0u8]; // 21 = discriminator, [7, 0] = ImmutableOwner as u16 LE
-    
-    let get_size_metas = &[
-        AccountMeta {
-            pubkey: mint.key(),
-            is_writable: false,
-            is_signer: false,
-        },
-    ];
-
-    let get_size_ix = Instruction {
-        program_id: token_program.key(),
-        accounts: get_size_metas,
-        data: &get_size_data,
-    };
-
-    invoke(&get_size_ix, &[mint])?;
-    
-    get_return_data()
-        .ok_or(ProgramError::InvalidInstructionData)
-        .and_then(|return_data| {
-            if return_data.program_id() != token_program.key() {
-                return Err(ProgramError::IncorrectProgramId);
-            }
-            if return_data.as_slice().len() != 8 {
-                return Err(ProgramError::InvalidInstructionData);
-            }
-            // Convert little-endian u64 to usize
-            let size_bytes: [u8; 8] = return_data.as_slice().try_into().map_err(|_| ProgramError::InvalidInstructionData)?;
-            Ok(usize::from_le_bytes(size_bytes))
-        })
 }
 
 #[cfg(test)]

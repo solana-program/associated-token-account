@@ -32,7 +32,7 @@ pub fn entry(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Prog
     let res = match *discriminator {
         // 0 - Create
         0 => process_create(program_id, accounts, false),
-        // 1 - CreateIdempotent  
+        // 1 - CreateIdempotent
         1 => process_create(program_id, accounts, true),
         // 2 - RecoverNested
         2 => process_recover(program_id, accounts),

@@ -128,78 +128,105 @@ fn main() {
         .expect("Failed to read pinocchio_token_program-keypair.json");
     let token_keypair_bytes: Vec<u8> = serde_json::from_str(&token_keypair_data)
         .expect("Failed to parse pinocchio_token_program keypair JSON");
-    let token_keypair =
+    let _token_keypair =
         Keypair::from_bytes(&token_keypair_bytes).expect("Invalid pinocchio_token_program keypair");
     let token_program_id = Pubkey::from(spl_token_interface::program::ID);
 
-    /* ------------------------------- CREATE -------------------------------- */
-    let payer = Pubkey::new_unique();
-    let wallet = Pubkey::new_unique();
-    let mint = Pubkey::new_unique();
+    /* ---------- helper to build CREATE variants ---------- */
+    #[allow(clippy::too_many_arguments)]
+    fn build_create(
+        program_id: &Pubkey,
+        token_program_id: &Pubkey,
+        with_rent: bool,
+        topup: bool,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        let payer = Pubkey::new_unique();
+        let wallet = Pubkey::new_unique();
+        let mint = Pubkey::new_unique();
 
-    // Derived Associated Token Account (wallet + mint)
-    let (ata, _bump) = Pubkey::find_program_address(
-        &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-        &program_id,
-    );
+        let (ata, _bump) = Pubkey::find_program_address(
+            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+            program_id,
+        );
 
-    // Account list (see processor::process_create docs)
-    let accounts_create = vec![
-        // payer
-        (payer, Account::new(1_000_000_000, 0, &system_program::id())),
-        // ata (PDA, uninitialized)
-        (ata, Account::new(0, 0, &system_program::id())),
-        // wallet
-        (wallet, Account::new(0, 0, &system_program::id())),
-        // mint (owned by SPL Token ID since pinocchio-token expects it)
-        (
-            mint,
-            Account {
-                lamports: 1_000_000_000,
-                data: build_mint_data(0),
-                owner: token_program_id,
-                executable: false,
-                rent_epoch: 0,
-            },
-        ),
-        // system program (dummy)
-        (
-            system_program::id(),
-            Account {
-                lamports: 1,
-                data: vec![],
-                owner: solana_sdk::native_loader::id(),
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        // token program (marked executable true so invoke succeeds)
-        (
-            token_program_id,
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: LOADER_V3,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-    ];
+        let mut accounts = vec![
+            (payer, Account::new(1_000_000_000, 0, &system_program::id())),
+            (ata, Account::new(0, 0, &system_program::id())),
+            (wallet, Account::new(0, 0, &system_program::id())),
+            (
+                mint,
+                Account {
+                    lamports: 1_000_000_000,
+                    data: build_mint_data(0),
+                    owner: *token_program_id,
+                    executable: false,
+                    rent_epoch: 0,
+                },
+            ),
+            (
+                system_program::id(),
+                Account {
+                    lamports: 1,
+                    data: vec![],
+                    owner: solana_sdk::native_loader::id(),
+                    executable: true,
+                    rent_epoch: 0,
+                },
+            ),
+            (
+                *token_program_id,
+                Account {
+                    lamports: 0,
+                    data: Vec::new(),
+                    owner: LOADER_V3,
+                    executable: true,
+                    rent_epoch: 0,
+                },
+            ),
+        ];
 
-    let create_ix = Instruction {
-        program_id,
-        accounts: vec![
+        if with_rent {
+            accounts.push((sysvar::rent::id(), rent_sysvar_account()));
+        }
+
+        // top-up path: pre-create ata with correct size but insufficient lamports
+        if topup {
+            if let Some((_, ata_acc)) = accounts.iter_mut().find(|(k, _)| *k == ata) {
+                ata_acc.data = vec![0u8; 165];
+                // Set to insufficient lamports to test actual top-up path (needs ~2M for rent exempt)
+                ata_acc.lamports = 1_000_000; // Below rent-exempt, needs top-up
+                                              // Keep system-owned for legitimate top-up scenario (allocated but not initialized)
+            }
+        }
+
+        let mut metas = vec![
             AccountMeta::new(payer, true),
             AccountMeta::new(ata, false),
             AccountMeta::new_readonly(wallet, false),
             AccountMeta::new_readonly(mint, false),
             AccountMeta::new_readonly(system_program::id(), false),
-            AccountMeta::new_readonly(token_program_id, false),
-        ],
-        data: vec![], // 0 => Create
-    };
+            AccountMeta::new_readonly(*token_program_id, false),
+        ];
+        if with_rent {
+            metas.push(AccountMeta::new_readonly(sysvar::rent::id(), false));
+        }
+
+        let ix = Instruction {
+            program_id: *program_id,
+            accounts: metas,
+            data: vec![],
+        };
+        (ix, accounts)
+    }
+
+    let (create_ix, accounts_create) = build_create(&program_id, &token_program_id, false, false);
+    let (create_rent_ix, accounts_create_rent) =
+        build_create(&program_id, &token_program_id, true, false);
+    let (create_topup_ix, accounts_create_topup) =
+        build_create(&program_id, &token_program_id, false, true);
 
     /* ------------------------------ RECOVER ------------------------------- */
+    let wallet = Pubkey::new_unique();
     let owner_mint = Pubkey::new_unique();
     let nested_mint = Pubkey::new_unique();
 
@@ -391,7 +418,9 @@ fn main() {
 
     println!("\n=== Running benchmarks ===");
     MolluskComputeUnitBencher::new(mollusk)
-        .bench(("create", &create_ix, &accounts_create[..]))
+        .bench(("create_base", &create_ix, &accounts_create[..]))
+        .bench(("create_rent", &create_rent_ix, &accounts_create_rent[..]))
+        .bench(("create_topup", &create_topup_ix, &accounts_create_topup[..]))
         .bench(("recover", &recover_ix, &accounts_recover[..]))
         .must_pass(true)
         .out_dir("../target/benches")

@@ -11,6 +11,7 @@ use {
         signature::{Keypair, Signer},
         system_program, sysvar,
     },
+    spl_token_2022::extension::ExtensionType,
     spl_token_interface::state::{account::Account as TokenAccount, mint::Mint, Transmutable},
     std::{fs, path::Path},
 };
@@ -49,6 +50,70 @@ fn build_mint_data(decimals: u8) -> Vec<u8> {
     // decimals offset: COption<Pubkey>(36) + supply(8) = 44
     data[44] = decimals;
     data[45] = 1; // is_initialized = true
+    println!(
+        "Base mint data length: {}, data[44]: {}, data[45]: {}",
+        data.len(),
+        data[44],
+        data[45]
+    );
+    data
+}
+
+/// Build an "extended" mint whose data length is larger than the base Mint::LEN so that
+/// the ATA create path activates the `get_account_len` CPI.  We don't need to populate a real
+/// extension layout; the runtime only checks the length to decide that extensions exist.
+fn build_extended_mint_data(decimals: u8) -> Vec<u8> {
+    // Calculate the exact size token-2022 expects for a Mint with ImmutableOwner extension
+    let required_len = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
+        ExtensionType::ImmutableOwner,
+    ])
+    .expect("calc len");
+    println!("Extended mint required_len: {}", required_len);
+
+    // Start with base mint
+    let mut data = build_mint_data(decimals);
+    // Ensure vector has required length, zero-padded
+    data.resize(required_len, 0u8);
+
+    // Compose TLV entries at correct offset (base len = 82)
+    let mut cursor = 82; // Standard SPL Token mint length
+                         // ImmutableOwner header
+    data[cursor..cursor + 2].copy_from_slice(&(ExtensionType::ImmutableOwner as u16).to_le_bytes());
+    data[cursor + 2..cursor + 4].copy_from_slice(&0u16.to_le_bytes()); // len = 0
+    cursor += 4;
+    // Sentinel header
+    data[cursor..cursor + 4].copy_from_slice(&0u32.to_le_bytes());
+
+    println!(
+        "Extended mint data length: {}, data[45]: {}",
+        data.len(),
+        data[45]
+    );
+    data
+}
+
+/// Build a Multisig account data with given signer public keys and threshold `m`.
+fn build_multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
+    use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
+    assert!(
+        m as usize <= signer_pubkeys.len(),
+        "m cannot exceed number of provided signers"
+    );
+    assert!(m >= 1, "m must be at least 1");
+    assert!(
+        signer_pubkeys.len() <= MAX_SIGNERS as usize,
+        "too many signers provided"
+    );
+
+    let mut data = vec![0u8; Multisig::LEN];
+    data[0] = m; // m threshold
+    data[1] = signer_pubkeys.len() as u8; // n signers
+    data[2] = 1; // is_initialized
+
+    for (i, pk) in signer_pubkeys.iter().enumerate() {
+        let offset = 3 + i * 32;
+        data[offset..offset + 32].copy_from_slice(pk.as_ref());
+    }
     data
 }
 
@@ -137,6 +202,7 @@ fn main() {
     fn build_create(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
+        extended_mint: bool,
         with_rent: bool,
         topup: bool,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
@@ -149,6 +215,12 @@ fn main() {
             program_id,
         );
 
+        let mint_data = if extended_mint {
+            build_extended_mint_data(0)
+        } else {
+            build_mint_data(0)
+        };
+
         let mut accounts = vec![
             (payer, Account::new(1_000_000_000, 0, &system_program::id())),
             (ata, Account::new(0, 0, &system_program::id())),
@@ -157,7 +229,7 @@ fn main() {
                 mint,
                 Account {
                     lamports: 1_000_000_000,
-                    data: build_mint_data(0),
+                    data: mint_data,
                     owner: *token_program_id,
                     executable: false,
                     rent_epoch: 0,
@@ -219,11 +291,20 @@ fn main() {
         (ix, accounts)
     }
 
-    let (create_ix, accounts_create) = build_create(&program_id, &token_program_id, false, false);
+    let (create_ix, accounts_create) =
+        build_create(&program_id, &token_program_id, false, false, false);
     let (create_rent_ix, accounts_create_rent) =
-        build_create(&program_id, &token_program_id, true, false);
+        build_create(&program_id, &token_program_id, false, true, false);
     let (create_topup_ix, accounts_create_topup) =
-        build_create(&program_id, &token_program_id, false, true);
+        build_create(&program_id, &token_program_id, false, false, true);
+
+    // Same set but with an extended mint (longer data len)
+    let (create_ext_ix, accounts_create_ext) =
+        build_create(&program_id, &token_program_id, true, false, false);
+    let (create_ext_rent_ix, accounts_create_ext_rent) =
+        build_create(&program_id, &token_program_id, true, true, false);
+    let (create_ext_topup_ix, accounts_create_ext_topup) =
+        build_create(&program_id, &token_program_id, true, false, true);
 
     /* ------------------------------ RECOVER ------------------------------- */
     let wallet = Pubkey::new_unique();
@@ -355,6 +436,166 @@ fn main() {
         data: vec![2u8], // 2 => RecoverNested
     };
 
+    /* ------------------------- RECOVER (MULTISIG WALLET) ------------------------- */
+    let wallet_ms = Pubkey::new_unique();
+    let signer1 = Pubkey::new_unique();
+    let signer2 = Pubkey::new_unique();
+    let signer3 = Pubkey::new_unique();
+    let ms_threshold: u8 = 2; // 2 of 3 multisig
+
+    let (owner_ata_ms, owner_bump_ms) = Pubkey::find_program_address(
+        &[
+            wallet_ms.as_ref(),
+            token_program_id.as_ref(),
+            owner_mint.as_ref(),
+        ],
+        &program_id,
+    );
+    let (nested_ata_ms, _nested_bump_ms) = Pubkey::find_program_address(
+        &[
+            owner_ata_ms.as_ref(),
+            token_program_id.as_ref(),
+            nested_mint.as_ref(),
+        ],
+        &program_id,
+    );
+    let (dest_ata_ms, _dest_bump_ms) = Pubkey::find_program_address(
+        &[
+            wallet_ms.as_ref(),
+            token_program_id.as_ref(),
+            nested_mint.as_ref(),
+        ],
+        &program_id,
+    );
+
+    let accounts_recover_ms = vec![
+        // nested_ata_ms – holds tokens owned by owner_ata_ms
+        (
+            nested_ata_ms,
+            Account {
+                lamports: 1_000_000_000,
+                data: build_token_account_data(&nested_mint, &owner_ata_ms, 100),
+                owner: token_program_id,
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+        // nested_mint
+        (
+            nested_mint,
+            Account {
+                lamports: 1_000_000_000,
+                data: build_mint_data(0),
+                owner: token_program_id,
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+        // dest_ata_ms – wallet_ms's ATA for nested_mint
+        (
+            dest_ata_ms,
+            Account {
+                lamports: 1_000_000_000,
+                data: build_token_account_data(&nested_mint, &wallet_ms, 0),
+                owner: token_program_id,
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+        // owner_ata_ms – wallet_ms's ATA for owner_mint (owner of nested_ata_ms)
+        (
+            owner_ata_ms,
+            Account {
+                lamports: 1_000_000_000,
+                data: build_token_account_data(&owner_mint, &wallet_ms, 0),
+                owner: token_program_id,
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+        // owner_mint (same as before)
+        (
+            owner_mint,
+            Account {
+                lamports: 1_000_000_000,
+                data: build_mint_data(0),
+                owner: token_program_id,
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+        // wallet_ms (multisig)
+        (
+            wallet_ms,
+            Account {
+                lamports: 1_000_000_000,
+                data: build_multisig_data(ms_threshold, &[signer1, signer2, signer3]),
+                owner: token_program_id,
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+        // token program (executable)
+        (
+            token_program_id,
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: LOADER_V3,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        // SPL Token program (points to same implementation as pinocchio-token)
+        (
+            Pubkey::from(spl_token_interface::program::ID),
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: LOADER_V3,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        // signer1 account (system, signer)
+        (
+            signer1,
+            Account::new(1_000_000_000, 0, &system_program::id()),
+        ),
+        // signer2 account (system, signer)
+        (
+            signer2,
+            Account::new(1_000_000_000, 0, &system_program::id()),
+        ),
+        // signer3 account (system, non-signer)
+        (
+            signer3,
+            Account::new(1_000_000_000, 0, &system_program::id()),
+        ),
+    ];
+
+    // Build account metas for the instruction
+    let mut recover_ms_metas = vec![
+        AccountMeta::new(nested_ata_ms, false),
+        AccountMeta::new_readonly(nested_mint, false),
+        AccountMeta::new(dest_ata_ms, false),
+        AccountMeta::new(owner_ata_ms, false),
+        AccountMeta::new_readonly(owner_mint, false),
+        AccountMeta::new(wallet_ms, false), // multisig wallet writable, not signer
+        AccountMeta::new_readonly(token_program_id, false),
+        AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
+    ];
+    // append signer metas
+    recover_ms_metas.push(AccountMeta::new_readonly(signer1, true));
+    recover_ms_metas.push(AccountMeta::new_readonly(signer2, true));
+    recover_ms_metas.push(AccountMeta::new_readonly(signer3, false));
+
+    let recover_msix = Instruction {
+        program_id,
+        accounts: recover_ms_metas,
+        data: vec![2u8], // RecoverNested
+    };
+
     /* ------------------------------ BENCH -------------------------------- */
     // Start with a Mollusk instance that already contains the common builtin programs
     let mut mollusk = Mollusk::default();
@@ -422,10 +663,66 @@ fn main() {
         .bench(("create_rent", &create_rent_ix, &accounts_create_rent[..]))
         .bench(("create_topup", &create_topup_ix, &accounts_create_topup[..]))
         .bench(("recover", &recover_ix, &accounts_recover[..]))
+        .bench(("recover_multisig", &recover_msix, &accounts_recover_ms[..]))
         .must_pass(true)
         .out_dir("../target/benches")
         .execute();
 
     // Prevent "function never used" warnings for the bumps (they're needed for seed calc correctness)
     let _ = owner_bump;
+    let _ = owner_bump_ms;
+
+    // After initial program registry debug prints remove original mollusk variable to avoid confusion. We'll create helper.
+
+    // Helper to produce a fresh Mollusk with the p-ata and token programs registered
+    fn fresh_mollusk(program_id: &Pubkey, token_program_id: &Pubkey) -> Mollusk {
+        let mut m = Mollusk::default();
+        m.add_program(program_id, "pinocchio_ata_program", &LOADER_V3);
+        m.add_program(
+            &Pubkey::from(spl_token_interface::program::ID),
+            "pinocchio_token_program",
+            &LOADER_V3,
+        );
+        m.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
+        m
+    }
+
+    println!("\n=== Running isolated benchmarks ===");
+
+    // create_base
+    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
+        .bench(("create_base", &create_ix, &accounts_create[..]))
+        .must_pass(true)
+        .out_dir("../target/benches")
+        .execute();
+
+    // create_rent
+    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
+        .bench(("create_rent", &create_rent_ix, &accounts_create_rent[..]))
+        .must_pass(true)
+        .out_dir("../target/benches")
+        .execute();
+
+    // create_topup
+    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
+        .bench(("create_topup", &create_topup_ix, &accounts_create_topup[..]))
+        .must_pass(true)
+        .out_dir("../target/benches")
+        .execute();
+
+    // recover (normal)
+    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
+        .bench(("recover", &recover_ix, &accounts_recover[..]))
+        .must_pass(true)
+        .out_dir("../target/benches")
+        .execute();
+
+    // recover_multisig (isolated with its own multisig accounts)
+    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
+        .bench(("recover_multisig", &recover_msix, &accounts_recover_ms[..]))
+        .must_pass(true)
+        .out_dir("../target/benches")
+        .execute();
+
+    // Extended-mint isolated benches disabled for now, since p-token doesn't support extensions yet.
 }

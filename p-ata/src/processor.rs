@@ -126,7 +126,7 @@ pub fn process_create(
     Ok(())
 }
 
-/// Accounts: nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet, token_prog
+/// Accounts: nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet, token_prog, [..multisig signer accounts]
 pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     if accounts.len() < 7 {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -165,8 +165,46 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     // subsequent owner checks on their account data provide sufficient safety
     // for practical purposes while saving ~3k CUs.
 
+    // --- Wallet signature / multisig handling ---
+    // If `wallet` signed directly, all good. Otherwise, allow a Multisig account
+    // owned by the token program, provided that the required number (m) of
+    // its signer keys signed this instruction.  Additional signer accounts
+    // must be passed directly after the `token_prog` account.
+
     if !wallet.is_signer() {
-        return Err(ProgramError::MissingRequiredSignature);
+        // Check if this is a token-program multisig owner
+        if unsafe { wallet.owner() } != token_prog.key() {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+
+        #[allow(unused_imports)]
+        use spl_token_interface::state::{multisig::Multisig, Initializable, Transmutable};
+
+        // Load and validate multisig state
+        let wallet_data_slice = unsafe { wallet.borrow_data_unchecked() };
+        let multisig_state: &Multisig =
+            unsafe { spl_token_interface::state::load::<Multisig>(wallet_data_slice)? };
+
+        let signer_infos = &accounts[7..];
+
+        // Count how many of the provided signer accounts are both marked as
+        // signer on this instruction *and* appear in the multisig signer list.
+        let mut signer_count: u8 = 0;
+        'outer: for signer_acc in signer_infos {
+            if !signer_acc.is_signer() {
+                continue;
+            }
+            for ms_pk in multisig_state.signers[..multisig_state.n as usize].iter() {
+                if ms_pk == signer_acc.key() {
+                    signer_count = signer_count.saturating_add(1);
+                    continue 'outer;
+                }
+            }
+        }
+
+        if signer_count < multisig_state.m {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
     }
 
     if unsafe { owner_mint_account.owner() } != token_prog.key() {

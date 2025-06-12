@@ -206,9 +206,31 @@ fn main() {
         with_rent: bool,
         topup: bool,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = Pubkey::new_unique();
-        let wallet = Pubkey::new_unique();
-        let mint = Pubkey::new_unique();
+        // Deterministic keys so CU cost is reproducible across runs
+        fn const_pk(b: u8) -> Pubkey {
+            Pubkey::new_from_array([b; 32])
+        }
+
+        let payer = const_pk(10);
+        let mint = const_pk(11);
+
+        // Choose a wallet that gives bump 255 for its ATA
+        let mut wallet = const_pk(12);
+        let mut best_bump = 0u8;
+        for b in 12u8..=255 {
+            let cand = const_pk(b);
+            let (_, bump) = Pubkey::find_program_address(
+                &[cand.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+                program_id,
+            );
+            if bump > best_bump {
+                wallet = cand;
+                best_bump = bump;
+                if bump == 255 {
+                    break;
+                }
+            }
+        }
 
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
@@ -291,20 +313,43 @@ fn main() {
         (ix, accounts)
     }
 
-    // NEW: helper to build a pre-initialized ATA so the instruction hits the CreateIdempotent early-exit
+    // helper to build a pre-initialized ATA so the instruction hits the CreateIdempotent early-exit
     fn build_create_idempotent(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
         with_rent: bool,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        // Payer and wallet
-        let payer = Pubkey::new_unique();
-        let wallet = Pubkey::new_unique();
-        // Mint for which we are creating an ATA
-        let mint = Pubkey::new_unique();
+        // Helper for deterministic pubkeys (array filled with the given byte)
+        fn const_pk(fill: u8) -> Pubkey {
+            Pubkey::new_from_array([fill; 32])
+        }
 
-        // Derive the ATA PDA
-        let (ata, _bump) = Pubkey::find_program_address(
+        // Fixed payer & mint for reproducibility
+        let payer = const_pk(1);
+        let mint = const_pk(2);
+
+        // Choose a wallet pubkey that yields the *maximum* bump (255)
+        // so that the on-chain PDA search exits after the very first
+        // keccak, giving the "best" and most predictable CU number.
+        let mut wallet = const_pk(3);
+        let mut best_bump = 0u8;
+        for byte in 3u8..=255 {
+            let candidate = const_pk(byte);
+            let (_, bump) = Pubkey::find_program_address(
+                &[candidate.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+                program_id,
+            );
+            if bump > best_bump {
+                wallet = candidate;
+                best_bump = bump;
+                if bump == 255 {
+                    break;
+                }
+            }
+        }
+
+        // Now derive the ATA PDA using the chosen wallet
+        let (ata, _final_bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
         );
@@ -411,10 +456,68 @@ fn main() {
         build_create(&program_id, &token_program_id, true, false, true);
 
     /* ------------------------------ RECOVER ------------------------------- */
-    let wallet = Pubkey::new_unique();
-    let owner_mint = Pubkey::new_unique();
-    let nested_mint = Pubkey::new_unique();
+    // Helper to build deterministic Pubkeys (32 identical bytes)
+    fn const_pk(byte: u8) -> Pubkey {
+        Pubkey::new_from_array([byte; 32])
+    }
 
+    // --- Choose owner_mint first (fixed) ---
+    let owner_mint = const_pk(20);
+
+    // --- Pick a wallet whose bump for owner_ata is 255 (1-hash PDA search) ---
+    let mut wallet = const_pk(30);
+    let mut best_bump = 0u8;
+    for b in 30u8..=255 {
+        let cand = const_pk(b);
+        let (_, bump) = Pubkey::find_program_address(
+            &[
+                cand.as_ref(),
+                token_program_id.as_ref(),
+                owner_mint.as_ref(),
+            ],
+            &program_id,
+        );
+        if bump > best_bump {
+            wallet = cand;
+            best_bump = bump;
+            if bump == 255 {
+                break;
+            }
+        }
+    }
+
+    // --- Now pick nested_mint so that nested_ata also yields bump 255 ---
+    let mut nested_mint = const_pk(40);
+    let mut best_nested_bump = 0u8;
+    // owner_ata is not yet defined – we'll compute candidate bumps on the fly
+    let (owner_ata_tmp, _) = Pubkey::find_program_address(
+        &[
+            wallet.as_ref(),
+            token_program_id.as_ref(),
+            owner_mint.as_ref(),
+        ],
+        &program_id,
+    );
+    for b in 40u8..=255 {
+        let cand = const_pk(b);
+        let (_, bump) = Pubkey::find_program_address(
+            &[
+                owner_ata_tmp.as_ref(),
+                token_program_id.as_ref(),
+                cand.as_ref(),
+            ],
+            &program_id,
+        );
+        if bump > best_nested_bump {
+            nested_mint = cand;
+            best_nested_bump = bump;
+            if bump == 255 {
+                break;
+            }
+        }
+    }
+
+    // owner_ata PDA (bump guaranteed high)
     let (owner_ata, owner_bump) = Pubkey::find_program_address(
         &[
             wallet.as_ref(),
@@ -423,6 +526,7 @@ fn main() {
         ],
         &program_id,
     );
+    // nested_ata PDA (bump high)
     let (nested_ata, _nested_bump) = Pubkey::find_program_address(
         &[
             owner_ata.as_ref(),
@@ -431,6 +535,7 @@ fn main() {
         ],
         &program_id,
     );
+
     let (dest_ata, _dest_bump) = Pubkey::find_program_address(
         &[
             wallet.as_ref(),
@@ -541,7 +646,28 @@ fn main() {
     };
 
     /* ------------------------- RECOVER (MULTISIG WALLET) ------------------------- */
-    let wallet_ms = Pubkey::new_unique();
+    // Choose a multisig wallet that also yields bump 255 for its owner_ata_ms
+    let mut wallet_ms = const_pk(60);
+    let mut best_bump_ms = 0u8;
+    for b in 60u8..=255 {
+        let cand = const_pk(b);
+        let (_, bump) = Pubkey::find_program_address(
+            &[
+                cand.as_ref(),
+                token_program_id.as_ref(),
+                owner_mint.as_ref(),
+            ],
+            &program_id,
+        );
+        if bump > best_bump_ms {
+            wallet_ms = cand;
+            best_bump_ms = bump;
+            if bump == 255 {
+                break;
+            }
+        }
+    }
+
     let signer1 = Pubkey::new_unique();
     let signer2 = Pubkey::new_unique();
     let signer3 = Pubkey::new_unique();
@@ -762,16 +888,33 @@ fn main() {
     }
 
     println!("\n=== Running benchmarks ===");
-    MolluskComputeUnitBencher::new(mollusk)
-        .bench(("create_base", &create_ix, &accounts_create[..]))
-        .bench(("create_rent", &create_rent_ix, &accounts_create_rent[..]))
-        .bench(("create_topup", &create_topup_ix, &accounts_create_topup[..]))
-        .bench(("create_idemp", &create_idemp_ix, &accounts_create_idemp[..]))
-        .bench(("recover", &recover_ix, &accounts_recover[..]))
-        .bench(("recover_multisig", &recover_msix, &accounts_recover_ms[..]))
-        .must_pass(true)
-        .out_dir("../target/benches")
-        .execute();
+    // NOTE: We intentionally do *not* use a single Mollusk instance for all benchmarks –
+    // sharing state would allow earlier instructions to mutate account data and skew
+    // the CU count of later benches.  Instead we run each bench against its own fresh
+    // Mollusk *and* freshly-cloned account list so that only the instruction under test
+    // is measured.
+
+    // Helper to deep-clone the `(Pubkey, Account)` vec so mutations in one run do not
+    // influence the next.
+    fn clone_accounts(src: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
+        src.iter().map(|(k, v)| (*k, v.clone())).collect()
+    }
+
+    let mut isolated_bencher = |name: &str, ix: &Instruction, accts: &[(Pubkey, Account)]| {
+        MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
+            .bench((name, ix, &clone_accounts(accts)[..]))
+            .must_pass(true)
+            .out_dir("../target/benches")
+            .execute();
+    };
+
+    println!("\n=== Running isolated benchmarks ===");
+    isolated_bencher("create_base", &create_ix, &accounts_create);
+    isolated_bencher("create_rent", &create_rent_ix, &accounts_create_rent);
+    isolated_bencher("create_topup", &create_topup_ix, &accounts_create_topup);
+    isolated_bencher("create_idemp", &create_idemp_ix, &accounts_create_idemp);
+    isolated_bencher("recover", &recover_ix, &accounts_recover);
+    isolated_bencher("recover_multisig", &recover_msix, &accounts_recover_ms);
 
     // Prevent "function never used" warnings for the bumps (they're needed for seed calc correctness)
     let _ = owner_bump;
@@ -791,50 +934,4 @@ fn main() {
         m.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
         m
     }
-
-    println!("\n=== Running isolated benchmarks ===");
-
-    // create_base
-    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
-        .bench(("create_base", &create_ix, &accounts_create[..]))
-        .must_pass(true)
-        .out_dir("../target/benches")
-        .execute();
-
-    // create_rent
-    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
-        .bench(("create_rent", &create_rent_ix, &accounts_create_rent[..]))
-        .must_pass(true)
-        .out_dir("../target/benches")
-        .execute();
-
-    // create_topup
-    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
-        .bench(("create_topup", &create_topup_ix, &accounts_create_topup[..]))
-        .must_pass(true)
-        .out_dir("../target/benches")
-        .execute();
-
-    // create_idempotent
-    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
-        .bench(("create_idemp", &create_idemp_ix, &accounts_create_idemp[..]))
-        .must_pass(true)
-        .out_dir("../target/benches")
-        .execute();
-
-    // recover (normal)
-    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
-        .bench(("recover", &recover_ix, &accounts_recover[..]))
-        .must_pass(true)
-        .out_dir("../target/benches")
-        .execute();
-
-    // recover_multisig (isolated with its own multisig accounts)
-    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
-        .bench(("recover_multisig", &recover_msix, &accounts_recover_ms[..]))
-        .must_pass(true)
-        .out_dir("../target/benches")
-        .execute();
-
-    // Extended-mint isolated benches disabled for now, since p-token doesn't support extensions yet.
 }

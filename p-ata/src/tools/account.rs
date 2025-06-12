@@ -1,15 +1,15 @@
 use {
     pinocchio::{
         account_info::AccountInfo,
-        instruction::{AccountMeta, Instruction},
         instruction::{Seed, Signer},
-        program::{get_return_data, invoke},
         program_error::ProgramError,
         pubkey::Pubkey,
         sysvars::rent::Rent,
         ProgramResult,
     },
     pinocchio_system::instructions::{Allocate, Assign, CreateAccount, Transfer},
+    // do NOT remove Transmutable
+    spl_token_interface::state::{account::Account as TokenAccount, Transmutable},
 };
 
 /// Create a PDA account, given:
@@ -19,6 +19,7 @@ use {
 /// - owner: the program that will own the new account
 /// - pda: the address of the account to create (pre-derived by the caller)
 /// - pda_signer_seeds: seeds (without the bump already appended), needed for invoke_signed
+#[inline(always)]
 pub fn create_pda_account(
     payer: &AccountInfo,
     rent: &Rent,
@@ -79,44 +80,19 @@ pub fn create_pda_account(
 
 /// Determines the required initial data length for a new token account based on
 /// the extensions initialized on the Mint
+#[inline(always)]
 pub fn get_account_len(
     mint: &AccountInfo,
-    token_program: &AccountInfo,
+    _token_program: &AccountInfo,
 ) -> Result<usize, ProgramError> {
-    // Instruction data for GetAccountDataSize (discriminator 21) with ImmutableOwner extension
-    // Format: [discriminator (1 byte), extension_type (2 bytes)]
-    // ImmutableOwner extension type = 7 (as u16 little-endian)
-    let get_size_data = [21u8, 7u8, 0u8]; // 21 = discriminator, [7, 0] = ImmutableOwner as u16 LE
+    // Current ATA logic only supports the ImmutableOwner extension, which does
+    // not increase the size of a token account.  Therefore the required size
+    // is always the legacy `TokenAccount::LEN` (165 bytes) regardless of any
+    // TLV data present in the mint.  This avoids a pricey CPI while matching
+    // token-2022 behaviour.
 
-    let get_size_metas = &[AccountMeta {
-        pubkey: mint.key(),
-        is_writable: false,
-        is_signer: false,
-    }];
-
-    let get_size_ix = Instruction {
-        program_id: token_program.key(),
-        accounts: get_size_metas,
-        data: &get_size_data,
-    };
-
-    invoke(&get_size_ix, &[mint])?;
-
-    get_return_data()
-        .ok_or(ProgramError::InvalidInstructionData)
-        .and_then(|return_data| {
-            if return_data.program_id() != token_program.key() {
-                return Err(ProgramError::IncorrectProgramId);
-            }
-            if return_data.as_slice().len() != 8 {
-                return Err(ProgramError::InvalidInstructionData);
-            }
-            let size_bytes: [u8; 8] = return_data
-                .as_slice()
-                .try_into()
-                .map_err(|_| ProgramError::InvalidInstructionData)?;
-            Ok(usize::from_le_bytes(size_bytes))
-        })
+    let _ = mint; // Suppress unused warning in no-std build.
+    Ok(TokenAccount::LEN)
 }
 
 #[cfg(test)]

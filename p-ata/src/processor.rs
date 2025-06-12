@@ -161,7 +161,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // Skipping expensive seed verification for `nested_ata` and `dest_ata`; the
+    // No expensive seed verification for `nested_ata` and `dest_ata`; the
     // subsequent owner checks on their account data provide sufficient safety
     // for practical purposes while saving ~3k CUs.
 

@@ -291,12 +291,116 @@ fn main() {
         (ix, accounts)
     }
 
+    // NEW: helper to build a pre-initialized ATA so the instruction hits the CreateIdempotent early-exit
+    fn build_create_idempotent(
+        program_id: &Pubkey,
+        token_program_id: &Pubkey,
+        with_rent: bool,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Payer and wallet
+        let payer = Pubkey::new_unique();
+        let wallet = Pubkey::new_unique();
+        // Mint for which we are creating an ATA
+        let mint = Pubkey::new_unique();
+
+        // Derive the ATA PDA
+        let (ata, _bump) = Pubkey::find_program_address(
+            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+            program_id,
+        );
+
+        // Build fully initialized token account data owned by `wallet`
+        let ata_data = build_token_account_data(&mint, &wallet, 0);
+
+        // Build accounts vector with the ATA already initialized and owned by the token program
+        let mut accounts = vec![
+            // payer
+            (payer, Account::new(1_000_000_000, 0, &system_program::id())),
+            // the existing ATA (rent-exempt lamports, correct owner & data)
+            (
+                ata,
+                Account {
+                    lamports: 2_000_000, // >= rent-exempt
+                    data: ata_data,
+                    owner: *token_program_id,
+                    executable: false,
+                    rent_epoch: 0,
+                },
+            ),
+            // wallet
+            (wallet, Account::new(0, 0, &system_program::id())),
+            // mint
+            (
+                mint,
+                Account {
+                    lamports: 1_000_000_000,
+                    data: build_mint_data(0),
+                    owner: *token_program_id,
+                    executable: false,
+                    rent_epoch: 0,
+                },
+            ),
+            // system program
+            (
+                system_program::id(),
+                Account {
+                    lamports: 1,
+                    data: vec![],
+                    owner: solana_sdk::native_loader::id(),
+                    executable: true,
+                    rent_epoch: 0,
+                },
+            ),
+            // token program (executable)
+            (
+                *token_program_id,
+                Account {
+                    lamports: 0,
+                    data: Vec::new(),
+                    owner: LOADER_V3,
+                    executable: true,
+                    rent_epoch: 0,
+                },
+            ),
+        ];
+
+        if with_rent {
+            accounts.push((sysvar::rent::id(), rent_sysvar_account()));
+        }
+
+        // Same metas ordering as the Create instruction (payer, ata, wallet, mint, system, token [, rent])
+        let mut metas = vec![
+            AccountMeta::new(payer, true),
+            AccountMeta::new(ata, false),
+            AccountMeta::new_readonly(wallet, false),
+            AccountMeta::new_readonly(mint, false),
+            AccountMeta::new_readonly(system_program::id(), false),
+            AccountMeta::new_readonly(*token_program_id, false),
+        ];
+        if with_rent {
+            metas.push(AccountMeta::new_readonly(sysvar::rent::id(), false));
+        }
+
+        // Discriminator 1 triggers CreateIdempotent
+        let ix = Instruction {
+            program_id: *program_id,
+            accounts: metas,
+            data: vec![1u8],
+        };
+
+        (ix, accounts)
+    }
+
     let (create_ix, accounts_create) =
         build_create(&program_id, &token_program_id, false, false, false);
     let (create_rent_ix, accounts_create_rent) =
         build_create(&program_id, &token_program_id, false, true, false);
     let (create_topup_ix, accounts_create_topup) =
         build_create(&program_id, &token_program_id, false, false, true);
+
+    // NEW: CreateIdempotent benchmark setup
+    let (create_idemp_ix, accounts_create_idemp) =
+        build_create_idempotent(&program_id, &token_program_id, false);
 
     // Same set but with an extended mint (longer data len)
     let (create_ext_ix, accounts_create_ext) =
@@ -662,6 +766,7 @@ fn main() {
         .bench(("create_base", &create_ix, &accounts_create[..]))
         .bench(("create_rent", &create_rent_ix, &accounts_create_rent[..]))
         .bench(("create_topup", &create_topup_ix, &accounts_create_topup[..]))
+        .bench(("create_idemp", &create_idemp_ix, &accounts_create_idemp[..]))
         .bench(("recover", &recover_ix, &accounts_recover[..]))
         .bench(("recover_multisig", &recover_msix, &accounts_recover_ms[..]))
         .must_pass(true)
@@ -706,6 +811,13 @@ fn main() {
     // create_topup
     MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
         .bench(("create_topup", &create_topup_ix, &accounts_create_topup[..]))
+        .must_pass(true)
+        .out_dir("../target/benches")
+        .execute();
+
+    // create_idempotent
+    MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
+        .bench(("create_idemp", &create_idemp_ix, &accounts_create_idemp[..]))
         .must_pass(true)
         .out_dir("../target/benches")
         .execute();

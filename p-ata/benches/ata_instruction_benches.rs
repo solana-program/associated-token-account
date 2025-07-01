@@ -502,12 +502,8 @@ fn main() {
         build_create(&program_id, &token_program_id, false, true, false);
     let (create_topup_ix, accounts_create_topup) =
         build_create(&program_id, &token_program_id, false, false, true);
-
-    // NEW: CreateIdempotent benchmark setup
     let (create_idemp_ix, accounts_create_idemp) =
         build_create_idempotent(&program_id, &token_program_id, false);
-
-    // Same set but with an extended mint (longer data len)
     let (create_ext_ix, accounts_create_ext) =
         build_create(&program_id, &token_program_id, true, false, false);
     let (create_ext_rent_ix, accounts_create_ext_rent) =
@@ -967,16 +963,14 @@ fn main() {
     isolated_bencher("create_idemp", &create_idemp_ix, &accounts_create_idemp);
     isolated_bencher("recover", &recover_ix, &accounts_recover);
     isolated_bencher("recover_multisig", &recover_msix, &accounts_recover_ms);
-    // Run create_topup last to avoid potential account state conflicts
+
     isolated_bencher("create_topup", &create_topup_ix, &accounts_create_topup);
 
-    // Prevent "function never used" warnings for the bumps (they're needed for seed calc correctness)
     let _ = owner_bump;
     let _ = owner_bump_ms;
 
-    // After initial program registry debug prints remove original mollusk variable to avoid confusion. We'll create helper.
 
-    // Helper to produce a fresh Mollusk with the p-ata and token programs registered
+
     fn fresh_mollusk(program_id: &Pubkey, token_program_id: &Pubkey) -> Mollusk {
         let mut m = Mollusk::default();
         m.add_program(program_id, "pinocchio_ata_program", &LOADER_V3);

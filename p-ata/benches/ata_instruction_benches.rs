@@ -4,24 +4,30 @@ use {
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     mollusk_svm_bencher::MolluskComputeUnitBencher,
     solana_logger,
-    solana_sdk::{
-        account::Account,
-        instruction::{AccountMeta, Instruction},
-        pubkey::Pubkey,
-        signature::{Keypair, Signer},
-        system_program, sysvar,
-    },
+    solana_account::Account,
+    solana_instruction::{AccountMeta, Instruction},
+    solana_pubkey::Pubkey,
+    solana_keypair::Keypair,
+    solana_signer::Signer,
+    solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
     spl_token_interface::state::{account::Account as TokenAccount, mint::Mint, Transmutable},
     std::{fs, path::Path},
 };
+
+// System program and native loader constants
+const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]); // 11111111111111111111111111111111
+const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
+    5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241,
+    83, 160, 125, 173, 247, 101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
+]); // NativeLoader1111111111111111111111111111111
 
 /// Build a zero-rent `Rent` sysvar account with correctly sized data buffer.
 fn rent_sysvar_account() -> Account {
     Account {
         lamports: 1,
         data: vec![1u8; 17], // Minimal rent sysvar data
-        owner: sysvar::rent::id(),
+        owner: rent::id(),
         executable: false,
         rent_epoch: 0,
     }
@@ -129,6 +135,12 @@ fn main() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     println!("CARGO_MANIFEST_DIR: {}", manifest_dir);
 
+    /// print base58 representation of NATIVE_LOADER_ID
+    println!("NATIVE_LOADER_ID: {}", NATIVE_LOADER_ID.to_string());
+
+    /// print base58 representation of SYSTEM_PROGRAM_ID
+    println!("SYSTEM_PROGRAM_ID: {}", SYSTEM_PROGRAM_ID.to_string());
+
     let sbf_out_dir = format!("{}/target/sbpf-solana-solana/release", manifest_dir);
     println!("Setting SBF_OUT_DIR to: {}", sbf_out_dir);
 
@@ -211,13 +223,24 @@ fn main() {
             Pubkey::new_from_array([b; 32])
         }
 
-        let payer = const_pk(10);
-        let mint = const_pk(11);
+        // Use different base values for each test variant to avoid address collisions
+        let base_offset = match (extended_mint, with_rent, topup) {
+            (false, false, false) => 10,  // create_base
+            (false, true, false) => 20,   // create_rent  
+            (false, false, true) => 30,   // create_topup
+            (true, false, false) => 40,   // create_ext
+            (true, true, false) => 50,    // create_ext_rent
+            (true, false, true) => 60,    // create_ext_topup
+            _ => 70, // fallback for any other combination
+        };
+
+        let payer = const_pk(base_offset);
+        let mint = const_pk(base_offset + 1);
 
         // Choose a wallet that gives bump 255 for its ATA
-        let mut wallet = const_pk(12);
+        let mut wallet = const_pk(base_offset + 2);
         let mut best_bump = 0u8;
-        for b in 12u8..=255 {
+        for b in (base_offset + 2)..=255 {
             let cand = const_pk(b);
             let (_, bump) = Pubkey::find_program_address(
                 &[cand.as_ref(), token_program_id.as_ref(), mint.as_ref()],
@@ -236,6 +259,24 @@ fn main() {
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
         );
+        
+        let variant_name = match (extended_mint, with_rent, topup) {
+            (false, false, false) => "create_base",
+            (false, true, false) => "create_rent",
+            (false, false, true) => "create_topup", 
+            (true, false, false) => "create_ext",
+            (true, true, false) => "create_ext_rent",
+            (true, false, true) => "create_ext_topup",
+            _ => "unknown_variant",
+        };
+        
+        println!("DEBUG build_create: Deterministic keys for {}:", variant_name);
+        println!("  base_offset: {}", base_offset);
+        println!("  payer: {}", payer);
+        println!("  mint: {}", mint);
+        println!("  wallet: {}", wallet);
+        println!("  ATA address: {}", ata);
+        println!("  topup flag: {}", topup);
 
         let mint_data = if extended_mint {
             build_extended_mint_data(0)
@@ -244,9 +285,9 @@ fn main() {
         };
 
         let mut accounts = vec![
-            (payer, Account::new(1_000_000_000, 0, &system_program::id())),
-            (ata, Account::new(0, 0, &system_program::id())),
-            (wallet, Account::new(0, 0, &system_program::id())),
+            (payer, Account::new(1_000_000_000, 0, &SYSTEM_PROGRAM_ID)),
+            (ata, Account::new(0, 0, &SYSTEM_PROGRAM_ID)),
+            (wallet, Account::new(0, 0, &SYSTEM_PROGRAM_ID)),
             (
                 mint,
                 Account {
@@ -258,11 +299,11 @@ fn main() {
                 },
             ),
             (
-                system_program::id(),
+                SYSTEM_PROGRAM_ID,
                 Account {
                     lamports: 1,
                     data: vec![],
-                    owner: solana_sdk::native_loader::id(),
+                    owner: NATIVE_LOADER_ID,
                     executable: true,
                     rent_epoch: 0,
                 },
@@ -280,16 +321,24 @@ fn main() {
         ];
 
         if with_rent {
-            accounts.push((sysvar::rent::id(), rent_sysvar_account()));
+            accounts.push((rent::id(), rent_sysvar_account()));
         }
 
-        // top-up path: pre-create ata with correct size but insufficient lamports
+        // top-up path: account has received lamports but hasn't been allocated yet
         if topup {
+            println!("DEBUG: Setting up topup scenario for ATA: {}", ata);
             if let Some((_, ata_acc)) = accounts.iter_mut().find(|(k, _)| *k == ata) {
-                ata_acc.data = vec![0u8; 165];
-                // Set to insufficient lamports to test actual top-up path (needs ~2M for rent exempt)
-                ata_acc.lamports = 1_000_000; // Below rent-exempt, needs top-up
-                                              // Keep system-owned for legitimate top-up scenario (allocated but not initialized)
+                println!("DEBUG: BEFORE topup setup - ATA lamports: {}, data_len: {}, owner: {}", 
+                         ata_acc.lamports, ata_acc.data.len(), ata_acc.owner);
+                // Account has received lamports but is not allocated - this is the topup scenario
+                ata_acc.lamports = 1_000_000; // Some lamports but below rent-exempt
+                // No data allocated, still system-owned (account "exists" only because of lamports)
+                ata_acc.data = vec![];
+                ata_acc.owner = SYSTEM_PROGRAM_ID;
+                println!("DEBUG: AFTER topup setup - ATA lamports: {}, data_len: {}, owner: {}", 
+                         ata_acc.lamports, ata_acc.data.len(), ata_acc.owner);
+            } else {
+                println!("ERROR: Could not find ATA account in accounts list for topup setup!");
             }
         }
 
@@ -298,11 +347,11 @@ fn main() {
             AccountMeta::new(ata, false),
             AccountMeta::new_readonly(wallet, false),
             AccountMeta::new_readonly(mint, false),
-            AccountMeta::new_readonly(system_program::id(), false),
+            AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
             AccountMeta::new_readonly(*token_program_id, false),
         ];
         if with_rent {
-            metas.push(AccountMeta::new_readonly(sysvar::rent::id(), false));
+            metas.push(AccountMeta::new_readonly(rent::id(), false));
         }
 
         let ix = Instruction {
@@ -360,7 +409,7 @@ fn main() {
         // Build accounts vector with the ATA already initialized and owned by the token program
         let mut accounts = vec![
             // payer
-            (payer, Account::new(1_000_000_000, 0, &system_program::id())),
+            (payer, Account::new(1_000_000_000, 0, &SYSTEM_PROGRAM_ID)),
             // the existing ATA (rent-exempt lamports, correct owner & data)
             (
                 ata,
@@ -373,7 +422,7 @@ fn main() {
                 },
             ),
             // wallet
-            (wallet, Account::new(0, 0, &system_program::id())),
+            (wallet, Account::new(0, 0, &SYSTEM_PROGRAM_ID)),
             // mint
             (
                 mint,
@@ -387,11 +436,11 @@ fn main() {
             ),
             // system program
             (
-                system_program::id(),
+                SYSTEM_PROGRAM_ID,
                 Account {
                     lamports: 1,
                     data: vec![],
-                    owner: solana_sdk::native_loader::id(),
+                    owner: NATIVE_LOADER_ID,
                     executable: true,
                     rent_epoch: 0,
                 },
@@ -410,7 +459,7 @@ fn main() {
         ];
 
         if with_rent {
-            accounts.push((sysvar::rent::id(), rent_sysvar_account()));
+            accounts.push((rent::id(), rent_sysvar_account()));
         }
 
         // Same metas ordering as the Create instruction (payer, ata, wallet, mint, system, token [, rent])
@@ -419,11 +468,11 @@ fn main() {
             AccountMeta::new(ata, false),
             AccountMeta::new_readonly(wallet, false),
             AccountMeta::new_readonly(mint, false),
-            AccountMeta::new_readonly(system_program::id(), false),
+            AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
             AccountMeta::new_readonly(*token_program_id, false),
         ];
         if with_rent {
-            metas.push(AccountMeta::new_readonly(sysvar::rent::id(), false));
+            metas.push(AccountMeta::new_readonly(rent::id(), false));
         }
 
         // Discriminator 1 triggers CreateIdempotent
@@ -604,7 +653,7 @@ fn main() {
         // wallet (signer)
         (
             wallet,
-            Account::new(1_000_000_000, 0, &system_program::id()),
+            Account::new(1_000_000_000, 0, &SYSTEM_PROGRAM_ID),
         ),
         // token program (executable)
         (
@@ -790,17 +839,17 @@ fn main() {
         // signer1 account (system, signer)
         (
             signer1,
-            Account::new(1_000_000_000, 0, &system_program::id()),
+            Account::new(1_000_000_000, 0, &SYSTEM_PROGRAM_ID),
         ),
         // signer2 account (system, signer)
         (
             signer2,
-            Account::new(1_000_000_000, 0, &system_program::id()),
+            Account::new(1_000_000_000, 0, &SYSTEM_PROGRAM_ID),
         ),
         // signer3 account (system, non-signer)
         (
             signer3,
-            Account::new(1_000_000_000, 0, &system_program::id()),
+            Account::new(1_000_000_000, 0, &SYSTEM_PROGRAM_ID),
         ),
     ];
 
@@ -845,7 +894,6 @@ fn main() {
         token_program_id, LOADER_V3
     );
 
-    // Add our program under test (p-ata)
     mollusk.add_program(&program_id, "pinocchio_ata_program", &LOADER_V3);
     // Add pinocchio-token under the SPL Token ID since that's what some tests use
     mollusk.add_program(
@@ -888,19 +936,19 @@ fn main() {
     }
 
     println!("\n=== Running benchmarks ===");
-    // NOTE: We intentionally do *not* use a single Mollusk instance for all benchmarks –
-    // sharing state would allow earlier instructions to mutate account data and skew
-    // the CU count of later benches.  Instead we run each bench against its own fresh
-    // Mollusk *and* freshly-cloned account list so that only the instruction under test
-    // is measured.
 
-    // Helper to deep-clone the `(Pubkey, Account)` vec so mutations in one run do not
-    // influence the next.
     fn clone_accounts(src: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
         src.iter().map(|(k, v)| (*k, v.clone())).collect()
     }
 
     let mut isolated_bencher = |name: &str, ix: &Instruction, accts: &[(Pubkey, Account)]| {
+        println!("\n=== DEBUG: Running benchmark: {} ===", name);
+        println!("DEBUG: Instruction program_id: {}", ix.program_id);
+        println!("DEBUG: Account list for {}:", name);
+        for (i, (pubkey, account)) in accts.iter().enumerate() {
+            println!("  [{}] {} - lamports: {}, data_len: {}, owner: {}", 
+                     i, pubkey, account.lamports, account.data.len(), account.owner);
+        }
         MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
             .bench((name, ix, &clone_accounts(accts)[..]))
             .must_pass(true)
@@ -911,10 +959,11 @@ fn main() {
     println!("\n=== Running isolated benchmarks ===");
     isolated_bencher("create_base", &create_ix, &accounts_create);
     isolated_bencher("create_rent", &create_rent_ix, &accounts_create_rent);
-    isolated_bencher("create_topup", &create_topup_ix, &accounts_create_topup);
     isolated_bencher("create_idemp", &create_idemp_ix, &accounts_create_idemp);
     isolated_bencher("recover", &recover_ix, &accounts_recover);
     isolated_bencher("recover_multisig", &recover_msix, &accounts_recover_ms);
+    // Run create_topup last to avoid potential account state conflicts
+    isolated_bencher("create_topup", &create_topup_ix, &accounts_create_topup);
 
     // Prevent "function never used" warnings for the bumps (they're needed for seed calc correctness)
     let _ = owner_bump;

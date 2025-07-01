@@ -8,7 +8,7 @@ readme = "./README.md"
 crate-type = ["rlib"]
 
 [dependencies]
-pinocchio = "0.8.4"
+pinocchio = { version = "0.8.4", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded", default-features = false }
 pinocchio-pubkey = "0.2.4"
 
 [dev-dependencies]

@@ -431,7 +431,7 @@ mod tests {
     fn test_process_recover_instruction_assembly() {
         let token_prog_key = TOKEN_PROGRAM_ID;
         let nested_ata_key = pubkey_from_array([11; 32]);
-        let nested_mint_key = pubkey_from_array([12; 32]);
+        let _nested_mint_key = pubkey_from_array([12; 32]);
         let dest_ata_key = pubkey_from_array([13; 32]);
         let owner_ata_key = pubkey_from_array([14; 32]);
         let wallet_key = pubkey_from_array([16; 32]);

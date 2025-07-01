@@ -2,6 +2,7 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         instruction::{Seed, Signer},
+        msg,
         program_error::ProgramError,
         pubkey::Pubkey,
         sysvars::rent::Rent,
@@ -11,6 +12,9 @@ use {
     // do NOT remove Transmutable
     spl_token_interface::state::{account::Account as TokenAccount, Transmutable},
 };
+
+#[cfg(feature = "create-account-prefunded")]
+use pinocchio_system::instructions::CreateAccountPrefunded;
 
 /// Create a PDA account, given:
 /// - payer: Account to deduct SOL from
@@ -29,6 +33,8 @@ pub fn create_pda_account(
     pda_signer_seeds: &[&[u8]],
 ) -> ProgramResult {
     let current_lamports = pda.lamports();
+    
+    let required_lamports = rent.minimum_balance(space).max(1);
 
     debug_assert!(pda_signer_seeds.len() == 4, "Expected 4 seeds for PDA");
     let seed_array: [Seed; 4] = [
@@ -40,32 +46,49 @@ pub fn create_pda_account(
     let signer = Signer::from(&seed_array);
 
     if current_lamports > 0 {
-        let required_lamports = rent.minimum_balance(space).max(1);
-        if required_lamports > current_lamports {
-            Transfer {
+        #[cfg(feature = "create-account-prefunded")]
+        {
+            msg!("DEBUG: Using CreateAccountPrefunded path");
+            CreateAccountPrefunded {
                 from: payer,
                 to: pda,
-                lamports: required_lamports - current_lamports,
-            }
-            .invoke()?;
-        }
-
-        if pda.data_len() != space {
-            Allocate {
-                account: pda,
+                lamports: rent.minimum_balance(space).max(1),
                 space: space as u64,
-            }
-            .invoke_signed(&[signer.clone()])?;
-        }
-
-        if unsafe { pda.owner() } != owner {
-            Assign {
-                account: pda,
                 owner,
             }
-            .invoke_signed(&[signer.clone()])?;
+            .invoke_signed(&[signer])?;
+            msg!("DEBUG: CreateAccountPrefunded completed successfully");    
+        }
+        #[cfg(not(feature = "create-account-prefunded"))]
+        {
+            let required_lamports = rent.minimum_balance(space).max(1);
+            if required_lamports > current_lamports {
+                Transfer {
+                    from: payer,
+                    to: pda,
+                    lamports: required_lamports - current_lamports,
+                }
+                .invoke()?;
+            }
+
+            if pda.data_len() != space {
+                Allocate {
+                    account: pda,
+                    space: space as u64,
+                }
+                .invoke_signed(&[signer.clone()])?;
+            }
+
+            if unsafe { pda.owner() } != owner {
+                Assign {
+                    account: pda,
+                    owner,
+                }
+                .invoke_signed(&[signer.clone()])?;
+            }
         }
     } else {
+        msg!("DEBUG: Using CreateAccount path");
         CreateAccount {
             from: payer,
             to: pda,
@@ -74,23 +97,16 @@ pub fn create_pda_account(
             owner,
         }
         .invoke_signed(&[signer])?;
+        msg!("DEBUG: CreateAccount completed successfully");
     }
     Ok(())
 }
 
-/// Determines the required initial data length for a new token account based on
-/// the extensions initialized on the Mint
 #[inline(always)]
 pub fn get_account_len(
     mint: &AccountInfo,
     _token_program: &AccountInfo,
 ) -> Result<usize, ProgramError> {
-    // Current ATA logic only supports the ImmutableOwner extension, which does
-    // not increase the size of a token account.  Therefore the required size
-    // is always the legacy `TokenAccount::LEN` (165 bytes) regardless of any
-    // TLV data present in the mint.  This avoids a pricey CPI while matching
-    // token-2022 behaviour.
-
     let _ = mint; // Suppress unused warning in no-std build.
     Ok(TokenAccount::LEN)
 }

@@ -34,8 +34,6 @@ pub fn create_pda_account(
 ) -> ProgramResult {
     let current_lamports = pda.lamports();
 
-    let required_lamports = rent.minimum_balance(space).max(1);
-
     debug_assert!(pda_signer_seeds.len() == 4, "Expected 4 seeds for PDA");
     let seed_array: [Seed; 4] = [
         Seed::from(pda_signer_seeds[0]),

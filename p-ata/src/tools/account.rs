@@ -33,7 +33,7 @@ pub fn create_pda_account(
     pda_signer_seeds: &[&[u8]],
 ) -> ProgramResult {
     let current_lamports = pda.lamports();
-    
+
     let required_lamports = rent.minimum_balance(space).max(1);
 
     debug_assert!(pda_signer_seeds.len() == 4, "Expected 4 seeds for PDA");
@@ -57,7 +57,7 @@ pub fn create_pda_account(
                 owner,
             }
             .invoke_signed(&[signer])?;
-            msg!("DEBUG: CreateAccountPrefunded completed successfully");    
+            msg!("DEBUG: CreateAccountPrefunded completed successfully");
         }
         #[cfg(not(feature = "create-account-prefunded"))]
         {

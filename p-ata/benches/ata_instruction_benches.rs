@@ -969,8 +969,6 @@ fn main() {
     let _ = owner_bump;
     let _ = owner_bump_ms;
 
-
-
     fn fresh_mollusk(program_id: &Pubkey, token_program_id: &Pubkey) -> Mollusk {
         let mut m = Mollusk::default();
         m.add_program(program_id, "pinocchio_ata_program", &LOADER_V3);

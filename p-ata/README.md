@@ -4,7 +4,7 @@ A `pinocchio`-based Associated Token Account program.
 
 ## Overview
 
-`p-ata` follows `p-token` as a highly-optimized core Solana program. One of the most popular programs on Solana, `p-ata` uses [`pinocchio`](https://github.com/anza-xyz/pinocchio) to optimize compute units while being fully compatible with the original implementation – i.e., support the exact same instruction and account layouts as SPL Associated Token Account, byte for byte.
+`p-ata` uses [`pinocchio`](https://github.com/anza-xyz/pinocchio) to optimize compute units while being fully compatible with the original implementation – i.e., support the exact same instruction and account layouts as SPL Associated Token Account, byte for byte.
 
 ## Features
 
@@ -15,12 +15,11 @@ A `pinocchio`-based Associated Token Account program.
 ## Additional Features
 
 Minor requested features for ATA have also been included:
-(todo)
 
-## License
+- RecoverNested support for multisigs
+- CreateAccountPrefunded support for cheaper flows that transfer rent before creating account -  [SIMD-312](https://github.com/solana-foundation/solana-improvement-documents/pull/312)
 
-The code is licensed under the [Apache License Version 2.0](LICENSE)
 
 ## Testing
 
-export BPF_OUT_DIR=$(pwd)/target/deploy && cargo test
+cargo update && cargo build-sbf --features create-account-prefunded && cargo bench --bench ata_instruction_benches --features test-bpf,create-account-prefunded

@@ -2,14 +2,12 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         instruction::{Seed, Signer},
-        msg,
         program_error::ProgramError,
         pubkey::Pubkey,
         sysvars::rent::Rent,
         ProgramResult,
     },
     pinocchio_system::instructions::{Assign, CreateAccount},
-    // do NOT remove Transmutable
     spl_token_interface::state::{account::Account as TokenAccount, Transmutable},
 };
 
@@ -26,7 +24,7 @@ fn stamp_immutable_owner_extension(account: &AccountInfo, space: usize) -> Progr
     if space > TokenAccount::LEN {
         let mut data = account.try_borrow_mut_data()?;
         let base = TokenAccount::LEN; // 165
-        
+
         // Write ImmutableOwner TLV header (type=6, len=0)
         // ImmutableOwner extension type is 6
         let tag: u16 = 6;
@@ -64,10 +62,10 @@ pub fn create_pda_account(
     ];
     let signer = Signer::from(&seed_array);
 
-    // Check if this is a token account creation and whether to stamp ImmutableOwner extension
     // spl_token_interface::program::ID is the original SPL Token: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
     // Token-2022 program ID is: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
-    const TOKEN_2022_PROGRAM_ID: Pubkey = pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    const TOKEN_2022_PROGRAM_ID: Pubkey =
+        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
     // System program ID: 11111111111111111111111111111111
     const SYSTEM_PROGRAM_ID: Pubkey = pinocchio_pubkey::pubkey!("11111111111111111111111111111111");
     let is_token_2022_account = *target_program_owner == TOKEN_2022_PROGRAM_ID;
@@ -76,7 +74,6 @@ pub fn create_pda_account(
     if current_lamports > 0 {
         #[cfg(feature = "create-account-prefunded")]
         {
-            msg!("DEBUG: Using CreateAccountPrefunded path");
             CreateAccountPrefunded {
                 from: payer,
                 to: pda,
@@ -85,13 +82,11 @@ pub fn create_pda_account(
                 owner: target_program_owner,
             }
             .invoke_signed(&[signer])?;
-            
+
             // Stamp ImmutableOwner extension for token accounts with extensions
             if should_stamp_immutable_owner {
                 stamp_immutable_owner_extension(pda, space)?;
             }
-            
-            msg!("DEBUG: CreateAccountPrefunded completed successfully");
         }
         #[cfg(not(feature = "create-account-prefunded"))]
         {
@@ -111,7 +106,7 @@ pub fn create_pda_account(
                     space: space as u64,
                 }
                 .invoke_signed(&[signer.clone()])?;
-                
+
                 // Stamp ImmutableOwner extension after allocation but before assign
                 if should_stamp_immutable_owner {
                     stamp_immutable_owner_extension(pda, space)?;
@@ -127,15 +122,13 @@ pub fn create_pda_account(
             }
         }
     } else {
-        msg!("DEBUG: Using CreateAccount path");
-        
         // Create as system-owned first if we need to stamp extension data, otherwise create with target owner
         let initial_owner = if should_stamp_immutable_owner {
             &SYSTEM_PROGRAM_ID
         } else {
             target_program_owner
         };
-        
+
         CreateAccount {
             from: payer,
             to: pda,
@@ -144,11 +137,11 @@ pub fn create_pda_account(
             owner: initial_owner,
         }
         .invoke_signed(&[signer.clone()])?;
-        
+
         if should_stamp_immutable_owner {
             // Stamp ImmutableOwner extension after creation but before assigning to token program
             stamp_immutable_owner_extension(pda, space)?;
-            
+
             // Now assign to the token program
             Assign {
                 account: pda,
@@ -156,8 +149,6 @@ pub fn create_pda_account(
             }
             .invoke_signed(&[signer])?;
         }
-        
-        msg!("DEBUG: CreateAccount completed successfully");
     }
     Ok(())
 }

@@ -15,112 +15,278 @@ use {
     std::{fs, path::Path},
 };
 
-// System program and native loader constants
+// ================================= CONSTANTS =================================
+
+/// System program and native loader constants
 const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]); // 11111111111111111111111111111111
 const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
     5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
     101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
 ]); // NativeLoader1111111111111111111111111111111
 
-/// Build a zero-rent `Rent` sysvar account with correctly sized data buffer.
-fn rent_sysvar_account() -> Account {
-    Account {
-        lamports: 1,
-        data: vec![1u8; 17], // Minimal rent sysvar data
-        owner: rent::id(),
-        executable: false,
-        rent_epoch: 0,
+// ================================= KEY UTILITIES =================================
+
+/// Generate deterministic pubkeys for reproducible benchmarks
+mod key_utils {
+    use solana_pubkey::Pubkey;
+
+    /// Create a deterministic pubkey filled with the given byte
+    pub fn const_pk(byte: u8) -> Pubkey {
+        Pubkey::new_from_array([byte; 32])
+    }
+
+    /// Find a wallet that yields the highest bump for PDA derivation (ideally 255)
+    pub fn find_optimal_wallet(
+        start_byte: u8,
+        program_id: &Pubkey,
+        token_program_id: &Pubkey,
+        mint: &Pubkey,
+    ) -> Pubkey {
+        let mut best_wallet = const_pk(start_byte);
+        let mut best_bump = 0u8;
+        
+        for b in start_byte..=255 {
+            let candidate = const_pk(b);
+            let (_, bump) = Pubkey::find_program_address(
+                &[candidate.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+                program_id,
+            );
+            if bump > best_bump {
+                best_wallet = candidate;
+                best_bump = bump;
+                if bump == 255 {
+                    break;
+                }
+            }
+        }
+        best_wallet
     }
 }
 
-/// Build raw token Account data with the supplied mint / owner / amount.
-fn build_token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
-    let mut data = vec![0u8; TokenAccount::LEN];
+// ================================= ACCOUNT BUILDERS =================================
 
-    // Offsets based on token Account layout (see interface/src/state/account.rs)
-    // mint:   0..32
-    data[0..32].copy_from_slice(mint.as_ref());
-    // owner:  32..64
-    data[32..64].copy_from_slice(owner.as_ref());
-    // amount: 64..72 (u64 LE)
-    data[64..72].copy_from_slice(&amount.to_le_bytes());
-    // state enum byte after delegate COption (32+32+8+36 = 108)
-    data[108] = 1; // Initialized
-
-    data
-}
-
-/// Build mint data with given decimals and marked initialized.
-fn build_mint_data(decimals: u8) -> Vec<u8> {
-    let mut data = vec![0u8; Mint::LEN];
-    // decimals offset: COption<Pubkey>(36) + supply(8) = 44
-    data[44] = decimals;
-    data[45] = 1; // is_initialized = true
-    println!(
-        "Base mint data length: {}, data[44]: {}, data[45]: {}",
-        data.len(),
-        data[44],
-        data[45]
-    );
-    data
-}
-
-/// Build an "extended" mint whose data length is larger than the base Mint::LEN so that
-/// the ATA create path activates the `get_account_len` CPI.  We don't need to populate a real
-/// extension layout; the runtime only checks the length to decide that extensions exist.
-fn build_extended_mint_data(decimals: u8) -> Vec<u8> {
-    // Calculate the exact size token-2022 expects for a Mint with ImmutableOwner extension
-    let required_len = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
-        ExtensionType::ImmutableOwner,
-    ])
-    .expect("calc len");
-    println!("Extended mint required_len: {}", required_len);
-
-    // Start with base mint
-    let mut data = build_mint_data(decimals);
-    // Ensure vector has required length, zero-padded
-    data.resize(required_len, 0u8);
-
-    // Compose TLV entries at correct offset (base len = 82)
-    let mut cursor = 82; // Standard SPL Token mint length
-                         // ImmutableOwner header
-    data[cursor..cursor + 2].copy_from_slice(&(ExtensionType::ImmutableOwner as u16).to_le_bytes());
-    data[cursor + 2..cursor + 4].copy_from_slice(&0u16.to_le_bytes()); // len = 0
-    cursor += 4;
-    // Sentinel header
-    data[cursor..cursor + 4].copy_from_slice(&0u32.to_le_bytes());
-
-    println!(
-        "Extended mint data length: {}, data[45]: {}",
-        data.len(),
-        data[45]
-    );
-    data
-}
-
-/// Build a Multisig account data with given signer public keys and threshold `m`.
-fn build_multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
+/// Utilities for building various account types with correct data
+mod account_builders {
+    use super::*;
     use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
-    assert!(
-        m as usize <= signer_pubkeys.len(),
-        "m cannot exceed number of provided signers"
-    );
-    assert!(m >= 1, "m must be at least 1");
-    assert!(
-        signer_pubkeys.len() <= MAX_SIGNERS as usize,
-        "too many signers provided"
-    );
 
-    let mut data = vec![0u8; Multisig::LEN];
-    data[0] = m; // m threshold
-    data[1] = signer_pubkeys.len() as u8; // n signers
-    data[2] = 1; // is_initialized
-
-    for (i, pk) in signer_pubkeys.iter().enumerate() {
-        let offset = 3 + i * 32;
-        data[offset..offset + 32].copy_from_slice(pk.as_ref());
+    /// Build a zero-rent `Rent` sysvar account with correctly sized data buffer.
+    pub fn rent_sysvar_account() -> Account {
+        Account {
+            lamports: 1,
+            data: vec![1u8; 17], // Minimal rent sysvar data
+            owner: rent::id(),
+            executable: false,
+            rent_epoch: 0,
+        }
     }
-    data
+
+    /// Build raw token Account data with the supplied mint / owner / amount.
+    pub fn build_token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
+        let mut data = vec![0u8; TokenAccount::LEN];
+
+        // Offsets based on token Account layout (see interface/src/state/account.rs)
+        // mint:   0..32
+        data[0..32].copy_from_slice(mint.as_ref());
+        // owner:  32..64
+        data[32..64].copy_from_slice(owner.as_ref());
+        // amount: 64..72 (u64 LE)
+        data[64..72].copy_from_slice(&amount.to_le_bytes());
+        // state enum byte after delegate COption (32+32+8+36 = 108)
+        data[108] = 1; // Initialized
+
+        data
+    }
+
+    /// Build mint data with given decimals and marked initialized.
+    pub fn build_mint_data(decimals: u8) -> Vec<u8> {
+        let mut data = vec![0u8; Mint::LEN];
+        // decimals offset: COption<Pubkey>(36) + supply(8) = 44
+        data[44] = decimals;
+        data[45] = 1; // is_initialized = true
+        println!(
+            "Base mint data length: {}, data[44]: {}, data[45]: {}",
+            data.len(),
+            data[44],
+            data[45]
+        );
+        data
+    }
+
+    /// Build an "extended" mint whose data length is larger than the base Mint::LEN so that
+    /// the ATA create path activates the `get_account_len` CPI.  We don't need to populate a real
+    /// extension layout; the runtime only checks the length to decide that extensions exist.
+    pub fn build_extended_mint_data(decimals: u8) -> Vec<u8> {
+        // Calculate the exact size token-2022 expects for a Mint with ImmutableOwner extension
+        let required_len = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
+            ExtensionType::ImmutableOwner,
+        ])
+        .expect("calc len");
+        println!("Extended mint required_len: {}", required_len);
+
+        // Start with base mint
+        let mut data = build_mint_data(decimals);
+        // Ensure vector has required length, zero-padded
+        data.resize(required_len, 0u8);
+
+        // Compose TLV entries at correct offset (base len = 82)
+        let mut cursor = 82; // Standard SPL Token mint length
+                             // ImmutableOwner header
+        data[cursor..cursor + 2].copy_from_slice(&(ExtensionType::ImmutableOwner as u16).to_le_bytes());
+        data[cursor + 2..cursor + 4].copy_from_slice(&0u16.to_le_bytes()); // len = 0
+        cursor += 4;
+        // Sentinel header
+        data[cursor..cursor + 4].copy_from_slice(&0u32.to_le_bytes());
+
+        println!(
+            "Extended mint data length: {}, data[45]: {}",
+            data.len(),
+            data[45]
+        );
+        data
+    }
+
+    /// Build a Multisig account data with given signer public keys and threshold `m`.
+    pub fn build_multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
+        assert!(
+            m as usize <= signer_pubkeys.len(),
+            "m cannot exceed number of provided signers"
+        );
+        assert!(m >= 1, "m must be at least 1");
+        assert!(
+            signer_pubkeys.len() <= MAX_SIGNERS as usize,
+            "too many signers provided"
+        );
+
+        let mut data = vec![0u8; Multisig::LEN];
+        data[0] = m; // m threshold
+        data[1] = signer_pubkeys.len() as u8; // n signers
+        data[2] = 1; // is_initialized
+
+        for (i, pk) in signer_pubkeys.iter().enumerate() {
+            let offset = 3 + i * 32;
+            data[offset..offset + 32].copy_from_slice(pk.as_ref());
+        }
+        data
+    }
+
+    /// Build standard program accounts (system program, token program, etc.)
+    pub fn build_system_program_account() -> Account {
+        Account {
+            lamports: 1,
+            data: vec![],
+            owner: NATIVE_LOADER_ID,
+            executable: true,
+            rent_epoch: 0,
+        }
+    }
+
+    /// Build a token program account  
+    pub fn build_token_program_account() -> Account {
+        Account {
+            lamports: 0,
+            data: Vec::new(),
+            owner: LOADER_V3,
+            executable: true,
+            rent_epoch: 0,
+        }
+    }
+}
+
+// ================================= SETUP UTILITIES =================================
+
+/// Setup and initialization utilities
+mod setup_utils {
+    use super::*;
+
+    /// Setup Mollusk with required programs
+    pub fn fresh_mollusk(program_id: &Pubkey, token_program_id: &Pubkey) -> Mollusk {
+        let mut m = Mollusk::default();
+        m.add_program(program_id, "pinocchio_ata_program", &LOADER_V3);
+        m.add_program(
+            &Pubkey::from(spl_token_interface::program::ID),
+            "pinocchio_token_program",
+            &LOADER_V3,
+        );
+        m.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
+        m
+    }
+
+    /// Setup SBF environment and copy required files
+    pub fn setup_sbf_environment(manifest_dir: &str) -> String {
+        let sbf_out_dir = format!("{}/target/sbpf-solana-solana/release", manifest_dir);
+        println!("Setting SBF_OUT_DIR to: {}", sbf_out_dir);
+        std::env::set_var("SBF_OUT_DIR", sbf_out_dir.clone());
+
+        // Check if the directory exists and list its contents
+        if let Ok(entries) = std::fs::read_dir(&sbf_out_dir) {
+            println!("Contents of SBF_OUT_DIR:");
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    println!("  - {}", entry.file_name().to_string_lossy());
+                }
+            }
+        } else {
+            println!("ERROR: SBF_OUT_DIR does not exist or cannot be read!");
+        }
+
+        // Copy pinocchio_token.so from programs/ to SBF_OUT_DIR if it doesn't exist
+        let programs_dir = format!("{}/programs", manifest_dir);
+        let token_so_src = Path::new(&programs_dir).join("pinocchio_token_program.so");
+        let token_so_dst = Path::new(&sbf_out_dir).join("pinocchio_token_program.so");
+
+        if token_so_src.exists() {
+            if !token_so_dst.exists() {
+                println!("Copying pinocchio_token_program.so to SBF_OUT_DIR");
+                fs::copy(&token_so_src, &token_so_dst)
+                    .expect("Failed to copy pinocchio_token_program.so to SBF_OUT_DIR");
+            }
+        } else {
+            panic!("pinocchio_token_program.so not found in programs/ directory");
+        }
+
+        // List SBF_OUT_DIR contents again after copying
+        println!("\nContents of SBF_OUT_DIR after copying:");
+        if let Ok(entries) = std::fs::read_dir(&sbf_out_dir) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    println!("  - {}", entry.file_name().to_string_lossy());
+                }
+            }
+        }
+
+        sbf_out_dir
+    }
+
+    /// Load program keypairs and return program IDs
+    pub fn load_program_ids(manifest_dir: &str) -> (Pubkey, Pubkey) {
+        let ata_keypair_path = format!(
+            "{}/target/deploy/pinocchio_ata_program-keypair.json",
+            manifest_dir
+        );
+        let ata_keypair_data = fs::read_to_string(&ata_keypair_path)
+            .expect("Failed to read pinocchio_ata_program-keypair.json");
+        let ata_keypair_bytes: Vec<u8> = serde_json::from_str(&ata_keypair_data)
+            .expect("Failed to parse pinocchio_ata_program keypair JSON");
+        let ata_keypair =
+            Keypair::from_bytes(&ata_keypair_bytes).expect("Invalid pinocchio_ata_program keypair");
+        let program_id = ata_keypair.pubkey();
+
+        // Read pinocchio_token keypair from programs/ directory
+        let token_keypair_path = format!(
+            "{}/programs/pinocchio_token_program-keypair.json",
+            manifest_dir
+        );
+        let token_keypair_data = fs::read_to_string(&token_keypair_path)
+            .expect("Failed to read pinocchio_token_program-keypair.json");
+        let token_keypair_bytes: Vec<u8> = serde_json::from_str(&token_keypair_data)
+            .expect("Failed to parse pinocchio_token_program keypair JSON");
+        let _token_keypair =
+            Keypair::from_bytes(&token_keypair_bytes).expect("Invalid pinocchio_token_program keypair");
+        let token_program_id = Pubkey::from(spl_token_interface::program::ID);
+
+        (program_id, token_program_id)
+    }
 }
 
 fn main() {
@@ -141,73 +307,10 @@ fn main() {
     /// print base58 representation of SYSTEM_PROGRAM_ID
     println!("SYSTEM_PROGRAM_ID: {}", SYSTEM_PROGRAM_ID.to_string());
 
-    let sbf_out_dir = format!("{}/target/sbpf-solana-solana/release", manifest_dir);
-    println!("Setting SBF_OUT_DIR to: {}", sbf_out_dir);
-
-    std::env::set_var("SBF_OUT_DIR", sbf_out_dir.clone());
-
-    // Check if the directory exists and list its contents
-    if let Ok(entries) = std::fs::read_dir(&sbf_out_dir) {
-        println!("Contents of SBF_OUT_DIR:");
-        for entry in entries {
-            if let Ok(entry) = entry {
-                println!("  - {}", entry.file_name().to_string_lossy());
-            }
-        }
-    } else {
-        println!("ERROR: SBF_OUT_DIR does not exist or cannot be read!");
-    }
-
-    // Copy pinocchio_token.so from programs/ to SBF_OUT_DIR if it doesn't exist
-    let programs_dir = format!("{}/programs", manifest_dir);
-    let token_so_src = Path::new(&programs_dir).join("pinocchio_token_program.so");
-    let token_so_dst = Path::new(&sbf_out_dir).join("pinocchio_token_program.so");
-
-    if token_so_src.exists() {
-        if !token_so_dst.exists() {
-            println!("Copying pinocchio_token_program.so to SBF_OUT_DIR");
-            fs::copy(&token_so_src, &token_so_dst)
-                .expect("Failed to copy pinocchio_token_program.so to SBF_OUT_DIR");
-        }
-    } else {
-        panic!("pinocchio_token_program.so not found in programs/ directory");
-    }
-
-    // List SBF_OUT_DIR contents again after copying
-    println!("\nContents of SBF_OUT_DIR after copying:");
-    if let Ok(entries) = std::fs::read_dir(&sbf_out_dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                println!("  - {}", entry.file_name().to_string_lossy());
-            }
-        }
-    }
+    let sbf_out_dir = setup_utils::setup_sbf_environment(manifest_dir);
 
     // Load the program IDs from their keypair files
-    let ata_keypair_path = format!(
-        "{}/target/deploy/pinocchio_ata_program-keypair.json",
-        manifest_dir
-    );
-    let ata_keypair_data = fs::read_to_string(&ata_keypair_path)
-        .expect("Failed to read pinocchio_ata_program-keypair.json");
-    let ata_keypair_bytes: Vec<u8> = serde_json::from_str(&ata_keypair_data)
-        .expect("Failed to parse pinocchio_ata_program keypair JSON");
-    let ata_keypair =
-        Keypair::from_bytes(&ata_keypair_bytes).expect("Invalid pinocchio_ata_program keypair");
-    let program_id = ata_keypair.pubkey();
-
-    // Read pinocchio_token keypair from programs/ directory
-    let token_keypair_path = format!(
-        "{}/programs/pinocchio_token_program-keypair.json",
-        manifest_dir
-    );
-    let token_keypair_data = fs::read_to_string(&token_keypair_path)
-        .expect("Failed to read pinocchio_token_program-keypair.json");
-    let token_keypair_bytes: Vec<u8> = serde_json::from_str(&token_keypair_data)
-        .expect("Failed to parse pinocchio_token_program keypair JSON");
-    let _token_keypair =
-        Keypair::from_bytes(&token_keypair_bytes).expect("Invalid pinocchio_token_program keypair");
-    let token_program_id = Pubkey::from(spl_token_interface::program::ID);
+    let (program_id, token_program_id) = setup_utils::load_program_ids(manifest_dir);
 
     /* ---------- helper to build CREATE variants ---------- */
     #[allow(clippy::too_many_arguments)]
@@ -282,9 +385,9 @@ fn main() {
         println!("  topup flag: {}", topup);
 
         let mint_data = if extended_mint {
-            build_extended_mint_data(0)
+            account_builders::build_extended_mint_data(0)
         } else {
-            build_mint_data(0)
+            account_builders::build_mint_data(0)
         };
 
         let mut accounts = vec![
@@ -324,7 +427,7 @@ fn main() {
         ];
 
         if with_rent {
-            accounts.push((rent::id(), rent_sysvar_account()));
+            accounts.push((rent::id(), account_builders::rent_sysvar_account()));
         }
 
         // top-up path: account has received lamports but hasn't been allocated yet
@@ -415,7 +518,7 @@ fn main() {
         );
 
         // Build fully initialized token account data owned by `wallet`
-        let ata_data = build_token_account_data(&mint, &wallet, 0);
+        let ata_data = account_builders::build_token_account_data(&mint, &wallet, 0);
 
         // Build accounts vector with the ATA already initialized and owned by the token program
         let mut accounts = vec![
@@ -439,7 +542,7 @@ fn main() {
                 mint,
                 Account {
                     lamports: 1_000_000_000,
-                    data: build_mint_data(0),
+                    data: account_builders::build_mint_data(0),
                     owner: *token_program_id,
                     executable: false,
                     rent_epoch: 0,
@@ -470,7 +573,7 @@ fn main() {
         ];
 
         if with_rent {
-            accounts.push((rent::id(), rent_sysvar_account()));
+            accounts.push((rent::id(), account_builders::rent_sysvar_account()));
         }
 
         // Same metas ordering as the Create instruction (payer, ata, wallet, mint, system, token [, rent])
@@ -607,7 +710,7 @@ fn main() {
             nested_ata,
             Account {
                 lamports: 1_000_000_000,
-                data: build_token_account_data(&nested_mint, &owner_ata, 100),
+                data: account_builders::build_token_account_data(&nested_mint, &owner_ata, 100),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -618,7 +721,7 @@ fn main() {
             nested_mint,
             Account {
                 lamports: 1_000_000_000,
-                data: build_mint_data(0),
+                data: account_builders::build_mint_data(0),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -629,7 +732,7 @@ fn main() {
             dest_ata,
             Account {
                 lamports: 1_000_000_000,
-                data: build_token_account_data(&nested_mint, &wallet, 0),
+                data: account_builders::build_token_account_data(&nested_mint, &wallet, 0),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -640,7 +743,7 @@ fn main() {
             owner_ata,
             Account {
                 lamports: 1_000_000_000,
-                data: build_token_account_data(&owner_mint, &wallet, 0),
+                data: account_builders::build_token_account_data(&owner_mint, &wallet, 0),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -651,7 +754,7 @@ fn main() {
             owner_mint,
             Account {
                 lamports: 1_000_000_000,
-                data: build_mint_data(0),
+                data: account_builders::build_mint_data(0),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -757,7 +860,7 @@ fn main() {
             nested_ata_ms,
             Account {
                 lamports: 1_000_000_000,
-                data: build_token_account_data(&nested_mint, &owner_ata_ms, 100),
+                data: account_builders::build_token_account_data(&nested_mint, &owner_ata_ms, 100),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -768,7 +871,7 @@ fn main() {
             nested_mint,
             Account {
                 lamports: 1_000_000_000,
-                data: build_mint_data(0),
+                data: account_builders::build_mint_data(0),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -779,7 +882,7 @@ fn main() {
             dest_ata_ms,
             Account {
                 lamports: 1_000_000_000,
-                data: build_token_account_data(&nested_mint, &wallet_ms, 0),
+                data: account_builders::build_token_account_data(&nested_mint, &wallet_ms, 0),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -790,7 +893,7 @@ fn main() {
             owner_ata_ms,
             Account {
                 lamports: 1_000_000_000,
-                data: build_token_account_data(&owner_mint, &wallet_ms, 0),
+                data: account_builders::build_token_account_data(&owner_mint, &wallet_ms, 0),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -801,7 +904,7 @@ fn main() {
             owner_mint,
             Account {
                 lamports: 1_000_000_000,
-                data: build_mint_data(0),
+                data: account_builders::build_mint_data(0),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -812,7 +915,7 @@ fn main() {
             wallet_ms,
             Account {
                 lamports: 1_000_000_000,
-                data: build_multisig_data(ms_threshold, &[signer1, signer2, signer3]),
+                data: account_builders::build_multisig_data(ms_threshold, &[signer1, signer2, signer3]),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -872,7 +975,7 @@ fn main() {
 
     /* ------------------------------ BENCH -------------------------------- */
     // Start with a Mollusk instance that already contains the common builtin programs
-    let mut mollusk = Mollusk::default();
+    let mut mollusk = setup_utils::fresh_mollusk(&program_id, &token_program_id);
 
     // === DEBUG: show program ids and loader id being registered ===
     println!(
@@ -950,7 +1053,7 @@ fn main() {
                 account.owner
             );
         }
-        MolluskComputeUnitBencher::new(fresh_mollusk(&program_id, &token_program_id))
+        MolluskComputeUnitBencher::new(setup_utils::fresh_mollusk(&program_id, &token_program_id))
             .bench((name, ix, &clone_accounts(accts)[..]))
             .must_pass(true)
             .out_dir("../target/benches")
@@ -968,16 +1071,4 @@ fn main() {
 
     let _ = owner_bump;
     let _ = owner_bump_ms;
-
-    fn fresh_mollusk(program_id: &Pubkey, token_program_id: &Pubkey) -> Mollusk {
-        let mut m = Mollusk::default();
-        m.add_program(program_id, "pinocchio_ata_program", &LOADER_V3);
-        m.add_program(
-            &Pubkey::from(spl_token_interface::program::ID),
-            "pinocchio_token_program",
-            &LOADER_V3,
-        );
-        m.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
-        m
-    }
 }

@@ -44,7 +44,7 @@ mod key_utils {
     ) -> Pubkey {
         let mut best_wallet = const_pk(start_byte);
         let mut best_bump = 0u8;
-        
+
         for b in start_byte..=255 {
             let candidate = const_pk(b);
             let (_, bump) = Pubkey::find_program_address(
@@ -118,10 +118,11 @@ mod account_builders {
     /// extension layout; the runtime only checks the length to decide that extensions exist.
     pub fn build_extended_mint_data(decimals: u8) -> Vec<u8> {
         // Calculate the exact size token-2022 expects for a Mint with ImmutableOwner extension
-        let required_len = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
-            ExtensionType::ImmutableOwner,
-        ])
-        .expect("calc len");
+        let required_len =
+            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
+                ExtensionType::ImmutableOwner,
+            ])
+            .expect("calc len");
         println!("Extended mint required_len: {}", required_len);
 
         // Start with base mint
@@ -132,7 +133,8 @@ mod account_builders {
         // Compose TLV entries at correct offset (base len = 82)
         let mut cursor = 82; // Standard SPL Token mint length
                              // ImmutableOwner header
-        data[cursor..cursor + 2].copy_from_slice(&(ExtensionType::ImmutableOwner as u16).to_le_bytes());
+        data[cursor..cursor + 2]
+            .copy_from_slice(&(ExtensionType::ImmutableOwner as u16).to_le_bytes());
         data[cursor + 2..cursor + 4].copy_from_slice(&0u16.to_le_bytes()); // len = 0
         cursor += 4;
         // Sentinel header
@@ -281,8 +283,8 @@ mod setup_utils {
             .expect("Failed to read pinocchio_token_program-keypair.json");
         let token_keypair_bytes: Vec<u8> = serde_json::from_str(&token_keypair_data)
             .expect("Failed to parse pinocchio_token_program keypair JSON");
-        let _token_keypair =
-            Keypair::from_bytes(&token_keypair_bytes).expect("Invalid pinocchio_token_program keypair");
+        let _token_keypair = Keypair::from_bytes(&token_keypair_bytes)
+            .expect("Invalid pinocchio_token_program keypair");
         let token_program_id = Pubkey::from(spl_token_interface::program::ID);
 
         (program_id, token_program_id)
@@ -915,7 +917,10 @@ fn main() {
             wallet_ms,
             Account {
                 lamports: 1_000_000_000,
-                data: account_builders::build_multisig_data(ms_threshold, &[signer1, signer2, signer3]),
+                data: account_builders::build_multisig_data(
+                    ms_threshold,
+                    &[signer1, signer2, signer3],
+                ),
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,

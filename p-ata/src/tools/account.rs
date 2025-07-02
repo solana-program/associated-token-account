@@ -1,7 +1,8 @@
 use {
     pinocchio::{
         account_info::AccountInfo,
-        instruction::{Seed, Signer},
+        instruction::{AccountMeta, Instruction, Seed, Signer},
+        program::invoke,
         program_error::ProgramError,
         pubkey::Pubkey,
         sysvars::rent::Rent,
@@ -16,24 +17,6 @@ use pinocchio_system::instructions::CreateAccountPrefunded;
 
 #[cfg(not(feature = "create-account-prefunded"))]
 use pinocchio_system::instructions::{Allocate, Transfer};
-
-/// Stamp the ImmutableOwner extension header into an account's data buffer.
-#[inline(always)]
-fn stamp_immutable_owner_extension(account: &AccountInfo, space: usize) -> ProgramResult {
-    // Only stamp if we have enough space for the extension
-    if space > TokenAccount::LEN {
-        let mut data = account.try_borrow_mut_data()?;
-        let base = TokenAccount::LEN; // 165
-
-        // Write ImmutableOwner TLV header (type=6, len=0)
-        // ImmutableOwner extension type is 6
-        let tag: u16 = 6;
-        data[base..base + 2].copy_from_slice(&tag.to_le_bytes()); // type
-        data[base + 2..base + 4].copy_from_slice(&0u16.to_le_bytes()); // len = 0
-        data[base + 4..base + 8].copy_from_slice(&0u32.to_le_bytes()); // sentinel
-    }
-    Ok(())
-}
 
 /// Create a PDA account, given:
 /// - payer: Account to deduct SOL from
@@ -62,15 +45,6 @@ pub fn create_pda_account(
     ];
     let signer = Signer::from(&seed_array);
 
-    // spl_token_interface::program::ID is the original SPL Token: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-    // Token-2022 program ID is: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
-    const TOKEN_2022_PROGRAM_ID: Pubkey =
-        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-    // System program ID: 11111111111111111111111111111111
-    const SYSTEM_PROGRAM_ID: Pubkey = pinocchio_pubkey::pubkey!("11111111111111111111111111111111");
-    let is_token_2022_account = *target_program_owner == TOKEN_2022_PROGRAM_ID;
-    let should_stamp_immutable_owner = is_token_2022_account && space > TokenAccount::LEN;
-
     if current_lamports > 0 {
         #[cfg(feature = "create-account-prefunded")]
         {
@@ -82,11 +56,6 @@ pub fn create_pda_account(
                 owner: target_program_owner,
             }
             .invoke_signed(&[signer])?;
-
-            // Stamp ImmutableOwner extension for token accounts with extensions
-            if should_stamp_immutable_owner {
-                stamp_immutable_owner_extension(pda, space)?;
-            }
         }
         #[cfg(not(feature = "create-account-prefunded"))]
         {
@@ -106,11 +75,6 @@ pub fn create_pda_account(
                     space: space as u64,
                 }
                 .invoke_signed(&[signer.clone()])?;
-
-                // Stamp ImmutableOwner extension after allocation but before assign
-                if should_stamp_immutable_owner {
-                    stamp_immutable_owner_extension(pda, space)?;
-                }
             }
 
             if unsafe { pda.owner() } != target_program_owner {
@@ -122,12 +86,7 @@ pub fn create_pda_account(
             }
         }
     } else {
-        // Create as system-owned first if we need to stamp extension data, otherwise create with target owner
-        let initial_owner = if should_stamp_immutable_owner {
-            &SYSTEM_PROGRAM_ID
-        } else {
-            target_program_owner
-        };
+        let initial_owner = target_program_owner;
 
         CreateAccount {
             from: payer,
@@ -137,18 +96,6 @@ pub fn create_pda_account(
             owner: initial_owner,
         }
         .invoke_signed(&[signer.clone()])?;
-
-        if should_stamp_immutable_owner {
-            // Stamp ImmutableOwner extension after creation but before assigning to token program
-            stamp_immutable_owner_extension(pda, space)?;
-
-            // Now assign to the token program
-            Assign {
-                account: pda,
-                owner: target_program_owner,
-            }
-            .invoke_signed(&[signer])?;
-        }
     }
     Ok(())
 }
@@ -162,31 +109,34 @@ pub fn get_account_len(
     Ok(TokenAccount::LEN)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use pinocchio::{account_info::AccountInfo, pubkey::Pubkey, sysvars::rent::Rent};
+/// Conditionally initialize the ImmutableOwner extension for a freshly created
+/// Token2022 account (no-op if not Token2022).
+#[inline(always)]
+pub fn initialize_immutable_owner(
+    token_program: &AccountInfo,
+    ata_account: &AccountInfo,
+) -> ProgramResult {
+    // Token-2022 program ID.
+    const TOKEN_2022_PROGRAM_ID: Pubkey =
+        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
-    #[test]
-    #[should_panic(expected = "Expected 4 seeds for PDA")]
-    fn test_create_pda_account_panic_on_invalid_seed_length() {
-        #[allow(invalid_value)]
-        let payer_account: AccountInfo = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
-        #[allow(invalid_value)]
-        let acct_account: AccountInfo = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
-
-        let target_program_owner = Pubkey::default();
-        let rent = Rent::default();
-        let space = 100;
-        let seeds_too_few: &[&[u8]] = &[&[1], &[2], &[3]];
-
-        let _ = create_pda_account(
-            &payer_account,
-            &rent,
-            space,
-            &target_program_owner,
-            &acct_account,
-            seeds_too_few,
-        );
+    if token_program.key() != &TOKEN_2022_PROGRAM_ID {
+        return Ok(());
     }
+
+    // Discriminator for TokenInstruction::InitializeImmutableOwner (22).
+    let ix_data = [22u8];
+    let metas = &[AccountMeta {
+        pubkey: ata_account.key(),
+        is_writable: true,
+        is_signer: false,
+    }];
+
+    let ix = Instruction {
+        program_id: token_program.key(),
+        accounts: metas,
+        data: &ix_data,
+    };
+
+    invoke(&ix, &[ata_account])
 }

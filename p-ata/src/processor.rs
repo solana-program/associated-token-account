@@ -1,5 +1,5 @@
 use {
-    crate::tools::account::{create_pda_account, get_account_len},
+    crate::tools::account::{create_pda_account, get_account_len, initialize_immutable_owner},
     pinocchio::{
         account_info::AccountInfo,
         instruction::{AccountMeta, Instruction, Seed, Signer},
@@ -16,12 +16,6 @@ use {
 };
 
 /// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
-///
-/// NOTE: This implementation purposefully skips the `InitializeImmutableOwner` CPI
-/// that the legacy SPL Associated Token Account program performs.  Omitting that
-/// call saves roughly 2 500–3 000 compute units on every create without reducing
-/// safety for the vast majority of applications.  If a downstream program *must*
-/// rely on the immutable-owner bit it should add its own check after creation.
 pub fn process_create(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -96,6 +90,7 @@ pub fn process_create(
         }
     };
     create_pda_account(payer, rent, space, token_prog.key(), ata_acc, seeds)?;
+    initialize_immutable_owner(token_prog, ata_acc)?;
 
     // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
     let mut initialize_account_instr_data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
@@ -161,9 +156,10 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // No expensive seed verification for `nested_ata` and `dest_ata`; the
+    // Removed expensive seed verification for `nested_ata` and `dest_ata`; the
     // subsequent owner checks on their account data provide sufficient safety
     // for practical purposes while saving ~3k CUs.
+    // TODO: Add notes on this to PR.
 
     // --- Wallet signature / multisig handling ---
     // If `wallet` signed directly, all good. Otherwise, allow a Multisig account

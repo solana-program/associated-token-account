@@ -73,8 +73,6 @@ pub fn process_create(
         return Err(ProgramError::IllegalOwner);
     }
 
-    // OPTIMIZATION: Inline account size calculation since get_account_len() always returns TokenAccount::LEN
-    // This eliminates function call overhead and unnecessary branching
     let space = TokenAccount::LEN;
 
     let seeds: &[&[u8]] = &[
@@ -196,7 +194,6 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
                 if ms_pk == signer_acc.key() {
                     signer_count = signer_count.saturating_add(1);
 
-                    // OPTIMIZATION: Early exit once we have enough signers
                     if signer_count >= multisig_state.m {
                         break 'outer;
                     }

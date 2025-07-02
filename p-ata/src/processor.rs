@@ -16,7 +16,7 @@ use {
 };
 
 /// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
-/// 
+///
 /// Manually stamping ImmutableOwner data and then calling Assign is **cheaper**
 /// on create paths than using the Token-2022 `InitializeImmutableOwner` CPI
 /// (100-200 CUs saved). If we ever have a lightweight pinocchio-flavoured
@@ -195,7 +195,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
             for ms_pk in multisig_state.signers[..multisig_state.n as usize].iter() {
                 if ms_pk == signer_acc.key() {
                     signer_count = signer_count.saturating_add(1);
-                    
+
                     // OPTIMIZATION: Early exit once we have enough signers
                     if signer_count >= multisig_state.m {
                         break 'outer;

@@ -21,4 +21,4 @@ Minor requested features for ATA have also been included:
 
 ## Testing
 
-cargo build-sbf --features create-account-prefunded && cargo bench --bench ata_instruction_benches --features test-bpf,create-account-prefunded
+cargo build-sbf --features create-account-prefunded && cargo bench --bench ata_instruction_benches --features test-bpf

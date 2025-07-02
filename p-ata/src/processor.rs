@@ -1,5 +1,5 @@
 use {
-    crate::tools::account::{create_pda_account, get_account_len},
+    crate::tools::account::create_pda_account,
     pinocchio::{
         account_info::AccountInfo,
         instruction::{AccountMeta, Instruction, Seed, Signer},
@@ -43,6 +43,19 @@ pub fn process_create(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
+    if idempotent && unsafe { ata_acc.owner() } == token_prog.key() {
+        let ata_data_slice = unsafe { ata_acc.borrow_data_unchecked() };
+        let ata_state = unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) };
+        if ata_state.owner != *wallet.key() {
+            return Err(ProgramError::IllegalOwner);
+        }
+        if ata_state.mint != *mint_account.key() {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        return Ok(());
+    }
+
+    // Only derive PDA when we actually need to create the account
     let (expected, bump) = find_program_address(
         &[
             wallet.key().as_ref(),
@@ -56,28 +69,13 @@ pub fn process_create(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    if idempotent && unsafe { ata_acc.owner() } == token_prog.key() {
-        let ata_data_slice = unsafe { ata_acc.borrow_data_unchecked() };
-        let ata_state = unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) };
-        if ata_state.owner != *wallet.key() {
-            return Err(ProgramError::IllegalOwner);
-        }
-        if ata_state.mint != *mint_account.key() {
-            return Err(ProgramError::InvalidAccountData);
-        }
-        return Ok(());
-    }
-
     if unsafe { ata_acc.owner() } != system_prog.key() && ata_acc.lamports() > 0 {
         return Err(ProgramError::IllegalOwner);
     }
 
-    // Smart extension detection: only query account size when mint likely has extensions
-    let space = if mint_account.data_len() > 82 {
-        get_account_len(mint_account, token_prog)?
-    } else {
-        TokenAccount::LEN
-    };
+    // OPTIMIZATION: Inline account size calculation since get_account_len() always returns TokenAccount::LEN
+    // This eliminates function call overhead and unnecessary branching
+    let space = TokenAccount::LEN;
 
     let seeds: &[&[u8]] = &[
         wallet.key().as_ref(),
@@ -197,6 +195,11 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
             for ms_pk in multisig_state.signers[..multisig_state.n as usize].iter() {
                 if ms_pk == signer_acc.key() {
                     signer_count = signer_count.saturating_add(1);
+                    
+                    // OPTIMIZATION: Early exit once we have enough signers
+                    if signer_count >= multisig_state.m {
+                        break 'outer;
+                    }
                     continue 'outer;
                 }
             }

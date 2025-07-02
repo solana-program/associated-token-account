@@ -153,15 +153,6 @@ pub fn create_pda_account(
     Ok(())
 }
 
-#[inline(always)]
-pub fn get_account_len(
-    mint: &AccountInfo,
-    _token_program: &AccountInfo,
-) -> Result<usize, ProgramError> {
-    let _ = mint; // Suppress unused warning in no-std build.
-    Ok(TokenAccount::LEN)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

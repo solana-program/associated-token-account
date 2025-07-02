@@ -16,12 +16,12 @@ use {
 };
 
 /// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
-///
-/// NOTE: This implementation purposefully skips the `InitializeImmutableOwner` CPI
-/// that the legacy SPL Associated Token Account program performs.  Omitting that
-/// call saves roughly 2 500–3 000 compute units on every create without reducing
-/// safety for the vast majority of applications.  If a downstream program *must*
-/// rely on the immutable-owner bit it should add its own check after creation.
+/// 
+/// Manually stamping ImmutableOwner data and then calling Assign is **cheaper**
+/// on create paths than using the Token-2022 `InitializeImmutableOwner` CPI
+/// (100-200 CUs saved). If we ever have a lightweight pinocchio-flavoured
+/// Token-2022 program (`p-token-2022`) with a lower overhead, we can swap
+/// back to the flow of CreateAccount + InitializeImmutableOwner.
 pub fn process_create(
     program_id: &Pubkey,
     accounts: &[AccountInfo],

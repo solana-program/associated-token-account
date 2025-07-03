@@ -9,7 +9,7 @@ use {
     solana_signer::Signer,
     solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
-    spl_token_interface::state::{account::Account as TokenAccount, mint::Mint, Transmutable},
+    spl_token_interface::state::Transmutable,
     std::{fs, path::Path},
 };
 
@@ -31,6 +31,77 @@ fn const_pk(byte: u8) -> Pubkey {
 /// Clone accounts vector for benchmark isolation
 fn clone_accounts(src: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
     src.iter().map(|(k, v)| (*k, v.clone())).collect()
+}
+
+/// Build mint data core structure
+#[inline(always)]
+fn build_mint_data_core(decimals: u8) -> [u8; 82] {
+    let mut data = [0u8; 82]; // Mint::LEN
+
+    // mint_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
+    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // COption tag = Some
+    data[4..36].fill(0); // All-zeros pubkey (valid but no authority)
+
+    // supply: u64 (8 bytes) - stays as 0
+
+    // decimals: u8 (1 byte)
+    data[44] = decimals;
+
+    // is_initialized: bool (1 byte)
+    data[45] = 1; // true
+
+    // freeze_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
+    data[46..50].copy_from_slice(&0u32.to_le_bytes()); // COption tag = None
+    // Remaining 32 bytes already 0
+
+    data
+}
+
+/// Build token account data core structure
+#[inline(always)]
+fn build_token_account_data_core(mint: &[u8; 32], owner: &[u8; 32], amount: u64) -> [u8; 165] {
+    let mut data = [0u8; 165]; // TokenAccount::LEN
+    data[0..32].copy_from_slice(mint); // mint
+    data[32..64].copy_from_slice(owner); // owner
+    data[64..72].copy_from_slice(&amount.to_le_bytes()); // amount
+    data[108] = 1; // state = Initialized
+    data
+}
+
+/// Build TLV extension header
+#[inline(always)]
+fn build_tlv_extension(extension_type: u16, data_len: u16) -> [u8; 4] {
+    let mut header = [0u8; 4];
+    header[0..2].copy_from_slice(&extension_type.to_le_bytes());
+    header[2..4].copy_from_slice(&data_len.to_le_bytes());
+    header
+}
+
+/// Build multisig account data
+#[inline(always)]
+fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
+    use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
+
+    assert!(
+        m as usize <= signer_pubkeys.len(),
+        "m cannot exceed number of provided signers"
+    );
+    assert!(m >= 1, "m must be at least 1");
+    assert!(
+        signer_pubkeys.len() <= MAX_SIGNERS as usize,
+        "too many signers provided"
+    );
+
+    let mut data = vec![0u8; Multisig::LEN];
+    data[0] = m; // m threshold
+    data[1] = signer_pubkeys.len() as u8; // n signers
+    data[2] = 1; // is_initialized
+
+    for (i, pk) in signer_pubkeys.iter().enumerate() {
+        let offset = 3 + i * 32;
+        data[offset..offset + 32].copy_from_slice(*pk);
+    }
+    data
 }
 
 /// Create a fresh Mollusk instance with required programs
@@ -71,36 +142,16 @@ impl AccountBuilder {
 
     /// Build raw token Account data with the supplied mint / owner / amount
     fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
-        let mut data = vec![0u8; TokenAccount::LEN];
-        data[0..32].copy_from_slice(mint.as_ref()); // mint
-        data[32..64].copy_from_slice(owner.as_ref()); // owner
-        data[64..72].copy_from_slice(&amount.to_le_bytes()); // amount
-        data[108] = 1; // state = Initialized
-        data
+        build_token_account_data_core(
+            mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
+            owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
+            amount,
+        ).to_vec()
     }
 
     /// Build mint data with given decimals and marked initialized
     fn mint_data(decimals: u8) -> Vec<u8> {
-        // Create Token-2022 compatible mint data
-        let mut data = vec![0u8; Mint::LEN]; // 82 bytes
-
-        // mint_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
-        data[0..4].copy_from_slice(&1u32.to_le_bytes()); // COption tag = Some
-        data[4..36].fill(0); // All-zeros pubkey (valid but no authority)
-
-        // supply: u64 (8 bytes) - stays as 0
-
-        // decimals: u8 (1 byte)
-        data[44] = decimals;
-
-        // is_initialized: bool (1 byte)
-        data[45] = 1; // true
-
-        // freeze_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
-        data[46..50].copy_from_slice(&0u32.to_le_bytes()); // COption tag = None
-                                                           // Remaining 32 bytes already 0
-
-        data
+        build_mint_data_core(decimals).to_vec()
     }
 
     /// Build extended mint data with ImmutableOwner extension
@@ -117,9 +168,8 @@ impl AccountBuilder {
         // Add TLV entries at correct offset (base len = 82)
         let mut cursor = 82;
         // ImmutableOwner header
-        data[cursor..cursor + 2]
-            .copy_from_slice(&(ExtensionType::ImmutableOwner as u16).to_le_bytes());
-        data[cursor + 2..cursor + 4].copy_from_slice(&0u16.to_le_bytes()); // len = 0
+        let immutable_owner_header = build_tlv_extension(ExtensionType::ImmutableOwner as u16, 0);
+        data[cursor..cursor + 4].copy_from_slice(&immutable_owner_header);
         cursor += 4;
         // Sentinel header
         data[cursor..cursor + 4].copy_from_slice(&0u32.to_le_bytes());
@@ -129,28 +179,11 @@ impl AccountBuilder {
 
     /// Build Multisig account data with given signer public keys and threshold `m`
     fn multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
-        use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
-
-        assert!(
-            m as usize <= signer_pubkeys.len(),
-            "m cannot exceed number of provided signers"
-        );
-        assert!(m >= 1, "m must be at least 1");
-        assert!(
-            signer_pubkeys.len() <= MAX_SIGNERS as usize,
-            "too many signers provided"
-        );
-
-        let mut data = vec![0u8; Multisig::LEN];
-        data[0] = m; // m threshold
-        data[1] = signer_pubkeys.len() as u8; // n signers
-        data[2] = 1; // is_initialized
-
-        for (i, pk) in signer_pubkeys.iter().enumerate() {
-            let offset = 3 + i * 32;
-            data[offset..offset + 32].copy_from_slice(pk.as_ref());
-        }
-        data
+        let byte_refs: Vec<&[u8; 32]> = signer_pubkeys
+            .iter()
+            .map(|pk| pk.as_ref().try_into().expect("Pubkey is 32 bytes"))
+            .collect();
+        build_multisig_data_core(m, &byte_refs)
     }
 
     /// Create a basic system account
@@ -279,26 +312,8 @@ impl TestCaseBuilder {
         with_rent: bool,
         topup: bool,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        // Use different base values for each test variant to avoid address collisions
-        let base_offset = match (extended_mint, with_rent, topup) {
-            (false, false, false) => 10, // create_base
-            (false, true, false) => 20,  // create_rent
-            (false, false, true) => 30,  // create_topup
-            (true, false, false) => 40,  // create_ext
-            (true, true, false) => 50,   // create_ext_rent
-            (true, false, true) => 60,   // create_ext_topup
-            _ => 70,                     // fallback
-        };
-
-        let payer = const_pk(base_offset);
-        let mint = const_pk(base_offset + 1);
-
-        let wallet = OptimalKeyFinder::find_optimal_wallet(
-            base_offset + 2,
-            token_program_id,
-            &mint,
-            program_id,
-        );
+        let base_offset = calculate_base_offset(extended_mint, with_rent, topup);
+        let (payer, mint, wallet) = build_base_test_accounts(base_offset, token_program_id, program_id);
 
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
@@ -313,15 +328,8 @@ impl TestCaseBuilder {
                 mint,
                 AccountBuilder::mint_account(0, token_program_id, extended_mint),
             ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
         ];
+        accounts.extend(create_standard_program_accounts(token_program_id));
 
         if with_rent {
             accounts.push((rent::id(), AccountBuilder::rent_sysvar()));
@@ -330,9 +338,7 @@ impl TestCaseBuilder {
         // Setup topup scenario if requested
         if topup {
             if let Some((_, ata_acc)) = accounts.iter_mut().find(|(k, _)| *k == ata) {
-                ata_acc.lamports = 1_000_000; // Some lamports but below rent-exempt
-                ata_acc.data = vec![]; // No data allocated
-                ata_acc.owner = SYSTEM_PROGRAM_ID; // Still system-owned
+                modify_account_for_topup(ata_acc);
             }
         }
 
@@ -352,7 +358,7 @@ impl TestCaseBuilder {
         let ix = Instruction {
             program_id: *program_id,
             accounts: metas,
-            data: vec![], // Create instruction (discriminator 0 with no bump)
+            data: build_instruction_data(0, &[]), // Create instruction (discriminator 0 with no bump)
         };
 
         (ix, accounts)
@@ -415,7 +421,7 @@ impl TestCaseBuilder {
         let ix = Instruction {
             program_id: *program_id,
             accounts: metas,
-            data: vec![1u8], // CreateIdempotent discriminator
+            data: build_instruction_data(1, &[]), // CreateIdempotent discriminator
         };
 
         (ix, accounts)
@@ -523,23 +529,8 @@ impl TestCaseBuilder {
         extended_mint: bool,
         with_rent: bool,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        // Use different base values to avoid address collisions
-        let base_offset = match (extended_mint, with_rent) {
-            (false, false) => 90, // create_with_bump_base
-            (false, true) => 95,  // create_with_bump_rent
-            (true, false) => 100, // create_with_bump_ext
-            (true, true) => 105,  // create_with_bump_ext_rent
-        };
-
-        let payer = const_pk(base_offset);
-        let mint = const_pk(base_offset + 1);
-
-        let wallet = OptimalKeyFinder::find_optimal_wallet(
-            base_offset + 2,
-            token_program_id,
-            &mint,
-            program_id,
-        );
+        let base_offset = calculate_bump_base_offset(extended_mint, with_rent);
+        let (payer, mint, wallet) = build_base_test_accounts(base_offset, token_program_id, program_id);
 
         let (ata, bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
@@ -584,7 +575,7 @@ impl TestCaseBuilder {
         let ix = Instruction {
             program_id: *program_id,
             accounts: metas,
-            data: vec![0u8, bump], // Create instruction (discriminator 0) with bump
+            data: build_instruction_data(0, &[bump]), // Create instruction (discriminator 0) with bump
         };
 
         (ix, accounts)
@@ -912,7 +903,7 @@ impl BenchmarkSetup {
         let ata_keypair_bytes: Vec<u8> = serde_json::from_str(&ata_keypair_data)
             .expect("Failed to parse pinocchio_ata_program keypair JSON");
         let ata_keypair =
-            Keypair::from_bytes(&ata_keypair_bytes).expect("Invalid pinocchio_ata_program keypair");
+            Keypair::try_from(&ata_keypair_bytes[..]).expect("Invalid pinocchio_ata_program keypair");
         let ata_program_id = ata_keypair.pubkey();
 
         // Use SPL Token interface ID for token program
@@ -965,18 +956,8 @@ impl BenchmarkRunner {
     ) {
         println!("\n=== Running benchmark: {} ===", name);
 
-        let cloned_accounts = clone_accounts(accounts);
-        let mut bencher =
-            MolluskComputeUnitBencher::new(fresh_mollusk(program_id, token_program_id))
-                .bench((name, ix, &cloned_accounts[..]))
-                .out_dir("../target/benches");
-
-        // For Token-2022 simulation, allow failure since we're testing extension stamping logic
-        if name != "create_token2022_sim" {
-            bencher = bencher.must_pass(true);
-        }
-
-        bencher.execute();
+        let must_pass = name != "create_token2022_sim";
+        run_benchmark_with_validation(name, ix, accounts, program_id, token_program_id, must_pass);
     }
 
     /// Run all benchmarks
@@ -1075,7 +1056,7 @@ fn main() {
     println!("Token Program ID: {}", token_program_id);
 
     // Setup Mollusk with required programs
-    let mut mollusk = fresh_mollusk(&program_id, &token_program_id);
+    let mollusk = fresh_mollusk(&program_id, &token_program_id);
 
     // Validate the setup works
     if let Err(e) = BenchmarkSetup::validate_setup(&mollusk, &program_id, &token_program_id) {
@@ -1086,4 +1067,168 @@ fn main() {
     BenchmarkRunner::run_all_benchmarks(&program_id, &token_program_id);
 
     println!("\n✓ All benchmarks completed successfully");
+}
+
+
+/// Build AccountMeta structure
+fn build_account_meta(pubkey: &Pubkey, writable: bool, signer: bool) -> AccountMeta {
+    AccountMeta {
+        pubkey: *pubkey,
+        is_writable: writable,
+        is_signer: signer,
+    }
+}
+
+/// Build standard ATA instruction metas
+fn build_ata_instruction_metas(
+    payer: &Pubkey,
+    ata: &Pubkey,
+    wallet: &Pubkey,
+    mint: &Pubkey,
+    system_prog: &Pubkey,
+    token_prog: &Pubkey,
+) -> Vec<AccountMeta> {
+    vec![
+        build_account_meta(payer, true, true),      // payer (writable, signer)
+        build_account_meta(ata, true, false),       // ata (writable, not signer)
+        build_account_meta(wallet, false, false),   // wallet (readonly, not signer)
+        build_account_meta(mint, false, false),     // mint (readonly, not signer)
+        build_account_meta(system_prog, false, false), // system program (readonly, not signer)
+        build_account_meta(token_prog, false, false),  // token program (readonly, not signer)
+    ]
+}
+
+/// Build instruction data with discriminator
+fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> {
+    let mut data = vec![discriminator];
+    data.extend_from_slice(additional_data);
+    data
+}
+
+
+/// Build base test accounts
+fn build_base_test_accounts(
+    base_offset: u8,
+    token_program_id: &Pubkey,
+    program_id: &Pubkey,
+) -> (Pubkey, Pubkey, Pubkey) {
+    let payer = const_pk(base_offset);
+    let mint = const_pk(base_offset + 1);
+    let wallet = OptimalKeyFinder::find_optimal_wallet(
+        base_offset + 2,
+        token_program_id,
+        &mint,
+        program_id,
+    );
+    (payer, mint, wallet)
+}
+
+/// Build standard account vector
+fn build_standard_account_vec(
+    accounts: &[(Pubkey, Account)],
+) -> Vec<(Pubkey, Account)> {
+    accounts.iter().map(|(k, v)| (*k, v.clone())).collect()
+}
+
+/// Modify account for topup scenario
+fn modify_account_for_topup(account: &mut Account) {
+    account.lamports = 1_000_000; // Some lamports but below rent-exempt
+    account.data = vec![]; // No data allocated
+    account.owner = SYSTEM_PROGRAM_ID; // Still system-owned
+}
+
+/// Calculate base offset for test variants
+fn calculate_base_offset(extended_mint: bool, with_rent: bool, topup: bool) -> u8 {
+    match (extended_mint, with_rent, topup) {
+        (false, false, false) => 10, // create_base
+        (false, true, false) => 20,  // create_rent
+        (false, false, true) => 30,  // create_topup
+        (true, false, false) => 40,  // create_ext
+        (true, true, false) => 50,   // create_ext_rent
+        (true, false, true) => 60,   // create_ext_topup
+        _ => 70,                     // fallback
+    }
+}
+
+/// Calculate bump offset for bump tests
+fn calculate_bump_base_offset(extended_mint: bool, with_rent: bool) -> u8 {
+    match (extended_mint, with_rent) {
+        (false, false) => 90, // create_with_bump_base
+        (false, true) => 95,  // create_with_bump_rent
+        (true, false) => 100, // create_with_bump_ext
+        (true, true) => 105,  // create_with_bump_ext_rent
+    }
+}
+
+
+/// Configure benchmark runner
+fn configure_bencher<'a>(
+    mollusk: Mollusk,
+    _name: &'a str,
+    must_pass: bool,
+    out_dir: &'a str,
+) -> MolluskComputeUnitBencher<'a> {
+    let mut bencher = MolluskComputeUnitBencher::new(mollusk)
+        .out_dir(out_dir);
+    
+    if must_pass {
+        bencher = bencher.must_pass(true);
+    }
+    
+    bencher
+}
+
+/// Execute benchmark case
+fn execute_benchmark_case<'a>(
+    bencher: MolluskComputeUnitBencher<'a>,
+    name: &'a str,
+    ix: &'a Instruction,
+    accounts: &'a [(Pubkey, Account)],
+) -> MolluskComputeUnitBencher<'a> {
+    bencher.bench((name, ix, accounts))
+}
+
+/// Run benchmark with validation
+fn run_benchmark_with_validation(
+    name: &str,
+    ix: &Instruction,
+    accounts: &[(Pubkey, Account)],
+    program_id: &Pubkey,
+    token_program_id: &Pubkey,
+    must_pass: bool,
+) {
+    let cloned_accounts = clone_accounts(accounts);
+    let mollusk = fresh_mollusk(program_id, token_program_id);
+    let bencher = configure_bencher(mollusk, name, must_pass, "../target/benches");
+    let mut bencher = execute_benchmark_case(bencher, name, ix, &cloned_accounts);
+    bencher.execute();
+}
+
+/// Create standard program accounts
+fn create_standard_program_accounts(token_program_id: &Pubkey) -> Vec<(Pubkey, Account)> {
+    vec![
+        (
+            SYSTEM_PROGRAM_ID,
+            AccountBuilder::executable_program(NATIVE_LOADER_ID),
+        ),
+        (
+            *token_program_id,
+            AccountBuilder::executable_program(LOADER_V3),
+        ),
+    ]
+}
+
+/// Generate test case name
+fn generate_test_case_name(base: &str, extended: bool, with_rent: bool, topup: bool) -> String {
+    let mut name = base.to_string();
+    if extended {
+        name.push_str("_ext");
+    }
+    if with_rent {
+        name.push_str("_rent");
+    }
+    if topup {
+        name.push_str("_topup");
+    }
+    name
 }

@@ -79,12 +79,10 @@ fn build_p_token(manifest_dir: &str, programs_dir: &Path) {
         );
     }
 
-    // Copy the binary to programs directory (build creates target at parent level)
-    let token_target_dir = Path::new(manifest_dir).join("programs/token");
+    // Copy the binary to programs directory (build creates target in the build directory)
     let source_so =
-        token_target_dir.join("target/sbpf-solana-solana/release/pinocchio_token_program.so");
-    let source_keypair =
-        token_target_dir.join("target/deploy/pinocchio_token_program-keypair.json");
+        p_token_dir.join("target/sbpf-solana-solana/release/pinocchio_token_program.so");
+    let source_keypair = p_token_dir.join("target/deploy/pinocchio_token_program-keypair.json");
     let dest_so = programs_dir.join("pinocchio_token_program.so");
     let dest_keypair = programs_dir.join("pinocchio_token_program-keypair.json");
 
@@ -119,11 +117,9 @@ fn build_token_2022(manifest_dir: &str, programs_dir: &Path) {
         );
     }
 
-    // Copy the binary to programs directory (build creates target at parent level)
-    let token_2022_target_dir = Path::new(manifest_dir).join("programs/token-2022");
-    let source_so =
-        token_2022_target_dir.join("target/sbpf-solana-solana/release/spl_token_2022.so");
-    let source_keypair = token_2022_target_dir.join("target/deploy/spl_token_2022-keypair.json");
+    // Copy the binary to programs directory (build creates target in the build directory)
+    let source_so = token_2022_dir.join("target/sbpf-solana-solana/release/spl_token_2022.so");
+    let source_keypair = token_2022_dir.join("target/deploy/spl_token_2022-keypair.json");
     let dest_so = programs_dir.join("spl_token_2022.so");
     let dest_keypair = programs_dir.join("spl_token_2022-keypair.json");
 

@@ -26,6 +26,29 @@ type AtaAccounts<'a> = (
     Option<&'a AccountInfo>,
 );
 
+/// Extract PDA derivation for ATA
+#[inline(always)]
+fn derive_ata_pda(
+    wallet: &Pubkey,
+    token_prog: &Pubkey,
+    mint: &Pubkey,
+    program_id: &Pubkey,
+) -> (Pubkey, u8) {
+    find_program_address(
+        &[wallet.as_ref(), token_prog.as_ref(), mint.as_ref()],
+        program_id,
+    )
+}
+
+/// Extract PDA validation
+#[inline(always)]
+fn validate_pda(expected: &Pubkey, actual: &Pubkey) -> Result<(), ProgramError> {
+    if expected != actual {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    Ok(())
+}
+
 /// Parse and validate the standard ATA account layout.
 #[inline(always)]
 fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramError> {
@@ -149,26 +172,15 @@ pub fn process_create(
     }
 
     let bump = match bump_opt {
-        Some(provided_bump) => {
-            // Trust client-provided bump and skip PDA verification
-            // If the bump is wrong, account creation/signing will fail naturally
-            provided_bump
-        }
+        Some(provided_bump) => provided_bump,
         None => {
-            // Compute bump on-chain (original behavior)
-            let (expected, computed_bump) = find_program_address(
-                &[
-                    wallet.key().as_ref(),
-                    token_prog.key().as_ref(),
-                    mint_account.key().as_ref(),
-                ],
+            let (expected, computed_bump) = derive_ata_pda(
+                wallet.key(),
+                token_prog.key(),
+                mint_account.key(),
                 program_id,
             );
-
-            if &expected != ata_acc.key() {
-                return Err(ProgramError::InvalidSeeds);
-            }
-
+            validate_pda(&expected, ata_acc.key())?;
             computed_bump
         }
     };
@@ -208,17 +220,13 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         &accounts[6],
     );
 
-    let (owner_pda, bump) = find_program_address(
-        &[
-            wallet.key().as_ref(),
-            token_prog.key().as_ref(),
-            owner_mint_account.key().as_ref(),
-        ],
+    let (owner_pda, bump) = derive_ata_pda(
+        wallet.key(),
+        token_prog.key(),
+        owner_mint_account.key(),
         program_id,
     );
-    if &owner_pda != owner_ata.key() {
-        return Err(ProgramError::InvalidSeeds);
-    }
+    validate_pda(&owner_pda, owner_ata.key())?;
 
     // No expensive seed verification for `nested_ata` and `dest_ata`; the
     // subsequent owner checks on their account data provide sufficient safety

@@ -1069,8 +1069,8 @@ fn main() {
     println!("\n✓ All benchmarks completed successfully");
 }
 
+// ================================= HELPERS =====================================
 
-/// Build AccountMeta structure
 fn build_account_meta(pubkey: &Pubkey, writable: bool, signer: bool) -> AccountMeta {
     AccountMeta {
         pubkey: *pubkey,
@@ -1079,7 +1079,6 @@ fn build_account_meta(pubkey: &Pubkey, writable: bool, signer: bool) -> AccountM
     }
 }
 
-/// Build standard ATA instruction metas
 fn build_ata_instruction_metas(
     payer: &Pubkey,
     ata: &Pubkey,
@@ -1098,7 +1097,6 @@ fn build_ata_instruction_metas(
     ]
 }
 
-/// Build instruction data with discriminator
 fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> {
     let mut data = vec![discriminator];
     data.extend_from_slice(additional_data);
@@ -1106,7 +1104,6 @@ fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> 
 }
 
 
-/// Build base test accounts
 fn build_base_test_accounts(
     base_offset: u8,
     token_program_id: &Pubkey,
@@ -1123,21 +1120,18 @@ fn build_base_test_accounts(
     (payer, mint, wallet)
 }
 
-/// Build standard account vector
 fn build_standard_account_vec(
     accounts: &[(Pubkey, Account)],
 ) -> Vec<(Pubkey, Account)> {
     accounts.iter().map(|(k, v)| (*k, v.clone())).collect()
 }
 
-/// Modify account for topup scenario
 fn modify_account_for_topup(account: &mut Account) {
     account.lamports = 1_000_000; // Some lamports but below rent-exempt
     account.data = vec![]; // No data allocated
     account.owner = SYSTEM_PROGRAM_ID; // Still system-owned
 }
 
-/// Calculate base offset for test variants
 fn calculate_base_offset(extended_mint: bool, with_rent: bool, topup: bool) -> u8 {
     match (extended_mint, with_rent, topup) {
         (false, false, false) => 10, // create_base
@@ -1150,7 +1144,6 @@ fn calculate_base_offset(extended_mint: bool, with_rent: bool, topup: bool) -> u
     }
 }
 
-/// Calculate bump offset for bump tests
 fn calculate_bump_base_offset(extended_mint: bool, with_rent: bool) -> u8 {
     match (extended_mint, with_rent) {
         (false, false) => 90, // create_with_bump_base
@@ -1161,7 +1154,6 @@ fn calculate_bump_base_offset(extended_mint: bool, with_rent: bool) -> u8 {
 }
 
 
-/// Configure benchmark runner
 fn configure_bencher<'a>(
     mollusk: Mollusk,
     _name: &'a str,
@@ -1178,7 +1170,6 @@ fn configure_bencher<'a>(
     bencher
 }
 
-/// Execute benchmark case
 fn execute_benchmark_case<'a>(
     bencher: MolluskComputeUnitBencher<'a>,
     name: &'a str,
@@ -1188,7 +1179,6 @@ fn execute_benchmark_case<'a>(
     bencher.bench((name, ix, accounts))
 }
 
-/// Run benchmark with validation
 fn run_benchmark_with_validation(
     name: &str,
     ix: &Instruction,
@@ -1204,7 +1194,6 @@ fn run_benchmark_with_validation(
     bencher.execute();
 }
 
-/// Create standard program accounts
 fn create_standard_program_accounts(token_program_id: &Pubkey) -> Vec<(Pubkey, Account)> {
     vec![
         (
@@ -1218,7 +1207,6 @@ fn create_standard_program_accounts(token_program_id: &Pubkey) -> Vec<(Pubkey, A
     ]
 }
 
-/// Generate test case name
 fn generate_test_case_name(base: &str, extended: bool, with_rent: bool, topup: bool) -> String {
     let mut name = base.to_string();
     if extended {

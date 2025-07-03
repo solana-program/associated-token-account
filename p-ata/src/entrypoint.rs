@@ -1,7 +1,7 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::processor::{process_create, process_recover},
+    crate::processor::{process_create, process_create_with_bump, process_recover},
     pinocchio::{
         account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
         pubkey::Pubkey, ProgramResult,
@@ -27,6 +27,14 @@ pub fn entry(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Prog
         1 => process_create(program_id, accounts, true),
         // 2 - RecoverNested
         2 => process_recover(program_id, accounts),
+        // 3 - CreateWithBump (optimized: client provides bump)
+        3 => {
+            if _instruction_data.is_empty() {
+                return Err(TokenError::InvalidInstruction.into());
+            }
+            let bump = _instruction_data[0];
+            process_create_with_bump(program_id, accounts, bump, false)
+        }
         _ => Err(TokenError::InvalidInstruction.into()),
     }
 }

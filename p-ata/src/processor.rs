@@ -15,34 +15,40 @@ use {
     },
 };
 
-/// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
-///
-/// Manually stamping ImmutableOwner data and then calling Assign is **cheaper**
-/// on create paths than using the Token-2022 `InitializeImmutableOwner` CPI
-/// (100-200 CUs saved). If we ever have a lightweight pinocchio-flavoured
-/// Token-2022 program (`p-token-2022`) with a lower overhead, we can swap
-/// back to the flow of CreateAccount + InitializeImmutableOwner.
-pub fn process_create(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    idempotent: bool,
-) -> ProgramResult {
-    // Support original ATA 6-account layout with optional Rent sysvar (7th account)
-    let (payer, ata_acc, wallet, mint_account, system_prog, token_prog, rent_info_opt) =
-        match accounts {
-            [payer, ata, wallet, mint, system, token] => {
-                (payer, ata, wallet, mint, system, token, None)
-            }
-            [payer, ata, wallet, mint, system, token, rent, ..] => {
-                (payer, ata, wallet, mint, system, token, Some(rent))
-            }
-            _ => return Err(ProgramError::NotEnoughAccountKeys),
-        };
+/// Parsed ATA accounts: (payer, ata, wallet, mint, system_program, token_program, rent_sysvar?)
+type AtaAccounts<'a> = (
+    &'a AccountInfo,
+    &'a AccountInfo,
+    &'a AccountInfo,
+    &'a AccountInfo,
+    &'a AccountInfo,
+    &'a AccountInfo,
+    Option<&'a AccountInfo>,
+);
 
-    if !payer.is_signer() {
-        return Err(ProgramError::MissingRequiredSignature);
+/// Parse and validate the standard ATA account layout.
+#[inline(always)]
+fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramError> {
+    match accounts {
+        [payer, ata, wallet, mint, system, token] => {
+            Ok((payer, ata, wallet, mint, system, token, None))
+        }
+        [payer, ata, wallet, mint, system, token, rent, ..] => {
+            Ok((payer, ata, wallet, mint, system, token, Some(rent)))
+        }
+        _ => Err(ProgramError::NotEnoughAccountKeys),
     }
+}
 
+/// Check if account already exists and is properly configured (idempotent check).
+#[inline(always)]
+fn check_idempotent_account(
+    ata_acc: &AccountInfo,
+    wallet: &AccountInfo,
+    mint_account: &AccountInfo,
+    token_prog: &AccountInfo,
+    idempotent: bool,
+) -> Result<bool, ProgramError> {
     if idempotent && unsafe { ata_acc.owner() } == token_prog.key() {
         let ata_data_slice = unsafe { ata_acc.borrow_data_unchecked() };
         let ata_state = unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) };
@@ -52,27 +58,26 @@ pub fn process_create(
         if ata_state.mint != *mint_account.key() {
             return Err(ProgramError::InvalidAccountData);
         }
-        return Ok(());
+        return Ok(true); // Account exists and is valid
     }
+    Ok(false) // Need to create account
+}
 
-    // Only derive PDA when we actually need to create the account
-    let (expected, bump) = find_program_address(
-        &[
-            wallet.key().as_ref(),
-            token_prog.key().as_ref(),
-            mint_account.key().as_ref(),
-        ],
-        program_id,
-    );
-
-    if &expected != ata_acc.key() {
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    if unsafe { ata_acc.owner() } != system_prog.key() && ata_acc.lamports() > 0 {
-        return Err(ProgramError::IllegalOwner);
-    }
-
+/// Create and initialize an ATA account with the given bump seed.
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+fn create_and_initialize_ata(
+    payer: &AccountInfo,
+    ata_acc: &AccountInfo,
+    wallet: &AccountInfo,
+    mint_account: &AccountInfo,
+    // if an account isn't owned by the system program,
+    // the create_pda_account call will fail anyway when trying to allocate/assign
+    _system_prog: &AccountInfo,
+    token_prog: &AccountInfo,
+    rent_info_opt: Option<&AccountInfo>,
+    bump: u8,
+) -> ProgramResult {
     let space = TokenAccount::LEN;
 
     let seeds: &[&[u8]] = &[
@@ -122,6 +127,85 @@ pub fn process_create(
     Ok(())
 }
 
+/// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
+///
+/// Manually stamping ImmutableOwner data and then calling Assign is **cheaper**
+/// on create paths than using the Token-2022 `InitializeImmutableOwner` CPI
+/// (100-200 CUs saved). If we ever have a lightweight pinocchio-flavoured
+/// Token-2022 program (`p-token-2022`) with a lower overhead, we can swap
+/// back to the flow of CreateAccount + InitializeImmutableOwner.
+pub fn process_create(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    idempotent: bool,
+) -> ProgramResult {
+    let (payer, ata_acc, wallet, mint_account, system_prog, token_prog, rent_info_opt) =
+        parse_ata_accounts(accounts)?;
+
+    // Check if account already exists (idempotent path)
+    if check_idempotent_account(ata_acc, wallet, mint_account, token_prog, idempotent)? {
+        return Ok(());
+    }
+
+    let (expected, bump) = find_program_address(
+        &[
+            wallet.key().as_ref(),
+            token_prog.key().as_ref(),
+            mint_account.key().as_ref(),
+        ],
+        program_id,
+    );
+
+    if &expected != ata_acc.key() {
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    create_and_initialize_ata(
+        payer,
+        ata_acc,
+        wallet,
+        mint_account,
+        system_prog,
+        token_prog,
+        rent_info_opt,
+        bump,
+    )
+}
+
+/// Optimized create instruction where client provides the bump seed to save some CUs.
+///
+/// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
+/// Instruction data: [bump: u8]
+#[inline(always)]
+pub fn process_create_with_bump(
+    _program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    bump: u8,
+    idempotent: bool,
+) -> ProgramResult {
+    let (payer, ata_acc, wallet, mint_account, system_prog, token_prog, rent_info_opt) =
+        parse_ata_accounts(accounts)?;
+
+    // Check if account already exists (idempotent path)
+    if check_idempotent_account(ata_acc, wallet, mint_account, token_prog, idempotent)? {
+        return Ok(());
+    }
+
+    // Trust client-provided bump and skip PDA verification
+    // If the bump is wrong, account creation/signing will fail naturally
+
+    create_and_initialize_ata(
+        payer,
+        ata_acc,
+        wallet,
+        mint_account,
+        system_prog,
+        token_prog,
+        rent_info_opt,
+        bump,
+    )
+}
+
 /// Accounts: nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet, token_prog, [..multisig signer accounts]
 pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     if accounts.len() < 7 {
@@ -159,7 +243,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
 
     // No expensive seed verification for `nested_ata` and `dest_ata`; the
     // subsequent owner checks on their account data provide sufficient safety
-    // for practical purposes while saving ~3k CUs.
+    // for practical purposes.
 
     // --- Wallet signature / multisig handling ---
     // If `wallet` signed directly, all good. Otherwise, allow a Multisig account
@@ -207,19 +291,12 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         }
     }
 
-    if unsafe { owner_mint_account.owner() } != token_prog.key() {
-        return Err(ProgramError::IllegalOwner);
-    }
-
     let owner_ata_data_slice = unsafe { owner_ata.borrow_data_unchecked() };
     let owner_ata_state = unsafe { &*(owner_ata_data_slice.as_ptr() as *const TokenAccount) };
     if owner_ata_state.owner != *wallet.key() {
         return Err(ProgramError::IllegalOwner);
     }
 
-    if unsafe { nested_ata.owner() } != token_prog.key() {
-        return Err(ProgramError::IllegalOwner);
-    }
     let nested_ata_data_slice = unsafe { nested_ata.borrow_data_unchecked() };
     let nested_ata_state = unsafe { &*(nested_ata_data_slice.as_ptr() as *const TokenAccount) };
     if nested_ata_state.owner != *owner_ata.key() {

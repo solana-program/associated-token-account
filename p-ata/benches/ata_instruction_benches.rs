@@ -522,9 +522,7 @@ impl TestCaseBuilder {
     fn build_create_token2022_simulation(
         program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        // For now, using Token-2022 program ID but with the Token program binary
-        // This works for very close benchmarks
-        let TOKEN_2022_PROGRAM_ID: Pubkey =
+        let token_2022_program_id: Pubkey =
             pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb").into();
 
         let base_offset = 80; // Unique offset to avoid collisions
@@ -533,7 +531,7 @@ impl TestCaseBuilder {
 
         let wallet = OptimalKeyFinder::find_optimal_wallet(
             base_offset + 2,
-            &TOKEN_2022_PROGRAM_ID,
+            &token_2022_program_id,
             &mint,
             program_id,
         );
@@ -541,7 +539,7 @@ impl TestCaseBuilder {
         let (ata, _bump) = Pubkey::find_program_address(
             &[
                 wallet.as_ref(),
-                TOKEN_2022_PROGRAM_ID.as_ref(),
+                token_2022_program_id.as_ref(),
                 mint.as_ref(),
             ],
             program_id,
@@ -549,19 +547,19 @@ impl TestCaseBuilder {
 
         let accounts = vec![
             (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)), // Will be created by p-ATA
+            (ata, AccountBuilder::system_account(0)),
             (wallet, AccountBuilder::system_account(0)),
             (
                 mint,
-                AccountBuilder::mint_account(0, &TOKEN_2022_PROGRAM_ID, true), // extended = true
+                AccountBuilder::mint_account(0, &token_2022_program_id, true), // extended = true
             ),
             (
                 SYSTEM_PROGRAM_ID,
                 AccountBuilder::executable_program(NATIVE_LOADER_ID),
             ),
             (
-                TOKEN_2022_PROGRAM_ID,
-                AccountBuilder::executable_program(LOADER_V3), // Use Token program binary
+                token_2022_program_id,
+                AccountBuilder::executable_program(LOADER_V3),
             ),
         ];
 
@@ -571,7 +569,7 @@ impl TestCaseBuilder {
             AccountMeta::new_readonly(wallet, false),
             AccountMeta::new_readonly(mint, false),
             AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-            AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),
+            AccountMeta::new_readonly(token_2022_program_id, false),
         ];
 
         let ix = Instruction {
@@ -745,7 +743,7 @@ impl BenchmarkSetup {
         let ata_keypair_bytes: Vec<u8> = serde_json::from_str(&ata_keypair_data)
             .expect("Failed to parse pinocchio_ata_program keypair JSON");
         let ata_keypair =
-            Keypair::from_bytes(&ata_keypair_bytes).expect("Invalid pinocchio_ata_program keypair");
+            Keypair::try_from(&ata_keypair_bytes).expect("Invalid pinocchio_ata_program keypair");
         let ata_program_id = ata_keypair.pubkey();
 
         // Use SPL Token interface ID for token program

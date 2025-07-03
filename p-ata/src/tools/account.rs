@@ -16,6 +16,12 @@ use pinocchio_system::instructions::CreateAccountPrefunded;
 #[cfg(not(feature = "create-account-prefunded"))]
 use pinocchio_system::instructions::{Allocate, Transfer};
 
+const IMMUTABLE_OWNER_HEADER: [u8; 8] = [
+    6, 0, // type = 6 (ImmutableOwner) in little-endian
+    0, 0, // length
+    0, 0, 0, 0, // padding
+];
+
 /// Stamp the ImmutableOwner extension header into an account's data buffer.
 #[inline(always)]
 fn stamp_immutable_owner_extension(account: &AccountInfo, space: usize) -> ProgramResult {
@@ -23,13 +29,7 @@ fn stamp_immutable_owner_extension(account: &AccountInfo, space: usize) -> Progr
     if space > TokenAccount::LEN {
         let mut data = account.try_borrow_mut_data()?;
         let base = TokenAccount::LEN; // 165
-
-        // Write ImmutableOwner TLV header (type=6, len=0)
-        // ImmutableOwner extension type is 6
-        let tag: u16 = 6;
-        data[base..base + 2].copy_from_slice(&tag.to_le_bytes()); // type
-        data[base + 2..base + 4].copy_from_slice(&0u16.to_le_bytes()); // len = 0
-        data[base + 4..base + 8].copy_from_slice(&0u32.to_le_bytes()); // sentinel
+        data[base..base + 8].copy_from_slice(&IMMUTABLE_OWNER_HEADER);
     }
     Ok(())
 }

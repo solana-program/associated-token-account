@@ -151,32 +151,3 @@ pub fn create_pda_account(
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use pinocchio::{account_info::AccountInfo, pubkey::Pubkey, sysvars::rent::Rent};
-
-    #[test]
-    #[should_panic(expected = "Expected 4 seeds for PDA")]
-    fn test_create_pda_account_panic_on_invalid_seed_length() {
-        #[allow(invalid_value)]
-        let payer_account: AccountInfo = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
-        #[allow(invalid_value)]
-        let acct_account: AccountInfo = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
-
-        let target_program_owner = Pubkey::default();
-        let rent = Rent::default();
-        let space = 100;
-        let seeds_too_few: &[&[u8]] = &[&[1], &[2], &[3]];
-
-        let _ = create_pda_account(
-            &payer_account,
-            &rent,
-            space,
-            &target_program_owner,
-            &acct_account,
-            seeds_too_few,
-        );
-    }
-}

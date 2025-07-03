@@ -26,6 +26,93 @@ type AtaAccounts<'a> = (
     Option<&'a AccountInfo>,
 );
 
+/// Extract PDA derivation for ATA
+#[inline(always)]
+fn derive_ata_pda(
+    wallet: &Pubkey,
+    token_prog: &Pubkey,
+    mint: &Pubkey,
+    program_id: &Pubkey,
+) -> (Pubkey, u8) {
+    find_program_address(
+        &[wallet.as_ref(), token_prog.as_ref(), mint.as_ref()],
+        program_id,
+    )
+}
+
+/// Extract PDA validation
+#[inline(always)]
+fn validate_pda(expected: &Pubkey, actual: &Pubkey) -> Result<(), ProgramError> {
+    if expected != actual {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    Ok(())
+}
+
+/// Extract zero-copy token account access
+#[inline(always)]
+fn get_token_account_unchecked(account: &AccountInfo) -> &TokenAccount {
+    let ata_data_slice = unsafe { account.borrow_data_unchecked() };
+    unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) }
+}
+
+/// Extract token account owner validation
+#[inline(always)]
+fn validate_token_account_owner(
+    account: &TokenAccount,
+    expected_owner: &Pubkey,
+) -> Result<(), ProgramError> {
+    if account.owner != *expected_owner {
+        return Err(ProgramError::IllegalOwner);
+    }
+    Ok(())
+}
+
+/// Extract token account mint validation
+#[inline(always)]
+fn validate_token_account_mint(
+    account: &TokenAccount,
+    expected_mint: &Pubkey,
+) -> Result<(), ProgramError> {
+    if account.mint != *expected_mint {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    Ok(())
+}
+
+/// Extract InitializeAccount3 instruction data building
+#[inline(always)]
+fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
+    let mut data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
+    data[0] = 18u8; // TokenInstruction::InitializeAccount3
+    data[1..33].copy_from_slice(owner.as_ref());
+    data
+}
+
+/// Extract Transfer instruction data building
+#[inline(always)]
+fn build_transfer_data(amount: u64) -> [u8; 9] {
+    let mut data = [0u8; 9];
+    data[0] = TokenInstruction::Transfer as u8;
+    data[1..9].copy_from_slice(&amount.to_le_bytes());
+    data
+}
+
+/// Extract CloseAccount instruction data building
+#[inline(always)]
+fn build_close_account_data() -> [u8; 1] {
+    [TokenInstruction::CloseAccount as u8]
+}
+
+/// Extract rent resolution
+#[inline(always)]
+fn resolve_rent(rent_info_opt: Option<&AccountInfo>) -> Result<Rent, ProgramError> {
+    match rent_info_opt {
+        Some(rent_acc) => unsafe { Rent::from_account_info_unchecked(rent_acc) }.cloned(),
+        None => Rent::get(),
+    }
+}
+
 /// Parse and validate the standard ATA account layout.
 #[inline(always)]
 fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramError> {
@@ -50,14 +137,9 @@ fn check_idempotent_account(
     idempotent: bool,
 ) -> Result<bool, ProgramError> {
     if idempotent && unsafe { ata_acc.owner() } == token_prog.key() {
-        let ata_data_slice = unsafe { ata_acc.borrow_data_unchecked() };
-        let ata_state = unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) };
-        if ata_state.owner != *wallet.key() {
-            return Err(ProgramError::IllegalOwner);
-        }
-        if ata_state.mint != *mint_account.key() {
-            return Err(ProgramError::InvalidAccountData);
-        }
+        let ata_state = get_token_account_unchecked(ata_acc);
+        validate_token_account_owner(ata_state, wallet.key())?;
+        validate_token_account_mint(ata_state, mint_account.key())?;
         return Ok(true); // Account exists and is valid
     }
     Ok(false) // Need to create account
@@ -88,20 +170,11 @@ fn create_and_initialize_ata(
     ];
 
     // Use Rent passed in accounts if supplied to avoid syscall
-    let rent_owned;
-    let rent: &Rent = match rent_info_opt {
-        Some(rent_acc) => unsafe { Rent::from_account_info_unchecked(rent_acc)? },
-        None => {
-            rent_owned = Rent::get()?;
-            &rent_owned
-        }
-    };
-    create_pda_account(payer, rent, space, token_prog.key(), ata_acc, seeds)?;
+    let rent = resolve_rent(rent_info_opt)?;
+    create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
 
     // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
-    let mut initialize_account_instr_data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
-    initialize_account_instr_data[0] = 18u8; // TokenInstruction::InitializeAccount3
-    initialize_account_instr_data[1..33].copy_from_slice(wallet.key().as_ref());
+    let initialize_account_instr_data = build_initialize_account3_data(wallet.key());
 
     let initialize_account_metas = &[
         AccountMeta {
@@ -149,26 +222,15 @@ pub fn process_create(
     }
 
     let bump = match bump_opt {
-        Some(provided_bump) => {
-            // Trust client-provided bump and skip PDA verification
-            // If the bump is wrong, account creation/signing will fail naturally
-            provided_bump
-        }
+        Some(provided_bump) => provided_bump,
         None => {
-            // Compute bump on-chain (original behavior)
-            let (expected, computed_bump) = find_program_address(
-                &[
-                    wallet.key().as_ref(),
-                    token_prog.key().as_ref(),
-                    mint_account.key().as_ref(),
-                ],
+            let (expected, computed_bump) = derive_ata_pda(
+                wallet.key(),
+                token_prog.key(),
+                mint_account.key(),
                 program_id,
             );
-
-            if &expected != ata_acc.key() {
-                return Err(ProgramError::InvalidSeeds);
-            }
-
+            validate_pda(&expected, ata_acc.key())?;
             computed_bump
         }
     };
@@ -208,17 +270,13 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         &accounts[6],
     );
 
-    let (owner_pda, bump) = find_program_address(
-        &[
-            wallet.key().as_ref(),
-            token_prog.key().as_ref(),
-            owner_mint_account.key().as_ref(),
-        ],
+    let (owner_pda, bump) = derive_ata_pda(
+        wallet.key(),
+        token_prog.key(),
+        owner_mint_account.key(),
         program_id,
     );
-    if &owner_pda != owner_ata.key() {
-        return Err(ProgramError::InvalidSeeds);
-    }
+    validate_pda(&owner_pda, owner_ata.key())?;
 
     // No expensive seed verification for `nested_ata` and `dest_ata`; the
     // subsequent owner checks on their account data provide sufficient safety
@@ -270,22 +328,14 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         }
     }
 
-    let owner_ata_data_slice = unsafe { owner_ata.borrow_data_unchecked() };
-    let owner_ata_state = unsafe { &*(owner_ata_data_slice.as_ptr() as *const TokenAccount) };
-    if owner_ata_state.owner != *wallet.key() {
-        return Err(ProgramError::IllegalOwner);
-    }
+    let owner_ata_state = get_token_account_unchecked(owner_ata);
+    validate_token_account_owner(owner_ata_state, wallet.key())?;
 
-    let nested_ata_data_slice = unsafe { nested_ata.borrow_data_unchecked() };
-    let nested_ata_state = unsafe { &*(nested_ata_data_slice.as_ptr() as *const TokenAccount) };
-    if nested_ata_state.owner != *owner_ata.key() {
-        return Err(ProgramError::IllegalOwner);
-    }
+    let nested_ata_state = get_token_account_unchecked(nested_ata);
+    validate_token_account_owner(nested_ata_state, owner_ata.key())?;
     let amount_to_recover = nested_ata_state.amount();
 
-    let mut transfer_data_arr = [0u8; 1 + 8];
-    transfer_data_arr[0] = TokenInstruction::Transfer as u8;
-    transfer_data_arr[1..9].copy_from_slice(&amount_to_recover.to_le_bytes());
+    let transfer_data = build_transfer_data(amount_to_recover);
 
     let transfer_metas = &[
         AccountMeta {
@@ -308,7 +358,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     let ix_transfer = Instruction {
         program_id: token_prog.key(),
         accounts: transfer_metas,
-        data: &transfer_data_arr,
+        data: &transfer_data,
     };
 
     let pda_seeds_raw: &[&[u8]] = &[
@@ -331,7 +381,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         &[pda_signer.clone()],
     )?;
 
-    let close_data = [TokenInstruction::CloseAccount as u8];
+    let close_data = build_close_account_data();
 
     let close_metas = &[
         AccountMeta {

@@ -1,5 +1,3 @@
-#![cfg(feature = "test-bpf")]
-
 use {
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     mollusk_svm_bencher::MolluskComputeUnitBencher,
@@ -596,7 +594,10 @@ impl TestCaseBuilder {
     fn build_worst_case_bump_scenario(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
-    ) -> ((Instruction, Vec<(Pubkey, Account)>), (Instruction, Vec<(Pubkey, Account)>)) {
+    ) -> (
+        (Instruction, Vec<(Pubkey, Account)>),
+        (Instruction, Vec<(Pubkey, Account)>),
+    ) {
         // Find a wallet that produces a very low bump (expensive to compute)
         let mut worst_wallet = const_pk(200);
         let mut worst_bump = 255u8;
@@ -641,7 +642,10 @@ impl TestCaseBuilder {
             (const_pk(198), AccountBuilder::system_account(1_000_000_000)), // payer
             (ata, AccountBuilder::system_account(0)),
             (worst_wallet, AccountBuilder::system_account(0)),
-            (mint, AccountBuilder::mint_account(0, token_program_id, false)),
+            (
+                mint,
+                AccountBuilder::mint_account(0, token_program_id, false),
+            ),
             (
                 SYSTEM_PROGRAM_ID,
                 AccountBuilder::executable_program(NATIVE_LOADER_ID),
@@ -675,7 +679,10 @@ impl TestCaseBuilder {
             data: vec![3u8, bump], // CreateWithBump discriminator + bump
         };
 
-        ((create_ix, accounts.clone()), (create_with_bump_ix, accounts))
+        (
+            (create_ix, accounts.clone()),
+            (create_with_bump_ix, accounts),
+        )
     }
 
     /// Build CREATE instruction for Token-2022 simulation
@@ -1025,9 +1032,6 @@ impl BenchmarkRunner {
     /// Run worst-case bump scenario to demonstrate Create vs CreateWithBump difference
     fn run_worst_case_bump_comparison(program_id: &Pubkey, token_program_id: &Pubkey) {
         println!("\n=== Worst-Case Bump Scenario Comparison ===");
-        println!("This demonstrates the CU savings of CreateWithBump vs Create");
-        println!("when find_program_address is expensive (low bump values)");
-
         let ((create_ix, create_accounts), (create_with_bump_ix, create_with_bump_accounts)) =
             TestCaseBuilder::build_worst_case_bump_scenario(program_id, token_program_id);
 
@@ -1048,8 +1052,6 @@ impl BenchmarkRunner {
             program_id,
             token_program_id,
         );
-
-        println!("Expected result: worst_case_create_with_bump should use ~3k fewer CUs");
     }
 }
 

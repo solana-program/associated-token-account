@@ -1,0 +1,2 @@
+[alias]
+bench = "bench ata_instruction_benches --features build-programs" 

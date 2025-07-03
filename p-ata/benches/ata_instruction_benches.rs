@@ -743,7 +743,7 @@ impl BenchmarkSetup {
         let ata_keypair_bytes: Vec<u8> = serde_json::from_str(&ata_keypair_data)
             .expect("Failed to parse pinocchio_ata_program keypair JSON");
         let ata_keypair =
-            Keypair::try_from(&ata_keypair_bytes).expect("Invalid pinocchio_ata_program keypair");
+            Keypair::from_bytes(&ata_keypair_bytes).expect("Invalid pinocchio_ata_program keypair");
         let ata_program_id = ata_keypair.pubkey();
 
         // Use SPL Token interface ID for token program

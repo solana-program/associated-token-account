@@ -517,6 +517,167 @@ impl TestCaseBuilder {
         (ix, accounts)
     }
 
+    /// Build CREATE_WITH_BUMP instruction (optimized variant)
+    fn build_create_with_bump(
+        program_id: &Pubkey,
+        token_program_id: &Pubkey,
+        extended_mint: bool,
+        with_rent: bool,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Use different base values to avoid address collisions
+        let base_offset = match (extended_mint, with_rent) {
+            (false, false) => 90, // create_with_bump_base
+            (false, true) => 95,  // create_with_bump_rent
+            (true, false) => 100, // create_with_bump_ext
+            (true, true) => 105,  // create_with_bump_ext_rent
+        };
+
+        let payer = const_pk(base_offset);
+        let mint = const_pk(base_offset + 1);
+
+        let wallet = OptimalKeyFinder::find_optimal_wallet(
+            base_offset + 2,
+            token_program_id,
+            &mint,
+            program_id,
+        );
+
+        let (ata, bump) = Pubkey::find_program_address(
+            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+            program_id,
+        );
+
+        let mut accounts = vec![
+            (payer, AccountBuilder::system_account(1_000_000_000)),
+            (ata, AccountBuilder::system_account(0)),
+            (wallet, AccountBuilder::system_account(0)),
+            (
+                mint,
+                AccountBuilder::mint_account(0, token_program_id, extended_mint),
+            ),
+            (
+                SYSTEM_PROGRAM_ID,
+                AccountBuilder::executable_program(NATIVE_LOADER_ID),
+            ),
+            (
+                *token_program_id,
+                AccountBuilder::executable_program(LOADER_V3),
+            ),
+        ];
+
+        if with_rent {
+            accounts.push((rent::id(), AccountBuilder::rent_sysvar()));
+        }
+
+        let mut metas = vec![
+            AccountMeta::new(payer, true),
+            AccountMeta::new(ata, false),
+            AccountMeta::new_readonly(wallet, false),
+            AccountMeta::new_readonly(mint, false),
+            AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
+            AccountMeta::new_readonly(*token_program_id, false),
+        ];
+
+        if with_rent {
+            metas.push(AccountMeta::new_readonly(rent::id(), false));
+        }
+
+        let ix = Instruction {
+            program_id: *program_id,
+            accounts: metas,
+            data: vec![3u8, bump], // CreateWithBump discriminator + bump
+        };
+
+        (ix, accounts)
+    }
+
+    /// Build worst-case bump scenario (very low bump = expensive find_program_address)
+    /// Returns both Create and CreateWithBump variants for comparison
+    fn build_worst_case_bump_scenario(
+        program_id: &Pubkey,
+        token_program_id: &Pubkey,
+    ) -> ((Instruction, Vec<(Pubkey, Account)>), (Instruction, Vec<(Pubkey, Account)>)) {
+        // Find a wallet that produces a very low bump (expensive to compute)
+        let mut worst_wallet = const_pk(200);
+        let mut worst_bump = 255u8;
+        let mint = const_pk(199); // Fixed mint for consistency
+
+        // Search for wallet with lowest bump (most expensive find_program_address)
+        for b in 200..=254 {
+            let candidate_wallet = const_pk(b);
+            let (_, bump) = Pubkey::find_program_address(
+                &[
+                    candidate_wallet.as_ref(),
+                    token_program_id.as_ref(),
+                    mint.as_ref(),
+                ],
+                program_id,
+            );
+            if bump < worst_bump {
+                worst_wallet = candidate_wallet;
+                worst_bump = bump;
+                // Stop if we find a really bad bump (expensive computation)
+                if bump <= 50 {
+                    break;
+                }
+            }
+        }
+
+        let (ata, bump) = Pubkey::find_program_address(
+            &[
+                worst_wallet.as_ref(),
+                token_program_id.as_ref(),
+                mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        println!(
+            "Worst case bump scenario: wallet={}, bump={} (lower = more expensive)",
+            worst_wallet, bump
+        );
+
+        let accounts = vec![
+            (const_pk(198), AccountBuilder::system_account(1_000_000_000)), // payer
+            (ata, AccountBuilder::system_account(0)),
+            (worst_wallet, AccountBuilder::system_account(0)),
+            (mint, AccountBuilder::mint_account(0, token_program_id, false)),
+            (
+                SYSTEM_PROGRAM_ID,
+                AccountBuilder::executable_program(NATIVE_LOADER_ID),
+            ),
+            (
+                *token_program_id,
+                AccountBuilder::executable_program(LOADER_V3),
+            ),
+        ];
+
+        let metas = vec![
+            AccountMeta::new(const_pk(198), true), // payer
+            AccountMeta::new(ata, false),
+            AccountMeta::new_readonly(worst_wallet, false),
+            AccountMeta::new_readonly(mint, false),
+            AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
+            AccountMeta::new_readonly(*token_program_id, false),
+        ];
+
+        // Create instruction (expensive find_program_address)
+        let create_ix = Instruction {
+            program_id: *program_id,
+            accounts: metas.clone(),
+            data: vec![0u8], // Create discriminator
+        };
+
+        // CreateWithBump instruction (skips find_program_address)
+        let create_with_bump_ix = Instruction {
+            program_id: *program_id,
+            accounts: metas,
+            data: vec![3u8, bump], // CreateWithBump discriminator + bump
+        };
+
+        ((create_ix, accounts.clone()), (create_with_bump_ix, accounts))
+    }
+
     /// Build CREATE instruction for Token-2022 simulation
     /// This tests our ImmutableOwner extension stamping logic
     fn build_create_token2022_simulation(
@@ -836,6 +997,14 @@ impl BenchmarkRunner {
                 TestCaseBuilder::build_create_token2022_simulation(program_id),
             ),
             (
+                "create_with_bump_base",
+                TestCaseBuilder::build_create_with_bump(program_id, token_program_id, false, false),
+            ),
+            (
+                "create_with_bump_rent",
+                TestCaseBuilder::build_create_with_bump(program_id, token_program_id, false, true),
+            ),
+            (
                 "recover",
                 TestCaseBuilder::build_recover(program_id, token_program_id),
             ),
@@ -848,6 +1017,39 @@ impl BenchmarkRunner {
         for (name, (ix, accounts)) in test_cases {
             Self::run_isolated_benchmark(name, &ix, &accounts, program_id, token_program_id);
         }
+
+        // Run worst-case bump scenario comparison
+        Self::run_worst_case_bump_comparison(program_id, token_program_id);
+    }
+
+    /// Run worst-case bump scenario to demonstrate Create vs CreateWithBump difference
+    fn run_worst_case_bump_comparison(program_id: &Pubkey, token_program_id: &Pubkey) {
+        println!("\n=== Worst-Case Bump Scenario Comparison ===");
+        println!("This demonstrates the CU savings of CreateWithBump vs Create");
+        println!("when find_program_address is expensive (low bump values)");
+
+        let ((create_ix, create_accounts), (create_with_bump_ix, create_with_bump_accounts)) =
+            TestCaseBuilder::build_worst_case_bump_scenario(program_id, token_program_id);
+
+        // Benchmark regular Create (expensive)
+        Self::run_isolated_benchmark(
+            "worst_case_create",
+            &create_ix,
+            &create_accounts,
+            program_id,
+            token_program_id,
+        );
+
+        // Benchmark CreateWithBump (optimized)
+        Self::run_isolated_benchmark(
+            "worst_case_create_with_bump",
+            &create_with_bump_ix,
+            &create_with_bump_accounts,
+            program_id,
+            token_program_id,
+        );
+
+        println!("Expected result: worst_case_create_with_bump should use ~3k fewer CUs");
     }
 }
 

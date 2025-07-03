@@ -49,6 +49,37 @@ fn validate_pda(expected: &Pubkey, actual: &Pubkey) -> Result<(), ProgramError> 
     Ok(())
 }
 
+/// Extract zero-copy token account access
+#[inline(always)]
+fn get_token_account_unchecked(account: &AccountInfo) -> &TokenAccount {
+    let ata_data_slice = unsafe { account.borrow_data_unchecked() };
+    unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) }
+}
+
+/// Extract token account owner validation
+#[inline(always)]
+fn validate_token_account_owner(
+    account: &TokenAccount,
+    expected_owner: &Pubkey,
+) -> Result<(), ProgramError> {
+    if account.owner != *expected_owner {
+        return Err(ProgramError::IllegalOwner);
+    }
+    Ok(())
+}
+
+/// Extract token account mint validation
+#[inline(always)]
+fn validate_token_account_mint(
+    account: &TokenAccount,
+    expected_mint: &Pubkey,
+) -> Result<(), ProgramError> {
+    if account.mint != *expected_mint {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    Ok(())
+}
+
 /// Parse and validate the standard ATA account layout.
 #[inline(always)]
 fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramError> {
@@ -73,14 +104,9 @@ fn check_idempotent_account(
     idempotent: bool,
 ) -> Result<bool, ProgramError> {
     if idempotent && unsafe { ata_acc.owner() } == token_prog.key() {
-        let ata_data_slice = unsafe { ata_acc.borrow_data_unchecked() };
-        let ata_state = unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) };
-        if ata_state.owner != *wallet.key() {
-            return Err(ProgramError::IllegalOwner);
-        }
-        if ata_state.mint != *mint_account.key() {
-            return Err(ProgramError::InvalidAccountData);
-        }
+        let ata_state = get_token_account_unchecked(ata_acc);
+        validate_token_account_owner(ata_state, wallet.key())?;
+        validate_token_account_mint(ata_state, mint_account.key())?;
         return Ok(true); // Account exists and is valid
     }
     Ok(false) // Need to create account
@@ -278,17 +304,11 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         }
     }
 
-    let owner_ata_data_slice = unsafe { owner_ata.borrow_data_unchecked() };
-    let owner_ata_state = unsafe { &*(owner_ata_data_slice.as_ptr() as *const TokenAccount) };
-    if owner_ata_state.owner != *wallet.key() {
-        return Err(ProgramError::IllegalOwner);
-    }
+    let owner_ata_state = get_token_account_unchecked(owner_ata);
+    validate_token_account_owner(owner_ata_state, wallet.key())?;
 
-    let nested_ata_data_slice = unsafe { nested_ata.borrow_data_unchecked() };
-    let nested_ata_state = unsafe { &*(nested_ata_data_slice.as_ptr() as *const TokenAccount) };
-    if nested_ata_state.owner != *owner_ata.key() {
-        return Err(ProgramError::IllegalOwner);
-    }
+    let nested_ata_state = get_token_account_unchecked(nested_ata);
+    validate_token_account_owner(nested_ata_state, owner_ata.key())?;
     let amount_to_recover = nested_ata_state.amount();
 
     let mut transfer_data_arr = [0u8; 1 + 8];

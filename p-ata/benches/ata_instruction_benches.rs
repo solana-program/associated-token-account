@@ -352,7 +352,7 @@ impl TestCaseBuilder {
         let ix = Instruction {
             program_id: *program_id,
             accounts: metas,
-            data: vec![],
+            data: vec![], // Create instruction (discriminator 0 with no bump)
         };
 
         (ix, accounts)
@@ -515,7 +515,8 @@ impl TestCaseBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE_WITH_BUMP instruction (optimized variant)
+    /// Build CREATE instruction with bump optimization
+    #[allow(clippy::too_many_arguments)]
     fn build_create_with_bump(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
@@ -583,7 +584,7 @@ impl TestCaseBuilder {
         let ix = Instruction {
             program_id: *program_id,
             accounts: metas,
-            data: vec![3u8, bump], // CreateWithBump discriminator + bump
+            data: vec![0u8, bump], // Create instruction (discriminator 0) with bump
         };
 
         (ix, accounts)
@@ -676,7 +677,7 @@ impl TestCaseBuilder {
         let create_with_bump_ix = Instruction {
             program_id: *program_id,
             accounts: metas,
-            data: vec![3u8, bump], // CreateWithBump discriminator + bump
+            data: vec![0u8, bump], // Create discriminator + bump
         };
 
         (

@@ -7,6 +7,7 @@ description = "A pinocchio-based Associated Token Account (aka 'p-ata') program"
 readme = "./README.md"
 autobenches = false
 edition = "2021"
+build = "build.rs"
 
 [lib]
 crate-type = ["cdylib"]
@@ -16,6 +17,7 @@ crate-type = ["cdylib"]
 [features]
 logging = []
 create-account-prefunded = []
+build-programs = []
 
 [patch.crates-io]
 pinocchio = { version = "0.8.4", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded", default-features = false }

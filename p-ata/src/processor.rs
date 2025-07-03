@@ -138,6 +138,7 @@ pub fn process_create(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     idempotent: bool,
+    bump_opt: Option<u8>,
 ) -> ProgramResult {
     let (payer, ata_acc, wallet, mint_account, system_prog, token_prog, rent_info_opt) =
         parse_ata_accounts(accounts)?;
@@ -147,52 +148,30 @@ pub fn process_create(
         return Ok(());
     }
 
-    let (expected, bump) = find_program_address(
-        &[
-            wallet.key().as_ref(),
-            token_prog.key().as_ref(),
-            mint_account.key().as_ref(),
-        ],
-        program_id,
-    );
+    let bump = match bump_opt {
+        Some(provided_bump) => {
+            // Trust client-provided bump and skip PDA verification
+            // If the bump is wrong, account creation/signing will fail naturally
+            provided_bump
+        }
+        None => {
+            // Compute bump on-chain (original behavior)
+            let (expected, computed_bump) = find_program_address(
+                &[
+                    wallet.key().as_ref(),
+                    token_prog.key().as_ref(),
+                    mint_account.key().as_ref(),
+                ],
+                program_id,
+            );
 
-    if &expected != ata_acc.key() {
-        return Err(ProgramError::InvalidSeeds);
-    }
+            if &expected != ata_acc.key() {
+                return Err(ProgramError::InvalidSeeds);
+            }
 
-    create_and_initialize_ata(
-        payer,
-        ata_acc,
-        wallet,
-        mint_account,
-        system_prog,
-        token_prog,
-        rent_info_opt,
-        bump,
-    )
-}
-
-/// Optimized create instruction where client provides the bump seed to save some CUs.
-///
-/// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
-/// Instruction data: [bump: u8]
-#[inline(always)]
-pub fn process_create_with_bump(
-    _program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    bump: u8,
-    idempotent: bool,
-) -> ProgramResult {
-    let (payer, ata_acc, wallet, mint_account, system_prog, token_prog, rent_info_opt) =
-        parse_ata_accounts(accounts)?;
-
-    // Check if account already exists (idempotent path)
-    if check_idempotent_account(ata_acc, wallet, mint_account, token_prog, idempotent)? {
-        return Ok(());
-    }
-
-    // Trust client-provided bump and skip PDA verification
-    // If the bump is wrong, account creation/signing will fail naturally
+            computed_bump
+        }
+    };
 
     create_and_initialize_ata(
         payer,

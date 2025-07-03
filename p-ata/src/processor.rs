@@ -104,6 +104,15 @@ fn build_close_account_data() -> [u8; 1] {
     [TokenInstruction::CloseAccount as u8]
 }
 
+/// Extract rent resolution
+#[inline(always)]
+fn resolve_rent(rent_info_opt: Option<&AccountInfo>) -> Result<Rent, ProgramError> {
+    match rent_info_opt {
+        Some(rent_acc) => unsafe { Rent::from_account_info_unchecked(rent_acc) }.cloned(),
+        None => Rent::get(),
+    }
+}
+
 /// Parse and validate the standard ATA account layout.
 #[inline(always)]
 fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramError> {
@@ -161,15 +170,8 @@ fn create_and_initialize_ata(
     ];
 
     // Use Rent passed in accounts if supplied to avoid syscall
-    let rent_owned;
-    let rent: &Rent = match rent_info_opt {
-        Some(rent_acc) => unsafe { Rent::from_account_info_unchecked(rent_acc)? },
-        None => {
-            rent_owned = Rent::get()?;
-            &rent_owned
-        }
-    };
-    create_pda_account(payer, rent, space, token_prog.key(), ata_acc, seeds)?;
+    let rent = resolve_rent(rent_info_opt)?;
+    create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
 
     // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
     let initialize_account_instr_data = build_initialize_account3_data(wallet.key());

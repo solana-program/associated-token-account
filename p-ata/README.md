@@ -19,7 +19,6 @@ Minor requested features for ATA have also been included:
 - RecoverNested support for multisigs
 - CreateAccountPrefunded support for cheaper flows that transfer rent before creating account -  [SIMD-312](https://github.com/solana-foundation/solana-improvement-documents/pull/312)
 
-
 ## Testing
 
-cargo update && cargo build-sbf --features create-account-prefunded && cargo bench --bench ata_instruction_benches --features test-bpf,create-account-prefunded
+cargo build-sbf --features create-account-prefunded && cargo bench --bench ata_instruction_benches --features test-bpf

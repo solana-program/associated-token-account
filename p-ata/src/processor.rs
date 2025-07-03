@@ -80,6 +80,30 @@ fn validate_token_account_mint(
     Ok(())
 }
 
+/// Extract InitializeAccount3 instruction data building
+#[inline(always)]
+fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
+    let mut data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
+    data[0] = 18u8; // TokenInstruction::InitializeAccount3
+    data[1..33].copy_from_slice(owner.as_ref());
+    data
+}
+
+/// Extract Transfer instruction data building
+#[inline(always)]
+fn build_transfer_data(amount: u64) -> [u8; 9] {
+    let mut data = [0u8; 9];
+    data[0] = TokenInstruction::Transfer as u8;
+    data[1..9].copy_from_slice(&amount.to_le_bytes());
+    data
+}
+
+/// Extract CloseAccount instruction data building
+#[inline(always)]
+fn build_close_account_data() -> [u8; 1] {
+    [TokenInstruction::CloseAccount as u8]
+}
+
 /// Parse and validate the standard ATA account layout.
 #[inline(always)]
 fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramError> {
@@ -148,9 +172,7 @@ fn create_and_initialize_ata(
     create_pda_account(payer, rent, space, token_prog.key(), ata_acc, seeds)?;
 
     // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
-    let mut initialize_account_instr_data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
-    initialize_account_instr_data[0] = 18u8; // TokenInstruction::InitializeAccount3
-    initialize_account_instr_data[1..33].copy_from_slice(wallet.key().as_ref());
+    let initialize_account_instr_data = build_initialize_account3_data(wallet.key());
 
     let initialize_account_metas = &[
         AccountMeta {
@@ -311,9 +333,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     validate_token_account_owner(nested_ata_state, owner_ata.key())?;
     let amount_to_recover = nested_ata_state.amount();
 
-    let mut transfer_data_arr = [0u8; 1 + 8];
-    transfer_data_arr[0] = TokenInstruction::Transfer as u8;
-    transfer_data_arr[1..9].copy_from_slice(&amount_to_recover.to_le_bytes());
+    let transfer_data = build_transfer_data(amount_to_recover);
 
     let transfer_metas = &[
         AccountMeta {
@@ -336,7 +356,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
     let ix_transfer = Instruction {
         program_id: token_prog.key(),
         accounts: transfer_metas,
-        data: &transfer_data_arr,
+        data: &transfer_data,
     };
 
     let pda_seeds_raw: &[&[u8]] = &[
@@ -359,7 +379,7 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         &[pda_signer.clone()],
     )?;
 
-    let close_data = [TokenInstruction::CloseAccount as u8];
+    let close_data = build_close_account_data();
 
     let close_metas = &[
         AccountMeta {

@@ -17,52 +17,6 @@ use {
 mod common;
 use common::*;
 
-// =============================== UTILITIES =================================
-
-/// Build mint data core structure
-#[inline(always)]
-fn build_mint_data_core(decimals: u8) -> [u8; 82] {
-    let mut data = [0u8; 82]; // Mint::LEN
-
-    // mint_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
-    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // COption tag = Some
-    data[4..36].fill(0); // All-zeros pubkey (valid but no authority)
-
-    // supply: u64 (8 bytes) - stays as 0
-
-    // decimals: u8 (1 byte)
-    data[44] = decimals;
-
-    // is_initialized: bool (1 byte)
-    data[45] = 1; // true
-
-    // freeze_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
-    data[46..50].copy_from_slice(&0u32.to_le_bytes()); // COption tag = None
-                                                       // Remaining 32 bytes already 0
-
-    data
-}
-
-/// Build token account data core structure
-#[inline(always)]
-fn build_token_account_data_core(mint: &[u8; 32], owner: &[u8; 32], amount: u64) -> [u8; 165] {
-    let mut data = [0u8; 165]; // TokenAccount::LEN
-    data[0..32].copy_from_slice(mint); // mint
-    data[32..64].copy_from_slice(owner); // owner
-    data[64..72].copy_from_slice(&amount.to_le_bytes()); // amount
-    data[108] = 1; // state = Initialized
-    data
-}
-
-/// Build TLV extension header
-#[inline(always)]
-fn build_tlv_extension(extension_type: u16, data_len: u16) -> [u8; 4] {
-    let mut header = [0u8; 4];
-    header[0..2].copy_from_slice(&extension_type.to_le_bytes());
-    header[2..4].copy_from_slice(&data_len.to_le_bytes());
-    header
-}
-
 // ========================== TEST CASE BUILDERS ============================
 
 struct TestCaseBuilder;
@@ -618,6 +572,211 @@ impl TestCaseBuilder {
 
         (ix, accounts)
     }
+
+    /// Build RECOVER instruction with bump optimization for regular wallet
+    fn build_recover_with_bump(
+        program_id: &Pubkey,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        let owner_mint = const_pk(21); // Different from regular recover to avoid collisions
+
+        let wallet =
+            OptimalKeyFinder::find_optimal_wallet(31, token_program_id, &owner_mint, program_id);
+
+        let (owner_ata, bump) = Pubkey::find_program_address(
+            &[
+                wallet.as_ref(),
+                token_program_id.as_ref(),
+                owner_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let nested_mint = OptimalKeyFinder::find_optimal_nested_mint(
+            41,
+            &owner_ata,
+            token_program_id,
+            program_id,
+        );
+
+        let (nested_ata, _) = Pubkey::find_program_address(
+            &[
+                owner_ata.as_ref(),
+                token_program_id.as_ref(),
+                nested_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let (dest_ata, _) = Pubkey::find_program_address(
+            &[
+                wallet.as_ref(),
+                token_program_id.as_ref(),
+                nested_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let accounts = vec![
+            (
+                nested_ata,
+                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
+            ),
+            (
+                nested_mint,
+                AccountBuilder::mint_account(0, token_program_id, false),
+            ),
+            (
+                dest_ata,
+                AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
+            ),
+            (
+                owner_ata,
+                AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
+            ),
+            (
+                owner_mint,
+                AccountBuilder::mint_account(0, token_program_id, false),
+            ),
+            (wallet, AccountBuilder::system_account(1_000_000_000)),
+            (
+                *token_program_id,
+                AccountBuilder::executable_program(LOADER_V3),
+            ),
+            (
+                Pubkey::from(spl_token_interface::program::ID),
+                AccountBuilder::executable_program(LOADER_V3),
+            ),
+        ];
+
+        let ix = Instruction {
+            program_id: *program_id,
+            accounts: vec![
+                AccountMeta::new(nested_ata, false),
+                AccountMeta::new_readonly(nested_mint, false),
+                AccountMeta::new(dest_ata, false),
+                AccountMeta::new(owner_ata, false),
+                AccountMeta::new_readonly(owner_mint, false),
+                AccountMeta::new(wallet, true),
+                AccountMeta::new_readonly(*token_program_id, false),
+                AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
+            ],
+            data: vec![2u8, bump], // RecoverNested discriminator + bump
+        };
+
+        (ix, accounts)
+    }
+
+    /// Build RECOVER instruction with bump optimization for multisig wallet
+    fn build_recover_multisig_with_bump(
+        program_id: &Pubkey,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        let owner_mint = const_pk(22); // Different from regular recover to avoid collisions
+        let nested_mint = const_pk(42);
+
+        let wallet_ms =
+            OptimalKeyFinder::find_optimal_wallet(61, token_program_id, &owner_mint, program_id);
+
+        let signer1 = Pubkey::new_unique();
+        let signer2 = Pubkey::new_unique();
+        let signer3 = Pubkey::new_unique();
+
+        let (owner_ata_ms, bump) = Pubkey::find_program_address(
+            &[
+                wallet_ms.as_ref(),
+                token_program_id.as_ref(),
+                owner_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let (nested_ata_ms, _) = Pubkey::find_program_address(
+            &[
+                owner_ata_ms.as_ref(),
+                token_program_id.as_ref(),
+                nested_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let (dest_ata_ms, _) = Pubkey::find_program_address(
+            &[
+                wallet_ms.as_ref(),
+                token_program_id.as_ref(),
+                nested_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let accounts = vec![
+            (
+                nested_ata_ms,
+                AccountBuilder::token_account(&nested_mint, &owner_ata_ms, 100, token_program_id),
+            ),
+            (
+                nested_mint,
+                AccountBuilder::mint_account(0, token_program_id, false),
+            ),
+            (
+                dest_ata_ms,
+                AccountBuilder::token_account(&nested_mint, &wallet_ms, 0, token_program_id),
+            ),
+            (
+                owner_ata_ms,
+                AccountBuilder::token_account(&owner_mint, &wallet_ms, 0, token_program_id),
+            ),
+            (
+                owner_mint,
+                AccountBuilder::mint_account(0, token_program_id, false),
+            ),
+            (
+                wallet_ms,
+                Account {
+                    lamports: 1_000_000_000,
+                    data: AccountBuilder::multisig_data(2, &[signer1, signer2, signer3]),
+                    owner: *token_program_id,
+                    executable: false,
+                    rent_epoch: 0,
+                },
+            ),
+            (
+                *token_program_id,
+                AccountBuilder::executable_program(LOADER_V3),
+            ),
+            (
+                Pubkey::from(spl_token_interface::program::ID),
+                AccountBuilder::executable_program(LOADER_V3),
+            ),
+            (signer1, AccountBuilder::system_account(1_000_000_000)),
+            (signer2, AccountBuilder::system_account(1_000_000_000)),
+            (signer3, AccountBuilder::system_account(1_000_000_000)),
+        ];
+
+        let mut metas = vec![
+            AccountMeta::new(nested_ata_ms, false),
+            AccountMeta::new_readonly(nested_mint, false),
+            AccountMeta::new(dest_ata_ms, false),
+            AccountMeta::new(owner_ata_ms, false),
+            AccountMeta::new_readonly(owner_mint, false),
+            AccountMeta::new(wallet_ms, false),
+            AccountMeta::new_readonly(*token_program_id, false),
+            AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
+        ];
+
+        // Add signer metas
+        metas.push(AccountMeta::new_readonly(signer1, true));
+        metas.push(AccountMeta::new_readonly(signer2, true));
+        metas.push(AccountMeta::new_readonly(signer3, false));
+
+        let ix = Instruction {
+            program_id: *program_id,
+            accounts: metas,
+            data: vec![2u8, bump], // RecoverNested discriminator + bump
+        };
+
+        (ix, accounts)
+    }
 }
 
 // ============================ SETUP AND CONFIGURATION =============================
@@ -767,6 +926,14 @@ impl BenchmarkRunner {
             (
                 "recover_multisig",
                 TestCaseBuilder::build_recover_multisig(program_id, token_program_id),
+            ),
+            (
+                "recover_with_bump",
+                TestCaseBuilder::build_recover_with_bump(program_id, token_program_id),
+            ),
+            (
+                "recover_multisig_with_bump",
+                TestCaseBuilder::build_recover_multisig_with_bump(program_id, token_program_id),
             ),
         ];
 

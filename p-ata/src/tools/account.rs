@@ -23,9 +23,8 @@ const IMMUTABLE_OWNER_HEADER: [u8; 8] = [
 ];
 
 const TOKEN_2022_PROGRAM_ID: Pubkey =
-pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const SYSTEM_PROGRAM_ID: Pubkey = pinocchio_pubkey::pubkey!("11111111111111111111111111111111");
-
 
 /// Stamp the ImmutableOwner extension header into an account's data buffer.
 #[inline(always)]

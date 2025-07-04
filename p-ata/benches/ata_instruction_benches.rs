@@ -52,7 +52,7 @@ fn build_mint_data_core(decimals: u8) -> [u8; 82] {
 
     // freeze_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
     data[46..50].copy_from_slice(&0u32.to_le_bytes()); // COption tag = None
-    // Remaining 32 bytes already 0
+                                                       // Remaining 32 bytes already 0
 
     data
 }
@@ -146,7 +146,8 @@ impl AccountBuilder {
             mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
             owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
             amount,
-        ).to_vec()
+        )
+        .to_vec()
     }
 
     /// Build mint data with given decimals and marked initialized
@@ -313,7 +314,8 @@ impl TestCaseBuilder {
         topup: bool,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         let base_offset = calculate_base_offset(extended_mint, with_rent, topup);
-        let (payer, mint, wallet) = build_base_test_accounts(base_offset, token_program_id, program_id);
+        let (payer, mint, wallet) =
+            build_base_test_accounts(base_offset, token_program_id, program_id);
 
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
@@ -530,7 +532,8 @@ impl TestCaseBuilder {
         with_rent: bool,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         let base_offset = calculate_bump_base_offset(extended_mint, with_rent);
-        let (payer, mint, wallet) = build_base_test_accounts(base_offset, token_program_id, program_id);
+        let (payer, mint, wallet) =
+            build_base_test_accounts(base_offset, token_program_id, program_id);
 
         let (ata, bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
@@ -902,8 +905,8 @@ impl BenchmarkSetup {
             .expect("Failed to read pinocchio_ata_program-keypair.json");
         let ata_keypair_bytes: Vec<u8> = serde_json::from_str(&ata_keypair_data)
             .expect("Failed to parse pinocchio_ata_program keypair JSON");
-        let ata_keypair =
-            Keypair::try_from(&ata_keypair_bytes[..]).expect("Invalid pinocchio_ata_program keypair");
+        let ata_keypair = Keypair::try_from(&ata_keypair_bytes[..])
+            .expect("Invalid pinocchio_ata_program keypair");
         let ata_program_id = ata_keypair.pubkey();
 
         // Use SPL Token interface ID for token program
@@ -1088,12 +1091,12 @@ fn build_ata_instruction_metas(
     token_prog: &Pubkey,
 ) -> Vec<AccountMeta> {
     vec![
-        build_account_meta(payer, true, true),      // payer (writable, signer)
-        build_account_meta(ata, true, false),       // ata (writable, not signer)
-        build_account_meta(wallet, false, false),   // wallet (readonly, not signer)
-        build_account_meta(mint, false, false),     // mint (readonly, not signer)
+        build_account_meta(payer, true, true), // payer (writable, signer)
+        build_account_meta(ata, true, false),  // ata (writable, not signer)
+        build_account_meta(wallet, false, false), // wallet (readonly, not signer)
+        build_account_meta(mint, false, false), // mint (readonly, not signer)
         build_account_meta(system_prog, false, false), // system program (readonly, not signer)
-        build_account_meta(token_prog, false, false),  // token program (readonly, not signer)
+        build_account_meta(token_prog, false, false), // token program (readonly, not signer)
     ]
 }
 
@@ -1103,7 +1106,6 @@ fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> 
     data
 }
 
-
 fn build_base_test_accounts(
     base_offset: u8,
     token_program_id: &Pubkey,
@@ -1111,18 +1113,12 @@ fn build_base_test_accounts(
 ) -> (Pubkey, Pubkey, Pubkey) {
     let payer = const_pk(base_offset);
     let mint = const_pk(base_offset + 1);
-    let wallet = OptimalKeyFinder::find_optimal_wallet(
-        base_offset + 2,
-        token_program_id,
-        &mint,
-        program_id,
-    );
+    let wallet =
+        OptimalKeyFinder::find_optimal_wallet(base_offset + 2, token_program_id, &mint, program_id);
     (payer, mint, wallet)
 }
 
-fn build_standard_account_vec(
-    accounts: &[(Pubkey, Account)],
-) -> Vec<(Pubkey, Account)> {
+fn build_standard_account_vec(accounts: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
     accounts.iter().map(|(k, v)| (*k, v.clone())).collect()
 }
 
@@ -1153,20 +1149,18 @@ fn calculate_bump_base_offset(extended_mint: bool, with_rent: bool) -> u8 {
     }
 }
 
-
 fn configure_bencher<'a>(
     mollusk: Mollusk,
     _name: &'a str,
     must_pass: bool,
     out_dir: &'a str,
 ) -> MolluskComputeUnitBencher<'a> {
-    let mut bencher = MolluskComputeUnitBencher::new(mollusk)
-        .out_dir(out_dir);
-    
+    let mut bencher = MolluskComputeUnitBencher::new(mollusk).out_dir(out_dir);
+
     if must_pass {
         bencher = bencher.must_pass(true);
     }
-    
+
     bencher
 }
 

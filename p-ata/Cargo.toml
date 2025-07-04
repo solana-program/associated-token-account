@@ -1,0 +1,63 @@
+[workspace]
+
+[package]
+name = "pinocchio-ata-program"
+version = "0.0.0"
+description = "A pinocchio-based Associated Token Account (aka 'p-ata') program"
+readme = "./README.md"
+autobenches = false
+edition = "2021"
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib"]
+
+# Build script (build.rs) compiles token programs during benchmarks
+
+[features]
+logging = []
+create-account-prefunded = []
+build-programs = []
+
+[patch.crates-io]
+pinocchio = { version = "0.8.4", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded", default-features = false }
+pinocchio-system = { version = "0.2.3", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded" }
+
+[dependencies]
+pinocchio = { version = "0.8.4", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded", default-features = false }
+pinocchio-log = { version = "0.4", default-features = false }
+pinocchio-pubkey = "0.2.4"
+pinocchio-system = { version = "0.2.3", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded" }
+pinocchio-token = "0.3.0"
+spl-token-interface = { version = "^0", git = "https://github.com/solana-program/token.git" }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+assert_matches = "1.5.0"
+num-traits = "0.2"
+solana-account = "2.2.1"
+solana-instruction = "2.3.0"
+solana-keypair = "2.2.3"
+solana-logger = "2.3.0"
+solana-pubkey = "2.2.1"
+solana-signature = "2.3.0"
+solana-signer = "2.2.1"
+solana-sysvar = "2.2.2"
+
+solana-program-test = { version = "3.0", git = "https://github.com/rustopian/agave.git", branch = "v3.0-create-account-prefunded" }
+solana-seed-derivable = "2.2.1"
+spl-token = { version="^4", features=["no-entrypoint"] }
+spl-token-2022 = { version="^7", features=["no-entrypoint"] }
+mollusk-svm = { version = "0.3.0", git = "https://github.com/rustopian/mollusk.git", branch = "v3.0", features = ["all-builtins"] }
+mollusk-svm-bencher = { version = "0.3.0", git = "https://github.com/rustopian/mollusk.git", branch = "v3.0" }
+serde_json = "1.0"
+test-case = "3.3.1"
+
+[[bench]]
+name = "ata_instruction_benches"
+harness = false
+
+[[bench]]
+name = "failure_scenarios"
+harness = false
+

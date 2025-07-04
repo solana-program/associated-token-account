@@ -26,7 +26,7 @@ type AtaAccounts<'a> = (
     Option<&'a AccountInfo>,
 );
 
-/// Extract PDA derivation for ATA
+/// Derive ATA PDA from wallet, token program, and mint
 #[inline(always)]
 fn derive_ata_pda(
     wallet: &Pubkey,
@@ -40,7 +40,7 @@ fn derive_ata_pda(
     )
 }
 
-/// Extract PDA validation
+/// Validate that expected PDA matches actual PDA
 #[inline(always)]
 fn validate_pda(expected: &Pubkey, actual: &Pubkey) -> Result<(), ProgramError> {
     if expected != actual {
@@ -49,14 +49,14 @@ fn validate_pda(expected: &Pubkey, actual: &Pubkey) -> Result<(), ProgramError> 
     Ok(())
 }
 
-/// Extract zero-copy token account access
+/// Get zero-copy token account reference from account info
 #[inline(always)]
 fn get_token_account_unchecked(account: &AccountInfo) -> &TokenAccount {
     let ata_data_slice = unsafe { account.borrow_data_unchecked() };
     unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) }
 }
 
-/// Extract token account owner validation
+/// Validate token account owner matches expected owner
 #[inline(always)]
 fn validate_token_account_owner(
     account: &TokenAccount,
@@ -68,7 +68,7 @@ fn validate_token_account_owner(
     Ok(())
 }
 
-/// Extract token account mint validation
+/// Validate token account mint matches expected mint
 #[inline(always)]
 fn validate_token_account_mint(
     account: &TokenAccount,
@@ -80,7 +80,7 @@ fn validate_token_account_mint(
     Ok(())
 }
 
-/// Extract InitializeAccount3 instruction data building
+/// Build InitializeAccount3 instruction data
 #[inline(always)]
 fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
     let mut data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
@@ -89,7 +89,7 @@ fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
     data
 }
 
-/// Extract Transfer instruction data building
+/// Build Transfer instruction data
 #[inline(always)]
 fn build_transfer_data(amount: u64) -> [u8; 9] {
     let mut data = [0u8; 9];
@@ -98,13 +98,13 @@ fn build_transfer_data(amount: u64) -> [u8; 9] {
     data
 }
 
-/// Extract CloseAccount instruction data building
+/// Build CloseAccount instruction data
 #[inline(always)]
 fn build_close_account_data() -> [u8; 1] {
     [TokenInstruction::CloseAccount as u8]
 }
 
-/// Extract rent resolution
+/// Resolve rent from sysvar account or syscall
 #[inline(always)]
 fn resolve_rent(rent_info_opt: Option<&AccountInfo>) -> Result<Rent, ProgramError> {
     match rent_info_opt {

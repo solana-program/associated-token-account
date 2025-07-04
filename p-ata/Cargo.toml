@@ -53,6 +53,8 @@ mollusk-svm = { version = "0.3.0", git = "https://github.com/rustopian/mollusk.g
 mollusk-svm-bencher = { version = "0.3.0", git = "https://github.com/rustopian/mollusk.git", branch = "v3.0" }
 serde_json = "1.0"
 test-case = "3.3.1"
+bs58 = "0.4.0"
+colored = "2.0"
 
 [[bench]]
 name = "ata_instruction_benches"

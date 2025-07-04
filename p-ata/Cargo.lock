@@ -652,6 +652,12 @@ dependencies = [
 
 [[package]]
 name = "bs58"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "771fe0050b883fcc3ea2359b1a96bcfbc090b7116eae7c3c512c7a083fdf23d3"
+
+[[package]]
+name = "bs58"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
@@ -870,6 +876,16 @@ name = "clap_lex"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
+
+[[package]]
+name = "colored"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
+dependencies = [
+ "lazy_static",
+ "windows-sys 0.59.0",
+]
 
 [[package]]
 name = "combine"
@@ -3069,6 +3085,8 @@ name = "pinocchio-ata-program"
 version = "0.0.0"
 dependencies = [
  "assert_matches",
+ "bs58 0.4.0",
+ "colored",
  "criterion",
  "mollusk-svm",
  "mollusk-svm-bencher",
@@ -4118,7 +4136,7 @@ version = "3.0.0"
 source = "git+https://github.com/rustopian/agave.git?branch=v3.0-create-account-prefunded#b6058235df437ed109c221d07015565df3ad14e5"
 dependencies = [
  "base64 0.22.1",
- "bs58",
+ "bs58 0.5.1",
  "serde",
  "serde_derive",
  "serde_json",
@@ -5069,7 +5087,7 @@ source = "git+https://github.com/rustopian/agave.git?branch=v3.0-create-account-
 dependencies = [
  "base64 0.22.1",
  "blake3",
- "bs58",
+ "bs58 0.5.1",
  "bytemuck",
 ]
 
@@ -5372,7 +5390,7 @@ dependencies = [
  "blake3",
  "borsh 0.10.4",
  "borsh 1.5.7",
- "bs58",
+ "bs58 0.5.1",
  "bytemuck",
  "console_error_panic_hook",
  "console_log",
@@ -5745,7 +5763,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bincode",
- "bs58",
+ "bs58 0.5.1",
  "futures",
  "indicatif",
  "log",
@@ -5819,7 +5837,7 @@ version = "3.0.0"
 source = "git+https://github.com/rustopian/agave.git?branch=v3.0-create-account-prefunded#b6058235df437ed109c221d07015565df3ad14e5"
 dependencies = [
  "base64 0.22.1",
- "bs58",
+ "bs58 0.5.1",
  "semver",
  "serde",
  "serde_derive",
@@ -6029,7 +6047,7 @@ version = "2.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86280da8b99d03560f6ab5aca9de2e38805681df34e0bb8f238e69b29433b9df"
 dependencies = [
- "bs58",
+ "bs58 0.5.1",
  "proc-macro2",
  "quote",
  "syn 2.0.104",
@@ -6746,7 +6764,7 @@ source = "git+https://github.com/rustopian/agave.git?branch=v3.0-create-account-
 dependencies = [
  "base64 0.22.1",
  "bincode",
- "bs58",
+ "bs58 0.5.1",
  "serde",
  "serde_derive",
  "serde_json",

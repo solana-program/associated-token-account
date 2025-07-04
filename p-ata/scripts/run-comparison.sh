@@ -17,6 +17,29 @@ print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
 
+# Parse command line arguments
+VERBOSE=false
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -v|--verbose)
+            VERBOSE=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [-v|--verbose]"
+            echo "  -v, --verbose    Show byte-by-byte comparison of instructions and account data"
+            exit 1
+            ;;
+    esac
+done
+
+# Export verbose flag for Rust code
+if [ "$VERBOSE" = true ]; then
+    export P_ATA_VERBOSE=1
+    print_status "Verbose mode enabled - will show detailed byte-by-byte comparisons"
+fi
+
 print_success() {
     echo -e "${GREEN}[SUCCESS]${NC} $1"
 }

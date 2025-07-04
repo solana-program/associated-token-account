@@ -87,17 +87,25 @@ mod builder {
             );
         }
 
-        println!("cargo:warning=Token-2022 built successfully to programs/token-2022/target/deploy/");
+        println!(
+            "cargo:warning=Token-2022 built successfully to programs/token-2022/target/deploy/"
+        );
     }
 
     fn build_original_ata(manifest_dir: &str, _programs_dir: &Path) {
         println!("cargo:warning=Building original ATA program...");
 
         // The original ATA program is in the root program/ directory
-        let original_ata_dir = Path::new(manifest_dir).parent().expect("Failed to get parent directory").join("program");
-        
+        let original_ata_dir = Path::new(manifest_dir)
+            .parent()
+            .expect("Failed to get parent directory")
+            .join("program");
+
         if !original_ata_dir.exists() {
-            println!("cargo:warning=Original ATA program directory not found at {:?}, skipping...", original_ata_dir);
+            println!(
+                "cargo:warning=Original ATA program directory not found at {:?}, skipping...",
+                original_ata_dir
+            );
             return;
         }
 

@@ -248,10 +248,11 @@ pub fn process_create(
 }
 
 /// Accounts: nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet, token_prog, [..multisig signer accounts]
-pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
-    if accounts.len() < 7 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
+pub fn process_recover(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    bump_opt: Option<u8>,
+) -> ProgramResult {
     let (
         nested_ata,
         _nested_mint_account,
@@ -270,13 +271,19 @@ pub fn process_recover(program_id: &Pubkey, accounts: &[AccountInfo]) -> Program
         &accounts[6],
     );
 
-    let (owner_pda, bump) = derive_ata_pda(
-        wallet.key(),
-        token_prog.key(),
-        owner_mint_account.key(),
-        program_id,
-    );
-    validate_pda(&owner_pda, owner_ata.key())?;
+    let bump = match bump_opt {
+        Some(provided_bump) => provided_bump,
+        None => {
+            let (owner_pda, computed_bump) = derive_ata_pda(
+                wallet.key(),
+                token_prog.key(),
+                owner_mint_account.key(),
+                program_id,
+            );
+            validate_pda(&owner_pda, owner_ata.key())?;
+            computed_bump
+        }
+    };
 
     // No expensive seed verification for `nested_ata` and `dest_ata`; the
     // subsequent owner checks on their account data provide sufficient safety

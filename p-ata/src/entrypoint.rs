@@ -29,8 +29,14 @@ pub fn entry(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Prog
             },
             // 1 - CreateIdempotent
             1 => process_create(program_id, accounts, true, None),
-            // 2 - RecoverNested
-            2 => process_recover(program_id, accounts),
+            // 2 - RecoverNested (with optional bump)
+            2 => match instruction_data {
+                // No bump provided - compute bump on-chain (original behavior)
+                [] => process_recover(program_id, accounts, None),
+                // Bump provided - use for optimization
+                [bump] => process_recover(program_id, accounts, Some(*bump)),
+                _ => Err(TokenError::InvalidInstruction.into()),
+            },
             _ => Err(TokenError::InvalidInstruction.into()),
         },
     }

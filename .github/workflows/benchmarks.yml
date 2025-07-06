@@ -136,11 +136,10 @@ jobs:
           
           # Create PR comment using JSON data and generated badges
           if [ -f "benchmark_results/performance_results.json" ] && [ -f "benchmark_results/failure_results.json" ]; then
-            cat > benchmark_results/pr_comment.md << 'EOF'
-## 📊 P-ATA Individual Test Results
-
-### CU Savings per Test
-EOF
+            # Start PR comment
+            echo "## 📊 P-ATA Individual Test Results" > benchmark_results/pr_comment.md
+            echo "" >> benchmark_results/pr_comment.md
+            echo "### CU Savings per Test" >> benchmark_results/pr_comment.md
             
             # Add CU savings badges
             if [ -f "benchmark_results/badges.md" ]; then
@@ -149,30 +148,27 @@ EOF
               echo "" >> benchmark_results/pr_comment.md
             fi
             
-            cat >> benchmark_results/pr_comment.md << 'EOF'
-
-### Performance Test Summary
-| Test | P-ATA CU | Original CU | Savings | Compatibility |
-|------|----------|-------------|---------|---------------|
-EOF
+            # Add performance table header
+            echo "" >> benchmark_results/pr_comment.md
+            echo "### Performance Test Summary" >> benchmark_results/pr_comment.md
+            echo "| Test | P-ATA CU | Original CU | Savings | Compatibility |" >> benchmark_results/pr_comment.md
+            echo "|------|----------|-------------|---------|---------------|" >> benchmark_results/pr_comment.md
             
             # Add performance data
             jq -r '.performance_tests | to_entries[] | "| \(.key) | \(.value.p_ata_cu) | \(.value.original_cu) | \(.value.savings_percent)% | \(.value.compatibility) |"' benchmark_results/performance_results.json >> benchmark_results/pr_comment.md
             
-            cat >> benchmark_results/pr_comment.md << 'EOF'
-
-### Failure Test Results
-| Test | Result |
-|------|--------|
-EOF
+            # Add failure test header
+            echo "" >> benchmark_results/pr_comment.md
+            echo "### Failure Test Results" >> benchmark_results/pr_comment.md
+            echo "| Test | Result |" >> benchmark_results/pr_comment.md
+            echo "|------|--------|" >> benchmark_results/pr_comment.md
             
             # Add failure test data
             jq -r '.failure_tests | to_entries[] | "| \(.key) | \(.value.status) |"' benchmark_results/failure_results.json >> benchmark_results/pr_comment.md
             
-            cat >> benchmark_results/pr_comment.md << 'EOF'
-
-> 🤖 Individual test results with no averages or aggregation. Each test shows exact CU consumption and byte-for-byte compatibility status.
-EOF
+            # Add footer
+            echo "" >> benchmark_results/pr_comment.md
+            echo "> 🤖 Individual test results with no averages or aggregation. Each test shows exact CU consumption and byte-for-byte compatibility status." >> benchmark_results/pr_comment.md
             
             echo "✅ PR comment generated"
           else

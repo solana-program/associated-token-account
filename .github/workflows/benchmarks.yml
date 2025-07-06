@@ -36,10 +36,6 @@ jobs:
           cargo-cache-key: cargo-benchmarks
           solana: true
 
-      - name: Install Additional Tools
-        run: |
-          cargo install mollusk-svm-bencher --locked
-
       - name: Build Both ATA Implementations
         run: |
           # Build original ATA program

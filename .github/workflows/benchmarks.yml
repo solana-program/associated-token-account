@@ -55,13 +55,13 @@ jobs:
           # Create output directory
           mkdir -p benchmark_results
           
-          # Run comparison benchmarks and capture output
+          # Run comparison benchmarks and capture output while showing it
           echo "🚀 Running P-ATA vs Original ATA Comparison Benchmarks"
-          cargo bench --features build-programs ata_instruction_benches > benchmark_results/comparison.log 2>&1 || true
+          cargo bench --features build-programs ata_instruction_benches 2>&1 | tee benchmark_results/comparison.log
           
           # Run failure scenarios
           echo "🧪 Running Failure Scenario Tests"  
-          cargo bench --features build-programs failure_scenarios > benchmark_results/failures.log 2>&1 || true
+          cargo bench --features build-programs failure_scenarios 2>&1 | tee benchmark_results/failures.log
           
           cd ..
 
@@ -135,23 +135,16 @@ jobs:
             # Start PR comment
             echo "## 📊 P-ATA Individual Test Results" > benchmark_results/pr_comment.md
             echo "" >> benchmark_results/pr_comment.md
-            echo "### CU Savings per Test" >> benchmark_results/pr_comment.md
-            
-            # Add CU savings badges
-            if [ -f "benchmark_results/badges.md" ]; then
-              echo "" >> benchmark_results/pr_comment.md
-              grep "CU Savings" benchmark_results/badges.md | head -6 >> benchmark_results/pr_comment.md
-              echo "" >> benchmark_results/pr_comment.md
-            fi
+
             
             # Add performance table header
             echo "" >> benchmark_results/pr_comment.md
             echo "### Performance Test Summary" >> benchmark_results/pr_comment.md
-            echo "| Test | P-ATA CU | Original CU | Savings | Compatibility |" >> benchmark_results/pr_comment.md
-            echo "|------|----------|-------------|---------|---------------|" >> benchmark_results/pr_comment.md
+            echo "| Test | P-ATA CU | SPL ATA CU  | Byte-for-Byte |" >> benchmark_results/pr_comment.md
+            echo "|------|----------|-------------|---------------|" >> benchmark_results/pr_comment.md
             
             # Add performance data
-            jq -r '.performance_tests | to_entries[] | "| \(.key) | \(.value.p_ata_cu) | \(.value.original_cu) | \(.value.savings_percent)% | \(.value.compatibility) |"' benchmark_results/performance_results.json >> benchmark_results/pr_comment.md
+            jq -r '.performance_tests | to_entries[] | "| \(.key) | \(.value.p_ata_cu) | \(.value.original_cu) | \(.value.compatibility) |"' benchmark_results/performance_results.json >> benchmark_results/pr_comment.md
             
             # Add failure test header
             echo "" >> benchmark_results/pr_comment.md
@@ -161,11 +154,7 @@ jobs:
             
             # Add failure test data
             jq -r '.failure_tests | to_entries[] | "| \(.key) | \(.value.status) |"' benchmark_results/failure_results.json >> benchmark_results/pr_comment.md
-            
-            # Add footer
-            echo "" >> benchmark_results/pr_comment.md
-            echo "> 🤖 Individual test results with no averages or aggregation. Each test shows exact CU consumption and byte-for-byte compatibility status." >> benchmark_results/pr_comment.md
-            
+                        
             echo "✅ PR comment generated"
           else
             echo "⚠️  No benchmark data available for PR comment"

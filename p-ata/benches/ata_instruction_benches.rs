@@ -812,6 +812,16 @@ impl ComparisonRunner {
         common::ComparisonRunner::print_comparison_result(&comparison);
         results.push(comparison);
 
+        // P-ATA only features (no Original ATA equivalent)
+        let comparison = Self::run_recover_multisig_test(
+            "recover_multisig",
+            p_ata_impl,
+            original_impl,
+            token_program_id,
+        );
+        common::ComparisonRunner::print_comparison_result(&comparison);
+        results.push(comparison);
+
         Self::print_summary(&results);
         Self::output_structured_data(&results);
         results
@@ -822,17 +832,9 @@ impl ComparisonRunner {
 
         for result in results {
             // Only include successful comparisons or known optimization cases
-            let (p_ata_cu, original_cu, savings_percent, compatibility) =
+            let (p_ata_cu, original_cu, compatibility) =
                 match (&result.p_ata.success, &result.original.success) {
                     (true, true) => {
-                        let savings = result.original.compute_units as i64
-                            - result.p_ata.compute_units as i64;
-                        let percentage = if result.original.compute_units > 0 {
-                            (savings as f64 / result.original.compute_units as f64) * 100.0
-                        } else {
-                            0.0
-                        };
-
                         let compat = match result.compatibility_status {
                             common::CompatibilityStatus::Identical => "identical",
                             common::CompatibilityStatus::OptimizedBehavior => "optimized",
@@ -845,13 +847,12 @@ impl ComparisonRunner {
                         (
                             result.p_ata.compute_units,
                             result.original.compute_units,
-                            percentage,
                             compat,
                         )
                     }
                     (true, false) => {
                         // P-ATA works, Original fails - optimization case
-                        (result.p_ata.compute_units, 0, 0.0, "optimized")
+                        (result.p_ata.compute_units, 0, "optimized")
                     }
                     _ => continue, // Skip cases where P-ATA fails
                 };
@@ -860,11 +861,10 @@ impl ComparisonRunner {
                 r#"    "{}": {{
       "p_ata_cu": {},
       "original_cu": {},
-      "savings_percent": {:.1},
       "compatibility": "{}",
       "type": "performance_test"
     }}"#,
-                result.test_name, p_ata_cu, original_cu, savings_percent, compatibility
+                result.test_name, p_ata_cu, original_cu, compatibility
             );
             json_entries.push(entry);
         }
@@ -1130,8 +1130,9 @@ impl ComparisonRunner {
     ) -> ComparisonResult {
         let (p_ata_ix, p_ata_accounts) =
             TestCaseBuilder::build_create_with_bump(p_ata_impl, token_program_id, false, false);
+        // Original ATA doesn't support CreateWithBump, so use regular Create for comparison
         let (original_ix, original_accounts) =
-            TestCaseBuilder::build_create_with_bump(original_impl, token_program_id, false, false);
+            TestCaseBuilder::build_create(original_impl, token_program_id, false, false, false);
 
         if common::VerboseComparison::is_enabled() {
             common::ComparisonRunner::run_verbose_comparison(
@@ -1279,8 +1280,9 @@ impl ComparisonRunner {
     ) -> ComparisonResult {
         let (p_ata_ix, p_ata_accounts) =
             TestCaseBuilder::build_recover_with_bump(&p_ata_impl.program_id, token_program_id);
+        // Original ATA doesn't support RecoverWithBump, so use regular Recover for comparison
         let (original_ix, original_accounts) =
-            TestCaseBuilder::build_recover_with_bump(&original_impl.program_id, token_program_id);
+            TestCaseBuilder::build_recover(original_impl, token_program_id);
 
         if common::VerboseComparison::is_enabled() {
             common::ComparisonRunner::run_verbose_comparison(
@@ -1308,6 +1310,58 @@ impl ComparisonRunner {
                 original_impl,
                 token_program_id,
             );
+
+            common::ComparisonRunner::create_comparison_result(
+                test_name,
+                p_ata_result,
+                original_result,
+            )
+        }
+    }
+
+    fn run_recover_multisig_test(
+        test_name: &str,
+        p_ata_impl: &AtaImplementation,
+        _original_impl: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> ComparisonResult {
+        let (p_ata_ix, p_ata_accounts) =
+            TestCaseBuilder::build_recover_multisig(&p_ata_impl.program_id, token_program_id);
+        // Original ATA doesn't support RecoverMultisig, so only test P-ATA
+
+        if common::VerboseComparison::is_enabled() {
+            // For verbose comparison, create a dummy failed result for original
+            let p_ata_result = common::ComparisonRunner::run_single_benchmark(
+                test_name,
+                &p_ata_ix,
+                &p_ata_accounts,
+                p_ata_impl,
+                token_program_id,
+            );
+            let original_result = common::BenchmarkResult {
+                success: false,
+                compute_units: 0,
+                error: Some("Original ATA doesn't support RecoverMultisig".to_string()),
+            };
+
+            common::ComparisonRunner::create_comparison_result(
+                test_name,
+                p_ata_result,
+                original_result,
+            )
+        } else {
+            let p_ata_result = common::ComparisonRunner::run_single_benchmark(
+                test_name,
+                &p_ata_ix,
+                &p_ata_accounts,
+                p_ata_impl,
+                token_program_id,
+            );
+            let original_result = common::BenchmarkResult {
+                success: false,
+                compute_units: 0,
+                error: Some("Original ATA doesn't support RecoverMultisig".to_string()),
+            };
 
             common::ComparisonRunner::create_comparison_result(
                 test_name,

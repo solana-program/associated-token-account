@@ -49,6 +49,14 @@ fn validate_pda(expected: &Pubkey, actual: &Pubkey) -> Result<(), ProgramError> 
     Ok(())
 }
 
+/// Check if the given program ID is Token-2022
+#[inline(always)]
+fn is_token_2022_program(program_id: &Pubkey) -> bool {
+    const TOKEN_2022_PROGRAM_ID: Pubkey =
+        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    *program_id == TOKEN_2022_PROGRAM_ID
+}
+
 /// Get zero-copy token account reference from account info
 #[inline(always)]
 fn get_token_account_unchecked(account: &AccountInfo) -> &TokenAccount {
@@ -87,6 +95,12 @@ fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
     data[0] = 18u8; // TokenInstruction::InitializeAccount3
     data[1..33].copy_from_slice(owner.as_ref());
     data
+}
+
+/// Build InitializeImmutableOwner instruction data
+#[inline(always)]
+fn build_initialize_immutable_owner_data() -> [u8; 1] {
+    [22u8] // TokenInstruction::InitializeImmutableOwner
 }
 
 /// Build Transfer instruction data
@@ -159,8 +173,20 @@ fn create_and_initialize_ata(
     token_prog: &AccountInfo,
     rent_info_opt: Option<&AccountInfo>,
     bump: u8,
+    account_len_opt: Option<usize>,
 ) -> ProgramResult {
-    let space = TokenAccount::LEN;
+    // Use provided account length if available, otherwise calculate based on token program
+    let space = match account_len_opt {
+        Some(len) => len,
+        None => {
+            // Calculate correct space: 165 for base TokenAccount, +5 for ImmutableOwner extension
+            if is_token_2022_program(token_prog.key()) {
+                TokenAccount::LEN + 5 // 170 bytes total for Token-2022 with ImmutableOwner
+            } else {
+                TokenAccount::LEN // 165 bytes for regular Token
+            }
+        }
+    };
 
     let seeds: &[&[u8]] = &[
         wallet.key().as_ref(),
@@ -172,6 +198,25 @@ fn create_and_initialize_ata(
     // Use Rent passed in accounts if supplied to avoid syscall
     let rent = resolve_rent(rent_info_opt)?;
     create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
+
+    // For Token-2022, initialize ImmutableOwner extension first
+    if is_token_2022_program(token_prog.key()) {
+        let initialize_immutable_owner_data = build_initialize_immutable_owner_data();
+
+        let initialize_immutable_owner_metas = &[AccountMeta {
+            pubkey: ata_acc.key(),
+            is_writable: true,
+            is_signer: false,
+        }];
+
+        let init_immutable_owner_ix = Instruction {
+            program_id: token_prog.key(),
+            accounts: initialize_immutable_owner_metas,
+            data: &initialize_immutable_owner_data,
+        };
+
+        invoke(&init_immutable_owner_ix, &[ata_acc])?;
+    }
 
     // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
     let initialize_account_instr_data = build_initialize_account3_data(wallet.key());
@@ -202,16 +247,14 @@ fn create_and_initialize_ata(
 
 /// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
 ///
-/// Manually stamping ImmutableOwner data and then calling Assign is **cheaper**
-/// on create paths than using the Token-2022 `InitializeImmutableOwner` CPI
-/// (100-200 CUs saved). If we ever have a lightweight pinocchio-flavoured
-/// Token-2022 program (`p-token-2022`) with a lower overhead, we can swap
-/// back to the flow of CreateAccount + InitializeImmutableOwner.
+/// For Token-2022 accounts, we create the account with the correct size (170 bytes)
+/// and call InitializeImmutableOwner followed by InitializeAccount3.
 pub fn process_create(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     idempotent: bool,
     bump_opt: Option<u8>,
+    account_len_opt: Option<usize>,
 ) -> ProgramResult {
     let (payer, ata_acc, wallet, mint_account, system_prog, token_prog, rent_info_opt) =
         parse_ata_accounts(accounts)?;
@@ -244,6 +287,7 @@ pub fn process_create(
         token_prog,
         rent_info_opt,
         bump,
+        account_len_opt,
     )
 }
 

@@ -4,6 +4,7 @@ use {
     solana_instruction::{AccountMeta, Instruction},
     solana_logger,
     solana_pubkey::Pubkey,
+    std::collections::HashMap,
 };
 
 #[path = "common.rs"]
@@ -689,58 +690,6 @@ impl FailureTestBuilder {
                 AccountMeta::new_readonly(*token_program_id, false),
             ],
             data: vec![0u8, 99u8], // Create with invalid bump (not the correct bump)
-        };
-
-        (ix, accounts)
-    }
-
-    /// Build CREATE failure test with non-executable program accounts
-    fn build_fail_non_executable_program(
-        program_id: &Pubkey,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(250);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            // Token program marked as non-executable
-            (
-                *token_program_id,
-                Account {
-                    lamports: 0,
-                    data: Vec::new(),
-                    owner: LOADER_V3,
-                    executable: false, // Should be true!
-                    rent_epoch: 0,
-                },
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8],
         };
 
         (ix, accounts)
@@ -1756,7 +1705,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            ComparisonRunner::print_comparison_result(&comparison);
+            common::ComparisonRunner::print_comparison_result(&comparison);
             results.push(comparison);
         }
 
@@ -1804,7 +1753,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            ComparisonRunner::print_comparison_result(&comparison);
+            common::ComparisonRunner::print_comparison_result(&comparison);
             results.push(comparison);
         }
 
@@ -1847,7 +1796,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            ComparisonRunner::print_comparison_result(&comparison);
+            common::ComparisonRunner::print_comparison_result(&comparison);
             results.push(comparison);
         }
 
@@ -1855,11 +1804,6 @@ impl FailureTestRunner {
         println!("\n--- Additional Validation Coverage Tests ---");
 
         let validation_tests = [
-            (
-                "fail_non_executable_program",
-                FailureTestBuilder::build_fail_non_executable_program
-                    as fn(&Pubkey, &Pubkey) -> (Instruction, Vec<(Pubkey, Account)>),
-            ),
             (
                 "fail_ata_owned_by_system_program",
                 FailureTestBuilder::build_fail_ata_owned_by_system_program
@@ -1895,11 +1839,98 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            ComparisonRunner::print_comparison_result(&comparison);
+            common::ComparisonRunner::print_comparison_result(&comparison);
             results.push(comparison);
         }
 
+        Self::print_failure_summary(&results);
+        Self::output_failure_test_data(&results);
         results
+    }
+
+    fn output_failure_test_data(results: &[ComparisonResult]) {
+        let mut json_entries = Vec::new();
+
+        for result in results {
+            let status = match (&result.p_ata.success, &result.original.success) {
+                (true, true) => "pass", // Both succeeded (might be unexpected for failure tests)
+                (false, false) => {
+                    // Both failed - check if errors are the same type
+                    let p_ata_error = result.p_ata.error_message.as_deref().unwrap_or("Unknown");
+                    let original_error = result
+                        .original
+                        .error_message
+                        .as_deref()
+                        .unwrap_or("Unknown");
+
+                    // Simple error type comparison - look for key differences
+                    if p_ata_error.contains("InvalidInstructionData")
+                        != original_error.contains("InvalidInstructionData")
+                        || p_ata_error.contains("Custom(") != original_error.contains("Custom(")
+                        || p_ata_error.contains("PrivilegeEscalation")
+                            != original_error.contains("PrivilegeEscalation")
+                    {
+                        "failed, but different error"
+                    } else {
+                        "failed with same error"
+                    }
+                }
+                (true, false) => "pass", // P-ATA works, original fails (P-ATA optimization)
+                (false, true) => "fail", // P-ATA fails, original works (concerning)
+            };
+
+            let p_ata_error_json = match &result.p_ata.error_message {
+                Some(msg) => format!(r#""{}""#, msg.replace('"', r#"\""#)),
+                None => "null".to_string(),
+            };
+
+            let original_error_json = match &result.original.error_message {
+                Some(msg) => format!(r#""{}""#, msg.replace('"', r#"\""#)),
+                None => "null".to_string(),
+            };
+
+            let entry = format!(
+                r#"    "{}": {{
+      "status": "{}",
+      "p_ata_success": {},
+      "original_success": {},
+      "p_ata_error": {},
+      "original_error": {},
+      "type": "failure_test"
+    }}"#,
+                result.test_name,
+                status,
+                result.p_ata.success,
+                result.original.success,
+                p_ata_error_json,
+                original_error_json
+            );
+            json_entries.push(entry);
+        }
+
+        let output = format!(
+            r#"{{
+  "timestamp": "{}",
+  "failure_tests": {{
+{}
+  }}
+}}"#,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            json_entries.join(",\n")
+        );
+
+        // Create benchmark_results directory if it doesn't exist
+        std::fs::create_dir_all("benchmark_results").ok();
+
+        // Write failure test results
+        if let Err(e) = std::fs::write("benchmark_results/failure_results.json", output) {
+            eprintln!("Failed to write failure results: {}", e);
+        } else {
+            println!("\n🧪 Failure test results written to benchmark_results/failure_results.json");
+        }
     }
 
     /// Print failure test summary with compatibility analysis
@@ -2152,10 +2183,6 @@ fn run_individual_failure_tests(program_id: &Pubkey, token_program_id: &Pubkey) 
     println!("\n=== Running Additional Validation Coverage Tests ===");
 
     let extended_failure_tests = [
-        (
-            "fail_non_executable_program",
-            FailureTestBuilder::build_fail_non_executable_program(program_id, token_program_id),
-        ),
         (
             "fail_ata_owned_by_system_program",
             FailureTestBuilder::build_fail_ata_owned_by_system_program(

@@ -1,0 +1,284 @@
+name: P-ATA Benchmarks
+
+on:
+  push:
+    paths:
+      - 'p-ata/**'
+      - 'program/**'
+      - '.github/workflows/benchmarks.yml'
+    branches: [main, p-ata, p-ata-dev]
+  pull_request:
+    paths:
+      - 'p-ata/**'
+      - 'program/**'
+      - '.github/workflows/benchmarks.yml'
+    branches: [main, p-ata]
+  workflow_dispatch:
+    inputs:
+      clear_cache:
+        description: 'Clear build cache before running'
+        type: boolean
+        default: false
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  run_benchmarks:
+    name: Run P-ATA Benchmarks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          cargo-cache-key: cargo-benchmarks
+          solana: true
+
+      - name: Generate Build Cache Keys
+        id: build-cache-keys
+        run: |
+          # Generate separate cache keys for each program
+          original_ata_key=$(find program -name "*.rs" -o -name "Cargo.toml" -o -name "Cargo.lock" -o -name "build.rs" | \
+                            xargs sha256sum | sha256sum | cut -d' ' -f1)
+          p_ata_key=$(find p-ata -name "*.rs" -o -name "Cargo.toml" -o -name "Cargo.lock" -o -name "build.rs" | \
+                     xargs sha256sum | sha256sum | cut -d' ' -f1)
+          
+          echo "original-ata-key=original-ata-$original_ata_key" >> $GITHUB_OUTPUT
+          echo "p-ata-key=p-ata-$p_ata_key" >> $GITHUB_OUTPUT
+          
+          echo "🔑 Original ATA cache key: original-ata-$original_ata_key"
+          echo "🔑 P-ATA cache key: p-ata-$p_ata_key"
+
+      - name: Cache Original ATA Program
+        id: cache-original-ata
+        uses: actions/cache@v4
+        if: ${{ !github.event.inputs.clear_cache }}
+        with:
+          path: program/target/deploy/
+          key: ${{ steps.build-cache-keys.outputs.original-ata-key }}
+          restore-keys: |
+            original-ata-
+
+      - name: Cache P-ATA Program
+        id: cache-p-ata
+        uses: actions/cache@v4
+        if: ${{ !github.event.inputs.clear_cache }}
+        with:
+          path: |
+            p-ata/target/deploy/
+            p-ata/programs/
+          key: ${{ steps.build-cache-keys.outputs.p-ata-key }}
+          restore-keys: |
+            p-ata-
+
+      - name: Clear Cache (Manual)
+        if: ${{ github.event.inputs.clear_cache }}
+        run: |
+          echo "🧹 Manual cache clear requested - forcing rebuild"
+          rm -rf program/target/deploy/ p-ata/target/deploy/ p-ata/programs/ 2>/dev/null || true
+
+      - name: Build Original ATA Program
+        if: steps.cache-original-ata.outputs.cache-hit != 'true' || github.event.inputs.clear_cache
+        run: |
+          echo "🔨 Building Original ATA program (cache miss)..."
+          cd program
+          cargo build-sbf
+          cd ..
+          echo "✅ Original ATA program built successfully"
+
+      - name: Build P-ATA Program
+        if: steps.cache-p-ata.outputs.cache-hit != 'true' || github.event.inputs.clear_cache
+        run: |
+          echo "🔨 Building P-ATA program (cache miss)..."
+          cd p-ata
+          cargo build-sbf --features build-programs
+          cd ..
+          echo "✅ P-ATA program built successfully"
+
+      - name: Verify Cached Programs
+        run: |
+          echo "📋 Program build summary:"
+          
+          # Check Original ATA
+          if [ "${{ steps.cache-original-ata.outputs.cache-hit }}" == "true" ]; then
+            echo "  💾 Original ATA: Restored from cache"
+          else
+            echo "  🔨 Original ATA: Built from source"
+          fi
+          
+          # Check P-ATA
+          if [ "${{ steps.cache-p-ata.outputs.cache-hit }}" == "true" ]; then
+            echo "  💾 P-ATA: Restored from cache"
+          else
+            echo "  🔨 P-ATA: Built from source"
+          fi
+          
+          echo ""
+          echo "📁 Available program binaries:"
+          find program p-ata -name "*.so" -type f | while read file; do
+            echo "  ✅ $file ($(stat -c%s "$file") bytes)"
+          done
+          
+          echo ""
+          echo "🔑 Available keypairs:"
+          find program p-ata -name "*-keypair.json" -type f | while read file; do
+            echo "  🔑 $file"
+          done
+          
+          echo ""
+          echo "✅ Program verification completed"
+
+      - name: Run Benchmarks
+        run: |
+          cd p-ata
+          
+          # Create output directory
+          mkdir -p benchmark_results
+          
+          # Run comparison benchmarks and capture output while showing it
+          echo "🚀 Running P-ATA vs Original ATA Comparison Benchmarks"
+          cargo bench --features build-programs ata_instruction_benches 2>&1 | tee benchmark_results/comparison.log
+          
+          # Run failure scenarios
+          echo "🧪 Running Failure Scenario Tests"  
+          cargo bench --features build-programs failure_scenarios 2>&1 | tee benchmark_results/failures.log
+          
+          cd ..
+
+      - name: Generate Badge Data
+        run: |
+          cd p-ata
+          
+          # Install jq for JSON processing
+          sudo apt-get update && sudo apt-get install -y jq bc
+          
+          # Generate badges using shell script functions
+          source scripts/run_local_benchmarks.sh
+          
+          # Generate badges if we have JSON results
+          if [ -f "benchmark_results/performance_results.json" ] || [ -f "benchmark_results/failure_results.json" ]; then
+            echo "📊 Processing JSON results..."
+            generate_badges
+            update_readme_badges
+            echo "✅ Badge generation completed"
+          else
+            echo "⚠️  No JSON results found"
+          fi
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: p-ata/benchmark_results/
+          retention-days: 30
+
+      - name: Update Repository with Results
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd p-ata
+          
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if README.md was updated
+          if git diff --quiet README.md; then
+            echo "No changes to README.md"
+          else
+            echo "README.md updated with new badges"
+            git add README.md
+            git commit -m "Update README with benchmark badges - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            git push origin HEAD
+          fi
+          
+          # Also create/update benchmark results branch for historical data
+          git checkout -B benchmark-results
+          
+          # Copy results to root level for easy access
+          cp benchmark_results/*.json . 2>/dev/null || true
+          cp benchmark_results/badges.md . 2>/dev/null || true
+          
+          # Add and commit results
+          git add *.json badges.md 2>/dev/null || true
+          git commit -m "Update benchmark results - $(date -u '+%Y-%m-%d %H:%M:%S UTC')" || exit 0
+          
+          # Push to benchmark-results branch
+          git push origin benchmark-results --force
+
+      - name: Create Performance Report
+        if: github.event_name == 'pull_request'
+        run: |
+          cd p-ata
+          
+          # Create PR comment using JSON data and generated badges
+          if [ -f "benchmark_results/performance_results.json" ] && [ -f "benchmark_results/failure_results.json" ]; then
+            # Start PR comment
+            echo "## 📊 P-ATA Individual Test Results" > benchmark_results/pr_comment.md
+            echo "" >> benchmark_results/pr_comment.md
+
+            
+            # Add performance table header
+            echo "" >> benchmark_results/pr_comment.md
+            echo "### Performance Test Summary" >> benchmark_results/pr_comment.md
+            echo "| Test | P-ATA CU | SPL ATA CU  | Byte-for-Byte |" >> benchmark_results/pr_comment.md
+            echo "|------|----------|-------------|---------------|" >> benchmark_results/pr_comment.md
+            
+            # Add performance data
+            jq -r '.performance_tests | to_entries[] | "| \(.key) | \(.value.p_ata_cu) | \(.value.original_cu) | \(.value.compatibility) |"' benchmark_results/performance_results.json >> benchmark_results/pr_comment.md
+            
+            # Add failure test header
+            echo "" >> benchmark_results/pr_comment.md
+            echo "### Failure Test Results" >> benchmark_results/pr_comment.md
+            echo "| Test | Result |" >> benchmark_results/pr_comment.md
+            echo "|------|--------|" >> benchmark_results/pr_comment.md
+            
+            # Add failure test data
+            jq -r '.failure_tests | to_entries[] | "| \(.key) | \(.value.status) |"' benchmark_results/failure_results.json >> benchmark_results/pr_comment.md
+            
+            # Add footer
+            echo "" >> benchmark_results/pr_comment.md
+            echo "> 🤖 Byte-for-byte checks instruction, input account data, and changes in accounts." >> benchmark_results/pr_comment.md
+            
+            echo "✅ PR comment generated"
+          else
+            echo "⚠️  No benchmark data available for PR comment"
+          fi
+
+      - name: Comment PR with Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'p-ata/benchmark_results/pr_comment.md';
+            
+            let comment;
+            if (fs.existsSync(path)) {
+              comment = fs.readFileSync(path, 'utf8');
+              console.log('📊 Found benchmark results, posting detailed comment');
+            } else {
+              console.log('⚠️  pr_comment.md not found, posting fallback comment');
+              comment = `## 🔨 P-ATA Benchmarks
+              
+              Benchmarks ran but detailed results are not available. 
+              Check the [Actions run](${context.payload.pull_request.html_url}/checks) for logs.
+              
+              _Generated by GitHub Actions on ${new Date().toISOString()}_`;
+            }
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+            
+            console.log('✅ PR comment posted successfully'); 

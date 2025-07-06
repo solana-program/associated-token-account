@@ -90,6 +90,11 @@ generate_badges() {
         echo "" >> benchmark_results/badges.md
         
         jq -r '.performance_tests | to_entries[] | "\(.key) \(.value.savings_percent) \(.value.compatibility)"' benchmark_results/performance_results.json | while read test_name savings_percent compatibility; do
+            # Skip if savings_percent is null
+            if [ "$savings_percent" = "null" ] || [ -z "$savings_percent" ]; then
+                continue
+            fi
+            
             # CU Savings badge
             if [ "$(echo "$savings_percent > 0" | bc -l 2>/dev/null || echo "0")" = "1" ]; then
                 color="green"
@@ -109,6 +114,11 @@ generate_badges() {
         echo "" >> benchmark_results/badges.md
         
         jq -r '.performance_tests | to_entries[] | "\(.key) \(.value.p_ata_cu)"' benchmark_results/performance_results.json | while read test_name p_ata_cu; do
+            # Skip if p_ata_cu is null
+            if [ "$p_ata_cu" = "null" ] || [ -z "$p_ata_cu" ]; then
+                continue
+            fi
+            
             badge_url=$(create_badge_url "${test_name} P-ATA CU" "$p_ata_cu" "blue")
             echo "![${test_name} P-ATA CU]($badge_url)" >> benchmark_results/badges.md
         done
@@ -118,6 +128,11 @@ generate_badges() {
         echo "" >> benchmark_results/badges.md
         
         jq -r '.performance_tests | to_entries[] | "\(.key) \(.value.compatibility)"' benchmark_results/performance_results.json | while read test_name compatibility; do
+            # Skip if compatibility is null
+            if [ "$compatibility" = "null" ] || [ -z "$compatibility" ]; then
+                continue
+            fi
+            
             case "$compatibility" in
                 "identical")
                     color="green"
@@ -149,6 +164,11 @@ generate_badges() {
         echo "" >> benchmark_results/badges.md
         
         jq -r '.failure_tests | to_entries[] | "\(.key) \(.value.status)"' benchmark_results/failure_results.json | while read test_name status; do
+            # Skip if status is null
+            if [ "$status" = "null" ] || [ -z "$status" ]; then
+                continue
+            fi
+            
             case "$status" in
                 "pass")
                     color="green"
@@ -221,23 +241,23 @@ if [ -f "benchmark_results/performance_results.json" ] || [ -f "benchmark_result
     if command -v jq &> /dev/null; then
         if [ -f "benchmark_results/performance_results.json" ]; then
             echo "Performance Test Results:"
-            jq -r '.performance_tests | to_entries[] | "  \(.key): \(.value.savings_percent)% CU savings, \(.value.compatibility) status"' benchmark_results/performance_results.json
+            jq -r '.performance_tests | to_entries[] | select(.value.savings_percent != null) | "  \(.key): \(.value.savings_percent)% CU savings, \(.value.compatibility) status"' benchmark_results/performance_results.json
         fi
         
         if [ -f "benchmark_results/failure_results.json" ]; then
             echo ""
             echo "Failure Test Results:"
-            jq -r '.failure_tests | to_entries[] | "  \(.key): \(.value.status)"' benchmark_results/failure_results.json
+            jq -r '.failure_tests | to_entries[] | select(.value.status != null) | "  \(.key): \(.value.status)"' benchmark_results/failure_results.json
         fi
         
-        # Count total badges
+        # Count total badges (only count non-null entries)
         total_badges=0
         if [ -f "benchmark_results/performance_results.json" ]; then
-            perf_count=$(jq -r '.performance_tests | length' benchmark_results/performance_results.json)
+            perf_count=$(jq -r '.performance_tests | to_entries | map(select(.value.savings_percent != null)) | length' benchmark_results/performance_results.json 2>/dev/null || echo "0")
             total_badges=$((total_badges + perf_count * 3)) # CU savings + P-ATA CU + compatibility
         fi
         if [ -f "benchmark_results/failure_results.json" ]; then
-            fail_count=$(jq -r '.failure_tests | length' benchmark_results/failure_results.json)
+            fail_count=$(jq -r '.failure_tests | to_entries | map(select(.value.status != null)) | length' benchmark_results/failure_results.json 2>/dev/null || echo "0")
             total_badges=$((total_badges + fail_count)) # failure result badges
         fi
         echo ""

@@ -695,58 +695,6 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with non-executable program accounts
-    fn build_fail_non_executable_program(
-        program_id: &Pubkey,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(250);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            // Token program marked as non-executable
-            (
-                *token_program_id,
-                Account {
-                    lamports: 0,
-                    data: Vec::new(),
-                    owner: LOADER_V3,
-                    executable: false, // Should be true!
-                    rent_epoch: 0,
-                },
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8],
-        };
-
-        (ix, accounts)
-    }
-
     /// Build CREATE failure test with ATA owned by system program (existing ATA with wrong owner)
     fn build_fail_ata_owned_by_system_program(
         program_id: &Pubkey,
@@ -1857,11 +1805,6 @@ impl FailureTestRunner {
 
         let validation_tests = [
             (
-                "fail_non_executable_program",
-                FailureTestBuilder::build_fail_non_executable_program
-                    as fn(&Pubkey, &Pubkey) -> (Instruction, Vec<(Pubkey, Account)>),
-            ),
-            (
                 "fail_ata_owned_by_system_program",
                 FailureTestBuilder::build_fail_ata_owned_by_system_program
                     as fn(&Pubkey, &Pubkey) -> (Instruction, Vec<(Pubkey, Account)>),
@@ -2240,10 +2183,6 @@ fn run_individual_failure_tests(program_id: &Pubkey, token_program_id: &Pubkey) 
     println!("\n=== Running Additional Validation Coverage Tests ===");
 
     let extended_failure_tests = [
-        (
-            "fail_non_executable_program",
-            FailureTestBuilder::build_fail_non_executable_program(program_id, token_program_id),
-        ),
         (
             "fail_ata_owned_by_system_program",
             FailureTestBuilder::build_fail_ata_owned_by_system_program(

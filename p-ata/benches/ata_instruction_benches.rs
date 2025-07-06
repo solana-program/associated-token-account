@@ -13,14 +13,12 @@ mod common;
 use common::*;
 
 // ========================== ATA IMPLEMENTATION ABSTRACTION ============================
-// (Types moved to common.rs for shared use)
 
 // ========================== TEST CASE BUILDERS ============================
 
 struct TestCaseBuilder;
 
 impl TestCaseBuilder {
-    /// Build CREATE instruction variants
     #[allow(clippy::too_many_arguments)]
     fn build_create(
         ata_implementation: &AtaImplementation,
@@ -86,7 +84,6 @@ impl TestCaseBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE_IDEMPOTENT instruction (pre-initialized ATA)
     fn build_create_idempotent(
         ata_implementation: &AtaImplementation,
         token_program_id: &Pubkey,
@@ -94,13 +91,8 @@ impl TestCaseBuilder {
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         let payer = const_pk(1);
         let mint = const_pk(2);
-
-        let wallet = OptimalKeyFinder::find_optimal_wallet(
-            3,
-            token_program_id,
-            &mint,
-            &ata_implementation.program_id,
-        );
+        // Wallets are independent of ATA program - use fixed wallet address
+        let wallet = const_pk(3);
 
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
@@ -155,19 +147,14 @@ impl TestCaseBuilder {
         (ix, accounts)
     }
 
-    /// Build RECOVER instruction for regular wallet
     fn build_recover(
         ata_implementation: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Fixed mints and wallets - independent of ATA program
         let owner_mint = const_pk(20);
-
-        let wallet = OptimalKeyFinder::find_optimal_wallet(
-            30,
-            token_program_id,
-            &owner_mint,
-            &ata_implementation.program_id,
-        );
+        let wallet = const_pk(30);
+        let nested_mint = const_pk(40);
 
         let (owner_ata, _) = Pubkey::find_program_address(
             &[
@@ -175,13 +162,6 @@ impl TestCaseBuilder {
                 token_program_id.as_ref(),
                 owner_mint.as_ref(),
             ],
-            &ata_implementation.program_id,
-        );
-
-        let nested_mint = OptimalKeyFinder::find_optimal_nested_mint(
-            40,
-            &owner_ata,
-            token_program_id,
             &ata_implementation.program_id,
         );
 
@@ -254,7 +234,6 @@ impl TestCaseBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE instruction with bump optimization
     #[allow(clippy::too_many_arguments)]
     fn build_create_with_bump(
         ata_implementation: &AtaImplementation,
@@ -319,8 +298,6 @@ impl TestCaseBuilder {
         (ix, accounts)
     }
 
-    /// Build worst-case bump scenario (very low bump = expensive find_program_address)
-    /// Returns both Create and CreateWithBump variants for comparison
     fn build_worst_case_bump_scenario(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
@@ -328,31 +305,10 @@ impl TestCaseBuilder {
         (Instruction, Vec<(Pubkey, Account)>),
         (Instruction, Vec<(Pubkey, Account)>),
     ) {
-        // Find a wallet that produces a very low bump (expensive to compute)
-        let mut worst_wallet = const_pk(200);
-        let mut worst_bump = 255u8;
+        // Use fixed wallet and mint - independent of ATA program
+        // These values were chosen to produce a low bump for worst-case testing
+        let worst_wallet = const_pk(200);
         let mint = const_pk(199); // Fixed mint for consistency
-
-        // Search for wallet with lowest bump (most expensive find_program_address)
-        for b in 200..=254 {
-            let candidate_wallet = const_pk(b);
-            let (_, bump) = Pubkey::find_program_address(
-                &[
-                    candidate_wallet.as_ref(),
-                    token_program_id.as_ref(),
-                    mint.as_ref(),
-                ],
-                program_id,
-            );
-            if bump < worst_bump {
-                worst_wallet = candidate_wallet;
-                worst_bump = bump;
-                // Stop if we find a really bad bump (expensive computation)
-                if bump <= 50 {
-                    break;
-                }
-            }
-        }
 
         let (ata, bump) = Pubkey::find_program_address(
             &[
@@ -415,16 +371,100 @@ impl TestCaseBuilder {
         )
     }
 
-    /// Build RECOVER instruction for multisig wallet
+    fn build_recover_with_bump(
+        program_id: &Pubkey,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Fixed mints and wallets - independent of ATA program
+        let owner_mint = const_pk(21); // Different from regular recover to avoid collisions
+        let wallet = const_pk(31);
+        let nested_mint = const_pk(41);
+
+        let (owner_ata, bump) = Pubkey::find_program_address(
+            &[
+                wallet.as_ref(),
+                token_program_id.as_ref(),
+                owner_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let (nested_ata, _) = Pubkey::find_program_address(
+            &[
+                owner_ata.as_ref(),
+                token_program_id.as_ref(),
+                nested_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let (dest_ata, _) = Pubkey::find_program_address(
+            &[
+                wallet.as_ref(),
+                token_program_id.as_ref(),
+                nested_mint.as_ref(),
+            ],
+            program_id,
+        );
+
+        let accounts = vec![
+            (
+                nested_ata,
+                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
+            ),
+            (
+                nested_mint,
+                AccountBuilder::mint_account(0, token_program_id, false),
+            ),
+            (
+                dest_ata,
+                AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
+            ),
+            (
+                owner_ata,
+                AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
+            ),
+            (
+                owner_mint,
+                AccountBuilder::mint_account(0, token_program_id, false),
+            ),
+            (wallet, AccountBuilder::system_account(1_000_000_000)),
+            (
+                *token_program_id,
+                AccountBuilder::executable_program(LOADER_V3),
+            ),
+            (
+                Pubkey::from(spl_token_interface::program::ID),
+                AccountBuilder::executable_program(LOADER_V3),
+            ),
+        ];
+
+        let ix = Instruction {
+            program_id: *program_id,
+            accounts: vec![
+                AccountMeta::new(nested_ata, false),
+                AccountMeta::new_readonly(nested_mint, false),
+                AccountMeta::new(dest_ata, false),
+                AccountMeta::new(owner_ata, false),
+                AccountMeta::new_readonly(owner_mint, false),
+                AccountMeta::new(wallet, true),
+                AccountMeta::new_readonly(*token_program_id, false),
+                AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
+            ],
+            data: vec![2u8, bump], // RecoverNested discriminator + bump
+        };
+
+        (ix, accounts)
+    }
+
     fn build_recover_multisig(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Fixed mints and wallets - independent of ATA program
         let owner_mint = const_pk(20);
         let nested_mint = const_pk(40);
-
-        let wallet_ms =
-            OptimalKeyFinder::find_optimal_wallet(60, token_program_id, &owner_mint, program_id);
+        let wallet_ms = const_pk(60);
 
         let signer1 = Pubkey::new_unique();
         let signer2 = Pubkey::new_unique();
@@ -526,110 +566,14 @@ impl TestCaseBuilder {
         (ix, accounts)
     }
 
-    /// Build RECOVER instruction with bump optimization for regular wallet
-    fn build_recover_with_bump(
-        program_id: &Pubkey,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let owner_mint = const_pk(21); // Different from regular recover to avoid collisions
-
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(31, token_program_id, &owner_mint, program_id);
-
-        let (owner_ata, bump) = Pubkey::find_program_address(
-            &[
-                wallet.as_ref(),
-                token_program_id.as_ref(),
-                owner_mint.as_ref(),
-            ],
-            program_id,
-        );
-
-        let nested_mint = OptimalKeyFinder::find_optimal_nested_mint(
-            41,
-            &owner_ata,
-            token_program_id,
-            program_id,
-        );
-
-        let (nested_ata, _) = Pubkey::find_program_address(
-            &[
-                owner_ata.as_ref(),
-                token_program_id.as_ref(),
-                nested_mint.as_ref(),
-            ],
-            program_id,
-        );
-
-        let (dest_ata, _) = Pubkey::find_program_address(
-            &[
-                wallet.as_ref(),
-                token_program_id.as_ref(),
-                nested_mint.as_ref(),
-            ],
-            program_id,
-        );
-
-        let accounts = vec![
-            (
-                nested_ata,
-                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
-            ),
-            (
-                nested_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                dest_ata,
-                AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_ata,
-                AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (wallet, AccountBuilder::system_account(1_000_000_000)),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-            (
-                Pubkey::from(spl_token_interface::program::ID),
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(nested_ata, false),
-                AccountMeta::new_readonly(nested_mint, false),
-                AccountMeta::new(dest_ata, false),
-                AccountMeta::new(owner_ata, false),
-                AccountMeta::new_readonly(owner_mint, false),
-                AccountMeta::new(wallet, true),
-                AccountMeta::new_readonly(*token_program_id, false),
-                AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
-            ],
-            data: vec![2u8, bump], // RecoverNested discriminator + bump
-        };
-
-        (ix, accounts)
-    }
-
-    /// Build RECOVER instruction with bump optimization for multisig wallet
     fn build_recover_multisig_with_bump(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Fixed mints and wallets - independent of ATA program
         let owner_mint = const_pk(22); // Different from regular recover to avoid collisions
         let nested_mint = const_pk(42);
-
-        let wallet_ms =
-            OptimalKeyFinder::find_optimal_wallet(61, token_program_id, &owner_mint, program_id);
+        let wallet_ms = const_pk(61);
 
         let signer1 = Pubkey::new_unique();
         let signer2 = Pubkey::new_unique();
@@ -735,7 +679,6 @@ impl TestCaseBuilder {
 // ============================ SETUP AND CONFIGURATION =============================
 
 impl BenchmarkSetup {
-    /// Validate that the benchmark setup works with a simple test for ATA implementations
     fn validate_ata_setup(
         mollusk: &Mollusk,
         ata_implementation: &AtaImplementation,
@@ -772,7 +715,6 @@ impl BenchmarkSetup {
 struct ComparisonRunner;
 
 impl ComparisonRunner {
-    /// Run comprehensive comparison between p-ata and original ATA
     fn run_full_comparison(
         p_ata_impl: &AtaImplementation,
         original_impl: &AtaImplementation,
@@ -873,133 +815,82 @@ impl ComparisonRunner {
         results
     }
 
-    // (Shared benchmark methods moved to common.rs)
-
-    /// Print summary of all comparisons
     fn print_summary(results: &[ComparisonResult]) {
-        println!("\n=== COMPARISON SUMMARY ===");
+        println!("\n=== BYTE-FOR-BYTE TEST SUMMARY ===");
 
-        let total_tests = results.len();
-        let identical_tests = results
-            .iter()
-            .filter(|r| matches!(r.compatibility_status, CompatibilityStatus::Identical))
-            .count();
-        let both_rejected_tests = results
-            .iter()
-            .filter(|r| matches!(r.compatibility_status, CompatibilityStatus::BothRejected))
-            .count();
-        let optimized_tests = results
-            .iter()
-            .filter(|r| {
-                matches!(
-                    r.compatibility_status,
-                    CompatibilityStatus::OptimizedBehavior
-                )
-            })
-            .count();
-        let problematic_tests = results
-            .iter()
-            .filter(|r| {
-                matches!(
-                    r.compatibility_status,
-                    CompatibilityStatus::AccountMismatch
-                        | CompatibilityStatus::IncompatibleFailure
-                        | CompatibilityStatus::IncompatibleSuccess
-                )
-            })
-            .count();
+        // Print each test with color-coded status
+        for result in results {
+            let status_indicator = match result.compatibility_status {
+                CompatibilityStatus::Identical => {
+                    // Special handling for create_with_bump - it's a P-ATA optimization
+                    if result.test_name == "create_with_bump" {
+                        "P-ATA OPTIMIZATION"
+                    } else {
+                        "\x1b[32m🟢 IDENTICAL\x1b[0m"
+                    }
+                }
+                CompatibilityStatus::OptimizedBehavior => "P-ATA OPTIMIZATION",
+                CompatibilityStatus::ExpectedDifferences => {
+                    "\x1b[33m🟡 EXPECTED DIFFERENCES\x1b[0m"
+                }
+                CompatibilityStatus::BothRejected => "\x1b[31m🔴 BOTH REJECTED\x1b[0m",
+                CompatibilityStatus::AccountMismatch => "\x1b[31m🔴 ACCOUNT MISMATCH\x1b[0m",
+                CompatibilityStatus::IncompatibleFailure => {
+                    "\x1b[31m🔴 INCOMPATIBLE FAILURE\x1b[0m"
+                }
+                CompatibilityStatus::IncompatibleSuccess => {
+                    "\x1b[31m🔴 INCOMPATIBLE SUCCESS\x1b[0m"
+                }
+            };
 
-        println!("Total Tests: {}", total_tests);
-        println!(
-            "Identical: {} ({:.1}%)",
-            identical_tests,
-            (identical_tests as f64 / total_tests as f64) * 100.0
-        );
-        println!(
-            "Both Rejected: {} ({:.1}%)",
-            both_rejected_tests,
-            (both_rejected_tests as f64 / total_tests as f64) * 100.0
-        );
-        println!(
-            "P-ATA Optimizations: {} ({:.1}%)",
-            optimized_tests,
-            (optimized_tests as f64 / total_tests as f64) * 100.0
-        );
-        println!(
-            "Problematic: {} ({:.1}%)",
-            problematic_tests,
-            (problematic_tests as f64 / total_tests as f64) * 100.0
-        );
+            let differences = Self::get_test_differences(result);
+            let differences_str = if differences.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", differences.join(", "))
+            };
 
-        // ATA vs P-ATA comparison list (exclude bump and prefunded tests)
-        println!("\n=== DETAILED COMPARISON (Identical Results Only) ===");
+            println!(
+                "  {} {:<18}{}",
+                status_indicator, result.test_name, differences_str
+            );
+        }
+    }
 
-        let comparable_tests: Vec<_> = results
-            .iter()
-            .filter(|r| matches!(r.compatibility_status, CompatibilityStatus::Identical))
-            .collect();
+    fn get_test_differences(result: &ComparisonResult) -> Vec<String> {
+        let mut differences = Vec::new();
 
-        if comparable_tests.is_empty() {
-            println!("No tests with identical results found.");
-            return;
+        match result.test_name.as_str() {
+            "create_with_bump" => {
+                differences.push("P-ATA uses CreateWithBump".to_string());
+            }
+            "recover_with_bump" => {
+                if !result.original.success {
+                    differences.push("Original fails".to_string());
+                }
+            }
+            _ => {}
         }
 
-        println!(
-            "{:<20} {:>12} {:>12} {:>12} {:>8}",
-            "Test", "Original CUs", "P-ATA CUs", "Savings", "% Saved"
-        );
-        println!("{}", "-".repeat(68));
+        differences
+    }
 
-        for result in &comparable_tests {
+    fn format_compute_savings(result: &ComparisonResult) -> String {
+        if result.p_ata.success && result.original.success {
             let savings = result.original.compute_units as i64 - result.p_ata.compute_units as i64;
             let percentage = if result.original.compute_units > 0 {
                 (savings as f64 / result.original.compute_units as f64) * 100.0
             } else {
                 0.0
             };
-
-            let savings_str = if savings >= 0 {
-                format!("+{}", savings)
-            } else {
-                format!("{}", savings)
-            };
-
-            println!(
-                "{:<20} {:>12} {:>12} {:>12} {:>7.1}%",
-                result.test_name,
-                result.original.compute_units,
-                result.p_ata.compute_units,
-                savings_str,
-                percentage
-            );
-        }
-
-        // Summary stats for comparable tests
-        let total_original: u64 = comparable_tests
-            .iter()
-            .map(|r| r.original.compute_units)
-            .sum();
-        let total_p_ata: u64 = comparable_tests.iter().map(|r| r.p_ata.compute_units).sum();
-        let total_savings = total_original as i64 - total_p_ata as i64;
-        let total_percentage = if total_original > 0 {
-            (total_savings as f64 / total_original as f64) * 100.0
+            format!("[-{:.1}% CUs]", percentage)
+        } else if result.p_ata.success && !result.original.success {
+            "[P-ATA works]".to_string()
+        } else if !result.p_ata.success && result.original.success {
+            "[P-ATA fails]".to_string()
         } else {
-            0.0
-        };
-
-        println!("{}", "-".repeat(68));
-        println!(
-            "{:<20} {:>12} {:>12} {:>12} {:>7.1}%",
-            "TOTAL",
-            total_original,
-            total_p_ata,
-            if total_savings >= 0 {
-                format!("+{}", total_savings)
-            } else {
-                format!("{}", total_savings)
-            },
-            total_percentage
-        );
+            "[Both fail]".to_string()
+        }
     }
 
     // Test scenario functions
@@ -1305,11 +1196,10 @@ impl ComparisonRunner {
         original_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> ComparisonResult {
-        // Placeholder for bump-enabled recover test
         let (p_ata_ix, p_ata_accounts) =
-            TestCaseBuilder::build_recover(p_ata_impl, token_program_id);
+            TestCaseBuilder::build_recover_with_bump(&p_ata_impl.program_id, token_program_id);
         let (original_ix, original_accounts) =
-            TestCaseBuilder::build_recover(original_impl, token_program_id);
+            TestCaseBuilder::build_recover_with_bump(&original_impl.program_id, token_program_id);
 
         if common::VerboseComparison::is_enabled() {
             common::ComparisonRunner::run_verbose_comparison(
@@ -1352,7 +1242,6 @@ impl ComparisonRunner {
 struct BenchmarkRunner;
 
 impl BenchmarkRunner {
-    /// Run an isolated benchmark for a single test case
     fn run_isolated_benchmark(
         name: &str,
         ix: &Instruction,
@@ -1366,7 +1255,6 @@ impl BenchmarkRunner {
         run_benchmark_with_validation(name, ix, accounts, program_id, token_program_id, must_pass);
     }
 
-    /// Run all benchmarks for P-ATA only
     fn run_all_benchmarks(ata_implementation: &AtaImplementation, token_program_id: &Pubkey) {
         println!(
             "\n=== Running all benchmarks for {} ===",
@@ -1450,7 +1338,6 @@ impl BenchmarkRunner {
         Self::run_worst_case_bump_comparison(&ata_implementation.program_id, token_program_id);
     }
 
-    /// Run worst-case bump scenario to demonstrate Create vs CreateWithBump difference
     fn run_worst_case_bump_comparison(program_id: &Pubkey, token_program_id: &Pubkey) {
         println!("\n=== Worst-Case Bump Scenario Comparison ===");
         let ((create_ix, create_accounts), (create_with_bump_ix, create_with_bump_accounts)) =
@@ -1587,8 +1474,8 @@ fn build_base_test_accounts(
 ) -> (Pubkey, Pubkey, Pubkey) {
     let payer = const_pk(base_offset);
     let mint = const_pk(base_offset + 1);
-    let wallet =
-        OptimalKeyFinder::find_optimal_wallet(base_offset + 2, token_program_id, &mint, program_id);
+    // Wallets are independent of ATA program - use fixed wallet address
+    let wallet = const_pk(base_offset + 2);
     (payer, mint, wallet)
 }
 

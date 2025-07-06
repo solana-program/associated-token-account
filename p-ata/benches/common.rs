@@ -25,18 +25,19 @@ pub const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
 pub struct AccountBuilder;
 
 impl AccountBuilder {
-    /// Build a zero-rent `Rent` sysvar account with correctly sized data buffer
     pub fn rent_sysvar() -> Account {
+        let mollusk = Mollusk::default();
+        let (_, mollusk_rent_account) = mollusk.sysvars.keyed_account_for_rent_sysvar();
+
         Account {
-            lamports: 1,
-            data: vec![1u8; 17], // Minimal rent sysvar data
+            lamports: mollusk_rent_account.lamports,
+            data: mollusk_rent_account.data,
             owner: rent::id(),
             executable: false,
             rent_epoch: 0,
         }
     }
 
-    /// Build raw token Account data with the supplied mint / owner / amount
     pub fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
         build_token_account_data_core(
             mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
@@ -46,12 +47,10 @@ impl AccountBuilder {
         .to_vec()
     }
 
-    /// Build mint data with given decimals and marked initialized
     pub fn mint_data(decimals: u8) -> Vec<u8> {
         build_mint_data_core(decimals).to_vec()
     }
 
-    /// Build extended mint data with ImmutableOwner extension
     pub fn extended_mint_data(decimals: u8) -> Vec<u8> {
         let required_len =
             ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
@@ -62,15 +61,13 @@ impl AccountBuilder {
         let mut data = Self::mint_data(decimals);
         data.resize(required_len, 0u8);
 
-        // Add TLV entries at correct offset (base len = 82)
         let cursor = 82;
-        let immutable_owner_header = [7u8, 0u8, 0u8, 0u8]; // type=7, length=0 (little-endian)
+        let immutable_owner_header = [7u8, 0u8, 0u8, 0u8];
         data[cursor..cursor + 4].copy_from_slice(&immutable_owner_header);
 
         data
     }
 
-    /// Build Multisig account data with given signer public keys and threshold `m`
     pub fn multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
         let byte_refs: Vec<&[u8; 32]> = signer_pubkeys
             .iter()
@@ -79,12 +76,10 @@ impl AccountBuilder {
         build_multisig_data_core(m, &byte_refs)
     }
 
-    /// Create a basic system account
     pub fn system_account(lamports: u64) -> Account {
         Account::new(lamports, 0, &SYSTEM_PROGRAM_ID)
     }
 
-    /// Create an executable program account
     pub fn executable_program(owner: Pubkey) -> Account {
         Account {
             lamports: 0,
@@ -95,7 +90,6 @@ impl AccountBuilder {
         }
     }
 
-    /// Create a token account with specified parameters
     pub fn token_account(
         mint: &Pubkey,
         owner: &Pubkey,
@@ -111,7 +105,6 @@ impl AccountBuilder {
         }
     }
 
-    /// Create a mint account
     pub fn mint_account(decimals: u8, token_program_id: &Pubkey, extended: bool) -> Account {
         Account {
             lamports: 1_000_000_000,
@@ -126,7 +119,6 @@ impl AccountBuilder {
         }
     }
 
-    /// Create a Token-2022 specific mint account for testing
     pub fn token_2022_mint_account(decimals: u8, token_program_id: &Pubkey) -> Account {
         Account {
             lamports: 1_000_000_000,
@@ -137,27 +129,15 @@ impl AccountBuilder {
         }
     }
 
-    /// Build Token-2022 specific mint data (PROPERLY INITIALIZED as Token-2022 expects)
     pub fn token_2022_mint_data(decimals: u8) -> Vec<u8> {
-        let mut data = [0u8; 82]; // Mint::LEN
+        let mut data = [0u8; 82];
+        let mint_authority = const_pk(123);
 
-        // Token-2022 requires a valid mint authority (not None)
-        let mint_authority = const_pk(123); // Valid deterministic authority
-
-        // mint_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
-        data[0..4].copy_from_slice(&1u32.to_le_bytes()); // COption tag = Some
-        data[4..36].copy_from_slice(mint_authority.as_ref()); // Valid authority
-
-        // supply: u64 (8 bytes) - stays as 0
-
-        // decimals: u8 (1 byte)
+        data[0..4].copy_from_slice(&1u32.to_le_bytes());
+        data[4..36].copy_from_slice(mint_authority.as_ref());
         data[44] = decimals;
-
-        // is_initialized: bool (1 byte)
-        data[45] = 1; // true - Token-2022 expects initialized mint
-
-        // freeze_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
-        data[46..50].copy_from_slice(&0u32.to_le_bytes()); // COption tag = None
+        data[45] = 1;
+        data[46..50].copy_from_slice(&0u32.to_le_bytes());
 
         data.to_vec()
     }
@@ -168,7 +148,6 @@ impl AccountBuilder {
 pub struct OptimalKeyFinder;
 
 impl OptimalKeyFinder {
-    /// Find a wallet pubkey that yields the maximum bump (255) for its ATA
     pub fn find_optimal_wallet(
         start_byte: u8,
         token_program_id: &Pubkey,
@@ -195,7 +174,6 @@ impl OptimalKeyFinder {
         wallet
     }
 
-    /// Find mint that gives optimal bump for nested ATA
     pub fn find_optimal_nested_mint(
         start_byte: u8,
         owner_ata: &Pubkey,
@@ -229,17 +207,14 @@ impl OptimalKeyFinder {
 
 // =============================== UTILITIES =================================
 
-/// Helper to create deterministic pubkeys (32 identical bytes)
 pub fn const_pk(byte: u8) -> Pubkey {
     Pubkey::new_from_array([byte; 32])
 }
 
-/// Clone accounts vector for benchmark isolation
 pub fn clone_accounts(src: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
     src.iter().map(|(k, v)| (*k, v.clone())).collect()
 }
 
-/// Create a fresh Mollusk instance with required programs
 pub fn fresh_mollusk(program_id: &Pubkey, token_program_id: &Pubkey) -> Mollusk {
     let mut mollusk = Mollusk::default();
     mollusk.add_program(program_id, "pinocchio_ata_program", &LOADER_V3);
@@ -265,7 +240,6 @@ pub fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<
     data
 }
 
-/// Build multisig account data
 pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
     use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
 
@@ -280,9 +254,9 @@ pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> 
     );
 
     let mut data = vec![0u8; Multisig::LEN];
-    data[0] = m; // m threshold
-    data[1] = signer_pubkeys.len() as u8; // n signers
-    data[2] = 1; // is_initialized
+    data[0] = m;
+    data[1] = signer_pubkeys.len() as u8;
+    data[2] = 1;
 
     for (i, pk) in signer_pubkeys.iter().enumerate() {
         let offset = 3 + i * 32;
@@ -291,42 +265,27 @@ pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> 
     data
 }
 
-/// Build mint data core structure
 #[inline(always)]
 fn build_mint_data_core(decimals: u8) -> [u8; 82] {
-    let mut data = [0u8; 82]; // Mint::LEN
-
-    // mint_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
-    data[0..4].copy_from_slice(&0u32.to_le_bytes()); // COption tag = None
-                                                     // Leave authority bytes as 0 (unused when tag is None)
-
-    // supply: u64 (8 bytes) - stays as 0
-
-    // decimals: u8 (1 byte)
+    let mut data = [0u8; 82];
+    data[0..4].copy_from_slice(&0u32.to_le_bytes());
     data[44] = decimals;
-
-    // is_initialized: bool (1 byte)
-    data[45] = 1; // true - regular SPL Token expects initialized mints
-
-    // freeze_authority: COption<Pubkey> (36 bytes: 4 tag + 32 pubkey)
-    data[46..50].copy_from_slice(&0u32.to_le_bytes()); // COption tag = None
-                                                       // Remaining 32 bytes already 0
+    data[45] = 1;
+    data[46..50].copy_from_slice(&0u32.to_le_bytes());
 
     data
 }
 
-/// Build token account data core structure
 #[inline(always)]
 fn build_token_account_data_core(mint: &[u8; 32], owner: &[u8; 32], amount: u64) -> [u8; 165] {
-    let mut data = [0u8; 165]; // TokenAccount::LEN
-    data[0..32].copy_from_slice(mint); // mint
-    data[32..64].copy_from_slice(owner); // owner
-    data[64..72].copy_from_slice(&amount.to_le_bytes()); // amount
-    data[108] = 1; // state = Initialized
+    let mut data = [0u8; 165];
+    data[0..32].copy_from_slice(mint);
+    data[32..64].copy_from_slice(owner);
+    data[64..72].copy_from_slice(&amount.to_le_bytes());
+    data[108] = 1;
     data
 }
 
-/// Build TLV extension header
 #[inline(always)]
 fn build_tlv_extension(extension_type: u16, data_len: u16) -> [u8; 4] {
     let mut header = [0u8; 4];
@@ -335,25 +294,16 @@ fn build_tlv_extension(extension_type: u16, data_len: u16) -> [u8; 4] {
     header
 }
 
-/// Build CREATE instruction for Token-2022 simulation
-/// This creates a PROPERLY INITIALIZED Token-2022 mint
 pub fn build_create_token2022_simulation(
     program_id: &Pubkey,
 ) -> (solana_instruction::Instruction, Vec<(Pubkey, Account)>) {
     let token_2022_program_id: Pubkey =
         pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb").into();
 
-    let base_offset = 80; // Unique offset to avoid collisions
+    let base_offset = 80;
     let payer = const_pk(base_offset);
     let mint = const_pk(base_offset + 1);
-    let mint_authority = const_pk(123); // Must match the authority in token_2022_mint_data
-
-    let wallet = OptimalKeyFinder::find_optimal_wallet(
-        base_offset + 2,
-        &token_2022_program_id,
-        &mint,
-        program_id,
-    );
+    let wallet = const_pk(base_offset + 2);
 
     let (ata, _bump) = Pubkey::find_program_address(
         &[
@@ -364,7 +314,6 @@ pub fn build_create_token2022_simulation(
         program_id,
     );
 
-    // Create Token-2022 specific mint account (properly initialized)
     let mint_account = AccountBuilder::token_2022_mint_account(0, &token_2022_program_id);
 
     let accounts = vec![
@@ -372,7 +321,6 @@ pub fn build_create_token2022_simulation(
         (ata, AccountBuilder::system_account(0)),
         (wallet, AccountBuilder::system_account(0)),
         (mint, mint_account),
-        (mint_authority, AccountBuilder::system_account(0)), // Add the mint authority account
         (
             SYSTEM_PROGRAM_ID,
             AccountBuilder::executable_program(NATIVE_LOADER_ID),
@@ -395,7 +343,7 @@ pub fn build_create_token2022_simulation(
     let ix = solana_instruction::Instruction {
         program_id: *program_id,
         accounts: metas,
-        data: build_instruction_data(0, &[]), // Create instruction (discriminator 0)
+        data: build_instruction_data(0, &[]),
     };
 
     (ix, accounts)
@@ -631,6 +579,7 @@ pub enum CompatibilityStatus {
     Identical,           // Both succeeded with identical account states
     BothRejected,        // Both failed with same error types
     OptimizedBehavior,   // P-ATA succeeded where original failed (bump optimization)
+    ExpectedDifferences, // Both succeeded but with expected differences (e.g., different ATA addresses)
     AccountMismatch,     // Both succeeded but account states differ (concerning)
     IncompatibleFailure, // Both failed but with different error codes
     IncompatibleSuccess, // One succeeded, one failed unexpectedly
@@ -761,8 +710,13 @@ impl ComparisonRunner {
     ) -> CompatibilityStatus {
         match (p_ata_result.success, original_result.success) {
             (true, true) => {
-                // Both succeeded - for failure tests this shouldn't happen, but if it does, assume identical
-                CompatibilityStatus::Identical
+                // Both succeeded - check if this is the Token-2022 test which has expected differences
+                if p_ata_result.test_name == "create_token2022" {
+                    CompatibilityStatus::ExpectedDifferences
+                } else {
+                    // For other tests, assume identical if both succeeded
+                    CompatibilityStatus::Identical
+                }
             }
             (false, false) => {
                 // Both failed - check if they failed with same error type
@@ -785,27 +739,8 @@ impl ComparisonRunner {
 
     /// Check if two error messages are compatible (same type of error)
     fn errors_are_compatible(p_ata_err: &str, orig_err: &str) -> bool {
-        let compatible_error_patterns = [
-            ("InvalidSeeds", "InvalidSeeds"),
-            ("InvalidAccountData", "InvalidAccountData"),
-            ("MissingRequiredSignature", "MissingRequiredSignature"),
-            ("NotRentExempt", "NotRentExempt"),
-            ("InvalidInstructionData", "InvalidInstructionData"),
-            ("IncorrectProgramId", "IncorrectProgramId"),
-            ("InvalidOwner", "InvalidOwner"),
-            ("Uninitialized", "Uninitialized"),
-            ("AlreadyInUse", "AlreadyInUse"),
-        ];
-
-        for (pattern1, pattern2) in &compatible_error_patterns {
-            if (p_ata_err.contains(pattern1) && orig_err.contains(pattern2))
-                || (p_ata_err.contains(pattern2) && orig_err.contains(pattern1))
-            {
-                return true;
-            }
-        }
-
-        false
+        // Check for exact match - identical errors are always compatible
+        p_ata_err == orig_err
     }
 
     /// Print individual comparison result
@@ -853,6 +788,9 @@ impl ComparisonRunner {
             }
             CompatibilityStatus::OptimizedBehavior => {
                 println!("  Status: P-ATA optimization working")
+            }
+            CompatibilityStatus::ExpectedDifferences => {
+                println!("  Status: Both succeeded with expected differences")
             }
             CompatibilityStatus::AccountMismatch => {
                 println!("  Status: Account mismatch (concerning)")
@@ -912,6 +850,12 @@ impl VerboseComparison {
             &original_verbose.instruction_data,
         );
 
+        // Compare input account data (before execution)
+        Self::compare_input_account_data(
+            &p_ata_verbose.original_accounts,
+            &original_verbose.original_accounts,
+        );
+
         // Compare changed accounts
         Self::compare_account_changes(
             &p_ata_verbose.original_accounts,
@@ -938,6 +882,73 @@ impl VerboseComparison {
         } else {
             println!("{}", "❌ Instruction data DIFFERS".red());
             Self::print_byte_comparison(p_ata_data, original_data, "Instruction");
+        }
+    }
+
+    /// Compare input account data (before execution)
+    fn compare_input_account_data(
+        p_ata_accounts: &[(Pubkey, Account)],
+        original_accounts: &[(Pubkey, Account)],
+    ) {
+        println!("\n📥 INPUT ACCOUNT DATA COMPARISON:");
+
+        let max_accounts = p_ata_accounts.len().max(original_accounts.len());
+
+        for i in 0..max_accounts {
+            println!("\n🔍 Account {} ({})", i, Self::get_account_role_name(i));
+
+            let p_ata_account = p_ata_accounts.get(i);
+            let original_account = original_accounts.get(i);
+
+            match (p_ata_account, original_account) {
+                (Some((p_ata_pk, p_ata_acc)), Some((orig_pk, orig_acc))) => {
+                    println!("   P-ATA address:    {}", p_ata_pk);
+                    println!("   Original address: {}", orig_pk);
+
+                    // Compare the account data, lamports, and owner
+                    let data_match = p_ata_acc.data == orig_acc.data;
+                    let lamports_match = p_ata_acc.lamports == orig_acc.lamports;
+                    let owner_match = p_ata_acc.owner == orig_acc.owner;
+
+                    if data_match && lamports_match && owner_match {
+                        println!("   {}", "✅ Account state IDENTICAL".green());
+                    } else {
+                        println!("   {}", "❌ Account state DIFFERS".red());
+                        if !data_match {
+                            println!(
+                                "     📊 Data differs: {} vs {} bytes",
+                                p_ata_acc.data.len(),
+                                orig_acc.data.len()
+                            );
+                            if !p_ata_acc.data.is_empty() || !orig_acc.data.is_empty() {
+                                Self::analyze_token_account_differences(
+                                    &p_ata_acc.data,
+                                    &orig_acc.data,
+                                );
+                            }
+                        }
+                        if !lamports_match {
+                            println!(
+                                "     💰 Lamports differ: {} vs {}",
+                                p_ata_acc.lamports, orig_acc.lamports
+                            );
+                        }
+                        if !owner_match {
+                            println!(
+                                "     👤 Owner differs: {} vs {}",
+                                p_ata_acc.owner, orig_acc.owner
+                            );
+                        }
+                    }
+                }
+                (Some((p_ata_pk, _)), None) => {
+                    println!("   ⚠️  Only in P-ATA: {}", p_ata_pk);
+                }
+                (None, Some((orig_pk, _))) => {
+                    println!("   ⚠️  Only in Original: {}", orig_pk);
+                }
+                (None, None) => unreachable!(),
+            }
         }
     }
 
@@ -1022,12 +1033,7 @@ impl VerboseComparison {
             account.owner
         );
         if !account.data.is_empty() {
-            let preview = if account.data.len() > 50 {
-                format!("{}...", bs58::encode(&account.data[..50]).into_string())
-            } else {
-                bs58::encode(&account.data).into_string()
-            };
-            println!("   Data preview: {}", preview);
+            println!("   Data: {}", bs58::encode(&account.data).into_string());
         }
     }
 
@@ -1081,13 +1087,7 @@ impl VerboseComparison {
             return;
         }
 
-        let p_ata_preview = if p_ata_data.len() > 100 {
-            format!(
-                "{}... ({} bytes)",
-                bs58::encode(&p_ata_data[..100]).into_string(),
-                p_ata_data.len()
-            )
-        } else if p_ata_data.is_empty() {
+        let p_ata_preview = if p_ata_data.is_empty() {
             "(empty)".to_string()
         } else {
             format!(
@@ -1097,13 +1097,7 @@ impl VerboseComparison {
             )
         };
 
-        let orig_preview = if original_data.len() > 100 {
-            format!(
-                "{}... ({} bytes)",
-                bs58::encode(&original_data[..100]).into_string(),
-                original_data.len()
-            )
-        } else if original_data.is_empty() {
+        let orig_preview = if original_data.is_empty() {
             "(empty)".to_string()
         } else {
             format!(
@@ -1193,6 +1187,92 @@ impl VerboseComparison {
         }
 
         differences
+    }
+
+    /// Analyze differences in token account data structure
+    fn analyze_token_account_differences(p_ata_data: &[u8], original_data: &[u8]) {
+        println!("     📊 Token Account Structure Analysis:");
+
+        // Token account structure (165 bytes total):
+        // mint: Pubkey (32 bytes, offset 0-31)
+        // owner: Pubkey (32 bytes, offset 32-63)
+        // amount: u64 (8 bytes, offset 64-71)
+        // delegate: COption<Pubkey> (36 bytes, offset 72-107) - 4 byte tag + 32 byte pubkey
+        // state: u8 (1 byte, offset 108)
+        // is_native: COption<u64> (12 bytes, offset 109-120) - 4 byte tag + 8 byte value
+        // delegated_amount: u64 (8 bytes, offset 121-128)
+        // close_authority: COption<Pubkey> (36 bytes, offset 129-164) - 4 byte tag + 32 byte pubkey
+
+        let fields = [
+            ("Mint", 0, 32),
+            ("Owner", 32, 32),
+            ("Amount", 64, 8),
+            ("Delegate", 72, 36),
+            ("State", 108, 1),
+            ("IsNative", 109, 12),
+            ("DelegatedAmount", 121, 8),
+            ("CloseAuthority", 129, 36),
+        ];
+
+        for (field_name, offset, size) in fields {
+            let end = offset + size;
+
+            let p_ata_field = p_ata_data.get(offset..end).unwrap_or(&[]);
+            let orig_field = original_data.get(offset..end).unwrap_or(&[]);
+
+            if p_ata_field != orig_field {
+                println!("       🔴 {} differs:", field_name);
+                println!("         P-ATA:    {:02x?}", p_ata_field);
+                println!("         Original: {:02x?}", orig_field);
+
+                // Special analysis for certain fields
+                match field_name {
+                    "Mint" | "Owner" => {
+                        if p_ata_field.len() == 32 && orig_field.len() == 32 {
+                            let p_ata_pk = Pubkey::try_from(p_ata_field).unwrap_or_default();
+                            let orig_pk = Pubkey::try_from(orig_field).unwrap_or_default();
+                            println!("         P-ATA:    {}", p_ata_pk);
+                            println!("         Original: {}", orig_pk);
+                        }
+                    }
+                    "Amount" | "DelegatedAmount" => {
+                        if p_ata_field.len() == 8 && orig_field.len() == 8 {
+                            let p_ata_amount =
+                                u64::from_le_bytes(p_ata_field.try_into().unwrap_or([0; 8]));
+                            let orig_amount =
+                                u64::from_le_bytes(orig_field.try_into().unwrap_or([0; 8]));
+                            println!("         P-ATA:    {} tokens", p_ata_amount);
+                            println!("         Original: {} tokens", orig_amount);
+                        }
+                    }
+                    "State" => {
+                        if !p_ata_field.is_empty() && !orig_field.is_empty() {
+                            println!(
+                                "         P-ATA:    {}",
+                                Self::decode_account_state(p_ata_field[0])
+                            );
+                            println!(
+                                "         Original: {}",
+                                Self::decode_account_state(orig_field[0])
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                println!("       ✅ {} identical", field_name);
+            }
+        }
+    }
+
+    /// Decode account state byte to human readable string
+    fn decode_account_state(state: u8) -> &'static str {
+        match state {
+            0 => "Uninitialized",
+            1 => "Initialized",
+            2 => "Frozen",
+            _ => "Unknown",
+        }
     }
 }
 

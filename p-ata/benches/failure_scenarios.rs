@@ -18,31 +18,35 @@ const WRONG_PROGRAM_ID: Pubkey = Pubkey::new_from_array([3u8; 32]);
 
 // ================================ FAILURE TEST BUILDERS ================================
 
+// Helper functions for consistent account building (matching ata_instruction_benches.rs pattern)
+fn build_base_failure_accounts(base_offset: u8) -> (Pubkey, Pubkey, Pubkey) {
+    let payer = const_pk(base_offset);
+    let mint = const_pk(base_offset + 1);
+    // Wallets are independent of ATA program - use fixed wallet address
+    let wallet = const_pk(base_offset + 2);
+    (payer, mint, wallet)
+}
+
 struct FailureTestBuilder;
 
 impl FailureTestBuilder {
-    /// Build CREATE failure test with wrong payer owner
     fn build_fail_wrong_payer_owner(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(100);
-        let mint = const_pk(101);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(102, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(100);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
         );
 
         let accounts = vec![
-            // Payer owned by wrong program (should be system program)
             (
                 payer,
                 Account {
                     lamports: 1_000_000_000,
                     data: Vec::new(),
-                    owner: *token_program_id, // Wrong! Should be system program
+                    owner: *token_program_id,
                     executable: false,
                     rent_epoch: 0,
                 },
@@ -79,15 +83,11 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with payer not signed
     fn build_fail_payer_not_signed(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(110);
-        let mint = const_pk(111);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(112, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(110);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -127,15 +127,11 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with wrong system program
     fn build_fail_wrong_system_program(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(120);
-        let mint = const_pk(121);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(122, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(120);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -176,15 +172,11 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with wrong token program
     fn build_fail_wrong_token_program(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(130);
-        let mint = const_pk(131);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(132, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(130);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -225,23 +217,18 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with insufficient funds
     fn build_fail_insufficient_funds(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(140);
-        let mint = const_pk(141);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(142, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(140);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
         );
 
         let accounts = vec![
-            // Payer with insufficient funds
-            (payer, AccountBuilder::system_account(1000)), // Very low balance
+            (payer, AccountBuilder::system_account(1000)),
             (ata, AccountBuilder::system_account(0)),
             (wallet, AccountBuilder::system_account(0)),
             (
@@ -274,16 +261,12 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with wrong ATA address (doesn't match PDA derivation)
     fn build_fail_wrong_ata_address(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(170);
-        let mint = const_pk(171);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(172, token_program_id, &mint, program_id);
-        let wrong_ata = const_pk(173); // Wrong ATA address (doesn't match PDA)
+        let (payer, mint, wallet) = build_base_failure_accounts(170);
+        let wrong_ata = const_pk(173);
 
         let accounts = vec![
             (payer, AccountBuilder::system_account(1_000_000_000)),
@@ -324,10 +307,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(180);
-        let mint = const_pk(181);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(182, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(180);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -379,10 +359,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(190);
-        let mint = const_pk(191);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(192, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(190);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -434,10 +411,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(00);
-        let mint = const_pk(01);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(202, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(200);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -635,10 +609,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(30);
-        let mint = const_pk(31);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(232, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(230);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -683,10 +654,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(40);
-        let mint = const_pk(41);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(242, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(240);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -731,10 +699,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(50);
-        let mint = const_pk(51);
-        let wallet =
-            OptimalKeyFinder::find_optimal_wallet(252, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(250);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -786,9 +751,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(60);
-        let mint = const_pk(61);
-        let wallet = OptimalKeyFinder::find_optimal_wallet(62, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(65);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -1031,9 +994,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(00);
-        let mint = const_pk(01);
-        let wallet = OptimalKeyFinder::find_optimal_wallet(02, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(75);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -1088,10 +1049,8 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(10);
-        let mint = const_pk(11);
-        let wrong_mint = const_pk(12);
-        let wallet = OptimalKeyFinder::find_optimal_wallet(13, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(85);
+        let wrong_mint = const_pk(88);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -1144,10 +1103,8 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(0);
-        let mint = const_pk(1);
-        let wallet = OptimalKeyFinder::find_optimal_wallet(22, token_program_id, &mint, program_id);
-        let wrong_owner = const_pk(3);
+        let (payer, mint, wallet) = build_base_failure_accounts(45);
+        let wrong_owner = const_pk(48);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -1196,9 +1153,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(30);
-        let mint = const_pk(31);
-        let wallet = OptimalKeyFinder::find_optimal_wallet(32, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(50);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -1307,9 +1262,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(50);
-        let mint = const_pk(51);
-        let wallet = OptimalKeyFinder::find_optimal_wallet(52, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(55);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -1365,9 +1318,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(60);
-        let mint = const_pk(61);
-        let wallet = OptimalKeyFinder::find_optimal_wallet(62, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(25);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -1423,9 +1374,7 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let payer = const_pk(70);
-        let mint = const_pk(71);
-        let wallet = OptimalKeyFinder::find_optimal_wallet(72, token_program_id, &mint, program_id);
+        let (payer, mint, wallet) = build_base_failure_accounts(35);
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -1731,14 +1680,9 @@ impl FailureTestRunner {
         // Build test for P-ATA
         let (p_ata_ix, p_ata_accounts) = test_builder(&p_ata_impl.program_id, token_program_id);
 
-        // Adapt instruction for original ATA (strip bump optimizations if needed)
-        let original_ix_data = original_impl.adapt_instruction_data(p_ata_ix.data.clone());
-        let original_ix = Instruction {
-            program_id: original_impl.program_id,
-            accounts: p_ata_ix.accounts.clone(),
-            data: original_ix_data,
-        };
-        let original_accounts = p_ata_accounts.clone(); // Same accounts for both
+        // Build test for Original ATA (separate account set with correct ATA addresses)
+        let (original_ix, original_accounts) =
+            test_builder(&original_impl.program_id, token_program_id);
 
         // Run benchmarks
         let p_ata_result = ComparisonRunner::run_single_benchmark(
@@ -1989,6 +1933,15 @@ impl FailureTestRunner {
             .iter()
             .filter(|r| matches!(r.compatibility_status, CompatibilityStatus::Identical))
             .count();
+        let optimized_behavior = results
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.compatibility_status,
+                    CompatibilityStatus::OptimizedBehavior
+                )
+            })
+            .count();
 
         println!("Total Failure Tests: {}", total_tests);
         println!(
@@ -1997,9 +1950,14 @@ impl FailureTestRunner {
             (both_rejected as f64 / total_tests as f64) * 100.0
         );
         println!(
-            "Incompatible Failure Modes: {} ({:.1}%)",
+            "Failed with Different Errors: {} ({:.1}%)",
             incompatible_failures,
             (incompatible_failures as f64 / total_tests as f64) * 100.0
+        );
+        println!(
+            "Optimized Behavior: {} ({:.1}%)",
+            optimized_behavior,
+            (optimized_behavior as f64 / total_tests as f64) * 100.0
         );
         println!(
             "Unexpected Success/Failure: {} ({:.1}%)",
@@ -2012,20 +1970,101 @@ impl FailureTestRunner {
             (both_succeeded as f64 / total_tests as f64) * 100.0
         );
 
-        if incompatible_failures > 0 || unexpected_success > 0 {
-            println!("\n⚠️  COMPATIBILITY ISSUES DETECTED:");
+        if incompatible_failures > 0 || unexpected_success > 0 || optimized_behavior > 0 {
+            println!("\n⚠️  TESTS WITH DIFFERENT BEHAVIORS:");
             for result in results
                 .iter()
                 .filter(|r| !matches!(r.compatibility_status, CompatibilityStatus::BothRejected))
             {
-                println!(
-                    "  - {}: {:?}",
-                    result.test_name, result.compatibility_status
-                );
+                match &result.compatibility_status {
+                    CompatibilityStatus::IncompatibleFailure => {
+                        println!("  {} - Different Error Messages:", result.test_name);
+                        if result.p_ata.success {
+                            println!("    P-ATA:     Success");
+                        } else {
+                            println!(
+                                "    P-ATA:     {}",
+                                result
+                                    .p_ata
+                                    .error_message
+                                    .as_deref()
+                                    .unwrap_or("Unknown error")
+                            );
+                        }
+                        if result.original.success {
+                            println!("    Original:  Success");
+                        } else {
+                            println!(
+                                "    Original:  {}",
+                                result
+                                    .original
+                                    .error_message
+                                    .as_deref()
+                                    .unwrap_or("Unknown error")
+                            );
+                        }
+                    }
+                    CompatibilityStatus::OptimizedBehavior => {
+                        println!("  {} - Optimized Behavior:", result.test_name);
+                        if result.p_ata.success {
+                            println!("    P-ATA:     Success");
+                        } else {
+                            println!(
+                                "    P-ATA:     {}",
+                                result
+                                    .p_ata
+                                    .error_message
+                                    .as_deref()
+                                    .unwrap_or("Unknown error")
+                            );
+                        }
+                        if result.original.success {
+                            println!("    Original:  Success");
+                        } else {
+                            println!(
+                                "    Original:  {}",
+                                result
+                                    .original
+                                    .error_message
+                                    .as_deref()
+                                    .unwrap_or("Unknown error")
+                            );
+                        }
+                    }
+                    CompatibilityStatus::IncompatibleSuccess => {
+                        println!("  {} - Incompatible Success/Failure:", result.test_name);
+                        if result.p_ata.success {
+                            println!("    P-ATA:     Success");
+                        } else {
+                            println!(
+                                "    P-ATA:     {}",
+                                result
+                                    .p_ata
+                                    .error_message
+                                    .as_deref()
+                                    .unwrap_or("Unknown error")
+                            );
+                        }
+                        if result.original.success {
+                            println!("    Original:  Success");
+                        } else {
+                            println!(
+                                "    Original:  {}",
+                                result
+                                    .original
+                                    .error_message
+                                    .as_deref()
+                                    .unwrap_or("Unknown error")
+                            );
+                        }
+                    }
+                    _ => {
+                        println!("  {} - {:?}", result.test_name, result.compatibility_status);
+                    }
+                }
             }
         } else if both_rejected == total_tests {
-            println!("\n✅ ALL FAILURE TESTS SHOW COMPATIBLE BEHAVIOR");
-            println!("   P-ATA maintains the same security properties as original ATA");
+            println!("\n✅ ALL FAILURE TESTS SHOW IDENTICAL ERRORS");
         }
     }
 }

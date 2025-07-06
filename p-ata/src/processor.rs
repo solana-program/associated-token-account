@@ -144,7 +144,7 @@ fn check_idempotent_account(
     if idempotent && unsafe { ata_acc.owner() } == token_prog.key() {
         let ata_state = get_token_account_unchecked(ata_acc);
         // validation is more or less the point of CreateIdempotent,
-        // so these remain
+        // so TBD on these staying or going
         validate_token_account_owner(ata_state, wallet.key())?;
         validate_token_account_mint(ata_state, mint_account.key())?;
         return Ok(true); // Account exists and is valid
@@ -320,16 +320,6 @@ pub fn process_recover(
         }
     };
 
-    // No expensive seed verification for `nested_ata` and `dest_ata`; the
-    // subsequent owner checks on their account data provide sufficient safety
-    // for practical purposes.
-
-    // --- Wallet signature / multisig handling ---
-    // If `wallet` signed directly, all good. Otherwise, allow a Multisig account
-    // owned by the token program, provided that the required number (m) of
-    // its signer keys signed this instruction.  Additional signer accounts
-    // must be passed directly after the `token_prog` account.
-
     if !wallet.is_signer() {
         // Check if this is a token-program multisig owner
         if unsafe { wallet.owner() } != token_prog.key() {
@@ -369,6 +359,8 @@ pub fn process_recover(
             return Err(ProgramError::MissingRequiredSignature);
         }
     }
+
+    // Owner_ata and nested_ata validation no longer performed here.
 
     let amount_to_recover = get_token_account_unchecked(nested_ata).amount();
 

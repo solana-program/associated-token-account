@@ -1339,9 +1339,11 @@ impl ComparisonRunner {
                 token_program_id,
             );
             let original_result = common::BenchmarkResult {
+                implementation: "original".to_string(),
+                test_name: test_name.to_string(),
                 success: false,
                 compute_units: 0,
-                error: Some("Original ATA doesn't support RecoverMultisig".to_string()),
+                error_message: Some("Original ATA doesn't support RecoverMultisig".to_string()),
             };
 
             common::ComparisonRunner::create_comparison_result(
@@ -1358,9 +1360,11 @@ impl ComparisonRunner {
                 token_program_id,
             );
             let original_result = common::BenchmarkResult {
+                implementation: "original".to_string(),
+                test_name: test_name.to_string(),
                 success: false,
                 compute_units: 0,
-                error: Some("Original ATA doesn't support RecoverMultisig".to_string()),
+                error_message: Some("Original ATA doesn't support RecoverMultisig".to_string()),
             };
 
             common::ComparisonRunner::create_comparison_result(

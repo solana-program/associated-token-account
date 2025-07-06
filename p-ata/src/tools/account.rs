@@ -6,14 +6,14 @@ use {
         sysvars::rent::Rent,
         ProgramResult,
     },
-    pinocchio_system::instructions::{Assign, CreateAccount},
+    pinocchio_system::instructions::CreateAccount,
 };
 
 #[cfg(feature = "create-account-prefunded")]
 use pinocchio_system::instructions::CreateAccountPrefunded;
 
 #[cfg(not(feature = "create-account-prefunded"))]
-use pinocchio_system::instructions::{Allocate, Transfer};
+use pinocchio_system::instructions::{Allocate, Assign, Transfer};
 
 /// Create a PDA account, given:
 /// - payer: Account to deduct SOL from

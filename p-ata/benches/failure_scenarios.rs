@@ -1870,9 +1870,9 @@ impl FailureTestRunner {
                         || p_ata_error.contains("PrivilegeEscalation")
                             != original_error.contains("PrivilegeEscalation")
                     {
-                        "error_mismatch"
+                        "failed, but different error"
                     } else {
-                        "pass"
+                        "failed with same error"
                     }
                 }
                 (true, false) => "pass", // P-ATA works, original fails (P-ATA optimization)

@@ -852,7 +852,7 @@ impl ComparisonRunner {
                     }
                     (true, false) => {
                         // P-ATA works, Original fails - optimization case
-                        (result.p_ata.compute_units, 0, "optimized")
+                        (result.p_ata.compute_units, 0, "new p-ata case")
                     }
                     _ => continue, // Skip cases where P-ATA fails
                 };

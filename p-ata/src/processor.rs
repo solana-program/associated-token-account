@@ -40,15 +40,6 @@ fn derive_ata_pda(
     )
 }
 
-/// Validate that expected PDA matches actual PDA
-#[inline(always)]
-fn validate_pda(expected: &Pubkey, actual: &Pubkey) -> Result<(), ProgramError> {
-    if expected != actual {
-        return Err(ProgramError::InvalidSeeds);
-    }
-    Ok(())
-}
-
 /// Check if the given program ID is Token-2022
 #[inline(always)]
 fn is_token_2022_program(program_id: &Pubkey) -> bool {
@@ -152,6 +143,8 @@ fn check_idempotent_account(
 ) -> Result<bool, ProgramError> {
     if idempotent && unsafe { ata_acc.owner() } == token_prog.key() {
         let ata_state = get_token_account_unchecked(ata_acc);
+        // validation is more or less the point of CreateIdempotent,
+        // so these remain
         validate_token_account_owner(ata_state, wallet.key())?;
         validate_token_account_mint(ata_state, mint_account.key())?;
         return Ok(true); // Account exists and is valid
@@ -267,13 +260,12 @@ pub fn process_create(
     let bump = match bump_opt {
         Some(provided_bump) => provided_bump,
         None => {
-            let (expected, computed_bump) = derive_ata_pda(
+            let (_, computed_bump) = derive_ata_pda(
                 wallet.key(),
                 token_prog.key(),
                 mint_account.key(),
                 program_id,
             );
-            validate_pda(&expected, ata_acc.key())?;
             computed_bump
         }
     };
@@ -318,13 +310,12 @@ pub fn process_recover(
     let bump = match bump_opt {
         Some(provided_bump) => provided_bump,
         None => {
-            let (owner_pda, computed_bump) = derive_ata_pda(
+            let (_, computed_bump) = derive_ata_pda(
                 wallet.key(),
                 token_prog.key(),
                 owner_mint_account.key(),
                 program_id,
             );
-            validate_pda(&owner_pda, owner_ata.key())?;
             computed_bump
         }
     };
@@ -379,12 +370,7 @@ pub fn process_recover(
         }
     }
 
-    let owner_ata_state = get_token_account_unchecked(owner_ata);
-    validate_token_account_owner(owner_ata_state, wallet.key())?;
-
-    let nested_ata_state = get_token_account_unchecked(nested_ata);
-    validate_token_account_owner(nested_ata_state, owner_ata.key())?;
-    let amount_to_recover = nested_ata_state.amount();
+    let amount_to_recover = get_token_account_unchecked(nested_ata).amount();
 
     let transfer_data = build_transfer_data(amount_to_recover);
 

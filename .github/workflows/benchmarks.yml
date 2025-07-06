@@ -154,7 +154,11 @@ jobs:
             
             # Add failure test data
             jq -r '.failure_tests | to_entries[] | "| \(.key) | \(.value.status) |"' benchmark_results/failure_results.json >> benchmark_results/pr_comment.md
-                        
+            
+            # Add footer
+            echo "" >> benchmark_results/pr_comment.md
+            echo "> 🤖 Byte-for-byte checks instruction, input account data, and changes in accounts." >> benchmark_results/pr_comment.md
+            
             echo "✅ PR comment generated"
           else
             echo "⚠️  No benchmark data available for PR comment"

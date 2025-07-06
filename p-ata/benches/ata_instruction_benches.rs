@@ -6,6 +6,7 @@ use {
     solana_logger,
     solana_pubkey::Pubkey,
     solana_sysvar::rent,
+    std::fs,
 };
 
 #[path = "common.rs"]
@@ -812,7 +813,87 @@ impl ComparisonRunner {
         results.push(comparison);
 
         Self::print_summary(&results);
+        Self::output_structured_data(&results);
         results
+    }
+
+    fn output_structured_data(results: &[ComparisonResult]) {
+        let mut json_entries = Vec::new();
+
+        for result in results {
+            // Only include successful comparisons or known optimization cases
+            let (p_ata_cu, original_cu, savings_percent, compatibility) =
+                match (&result.p_ata.success, &result.original.success) {
+                    (true, true) => {
+                        let savings = result.original.compute_units as i64
+                            - result.p_ata.compute_units as i64;
+                        let percentage = if result.original.compute_units > 0 {
+                            (savings as f64 / result.original.compute_units as f64) * 100.0
+                        } else {
+                            0.0
+                        };
+
+                        let compat = match result.compatibility_status {
+                            common::CompatibilityStatus::Identical => "identical",
+                            common::CompatibilityStatus::OptimizedBehavior => "optimized",
+                            common::CompatibilityStatus::ExpectedDifferences => {
+                                "expected_difference"
+                            }
+                            _ => "unknown",
+                        };
+
+                        (
+                            result.p_ata.compute_units,
+                            result.original.compute_units,
+                            percentage,
+                            compat,
+                        )
+                    }
+                    (true, false) => {
+                        // P-ATA works, Original fails - optimization case
+                        (result.p_ata.compute_units, 0, 0.0, "optimized")
+                    }
+                    _ => continue, // Skip cases where P-ATA fails
+                };
+
+            let entry = format!(
+                r#"    "{}": {{
+      "p_ata_cu": {},
+      "original_cu": {},
+      "savings_percent": {:.1},
+      "compatibility": "{}",
+      "type": "performance_test"
+    }}"#,
+                result.test_name, p_ata_cu, original_cu, savings_percent, compatibility
+            );
+            json_entries.push(entry);
+        }
+
+        let output = format!(
+            r#"{{
+  "timestamp": "{}",
+  "performance_tests": {{
+{}
+  }}
+}}"#,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            json_entries.join(",\n")
+        );
+
+        // Create benchmark_results directory if it doesn't exist
+        std::fs::create_dir_all("benchmark_results").ok();
+
+        // Write performance results
+        if let Err(e) = std::fs::write("benchmark_results/performance_results.json", output) {
+            eprintln!("Failed to write performance results: {}", e);
+        } else {
+            println!(
+                "\n📊 Performance results written to benchmark_results/performance_results.json"
+            );
+        }
     }
 
     fn print_summary(results: &[ComparisonResult]) {

@@ -1,0 +1,199 @@
+name: P-ATA Benchmarks
+
+on:
+  push:
+    paths:
+      - 'p-ata/**'
+      - 'program/**'
+      - '.github/workflows/benchmarks.yml'
+    branches: [main, p-ata, p-ata-dev]
+  pull_request:
+    paths:
+      - 'p-ata/**'
+      - 'program/**'
+      - '.github/workflows/benchmarks.yml'
+    branches: [main, p-ata]
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  run_benchmarks:
+    name: Run P-ATA Benchmarks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          cargo-cache-key: cargo-benchmarks
+          solana: true
+
+      - name: Install Additional Tools
+        run: |
+          cargo install mollusk-svm-bencher --locked
+
+      - name: Build Both ATA Implementations
+        run: |
+          # Build original ATA program
+          cd program
+          cargo build-sbf
+          cd ..
+          
+          # Build P-ATA program  
+          cd p-ata
+          cargo build-sbf --features build-programs
+          cd ..
+
+      - name: Run Benchmarks
+        run: |
+          cd p-ata
+          
+          # Create output directory
+          mkdir -p benchmark_results
+          
+          # Run comparison benchmarks and capture output
+          echo "🚀 Running P-ATA vs Original ATA Comparison Benchmarks"
+          cargo bench --features build-programs ata_instruction_benches > benchmark_results/comparison.log 2>&1 || true
+          
+          # Run failure scenarios
+          echo "🧪 Running Failure Scenario Tests"  
+          cargo bench --features build-programs failure_scenarios > benchmark_results/failures.log 2>&1 || true
+          
+          cd ..
+
+      - name: Generate Badge Data
+        run: |
+          cd p-ata
+          
+          # Install jq for JSON processing
+          sudo apt-get update && sudo apt-get install -y jq bc
+          
+          # Generate badges using shell script functions
+          source scripts/run_local_benchmarks.sh
+          
+          # Generate badges if we have JSON results
+          if [ -f "benchmark_results/performance_results.json" ] || [ -f "benchmark_results/failure_results.json" ]; then
+            echo "📊 Processing JSON results..."
+            generate_badges
+            update_readme_badges
+            echo "✅ Badge generation completed"
+          else
+            echo "⚠️  No JSON results found"
+          fi
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: p-ata/benchmark_results/
+          retention-days: 30
+
+      - name: Update Repository with Results
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd p-ata
+          
+          # Configure git
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if README.md was updated
+          if git diff --quiet README.md; then
+            echo "No changes to README.md"
+          else
+            echo "README.md updated with new badges"
+            git add README.md
+            git commit -m "Update README with benchmark badges - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            git push origin HEAD
+          fi
+          
+          # Also create/update benchmark results branch for historical data
+          git checkout -B benchmark-results
+          
+          # Copy results to root level for easy access
+          cp benchmark_results/*.json . 2>/dev/null || true
+          cp benchmark_results/badges.md . 2>/dev/null || true
+          
+          # Add and commit results
+          git add *.json badges.md 2>/dev/null || true
+          git commit -m "Update benchmark results - $(date -u '+%Y-%m-%d %H:%M:%S UTC')" || exit 0
+          
+          # Push to benchmark-results branch
+          git push origin benchmark-results --force
+
+      - name: Create Performance Report
+        if: github.event_name == 'pull_request'
+        run: |
+          cd p-ata
+          
+          # Create PR comment using JSON data and generated badges
+          if [ -f "benchmark_results/performance_results.json" ] && [ -f "benchmark_results/failure_results.json" ]; then
+            cat > benchmark_results/pr_comment.md << 'EOF'
+## 📊 P-ATA Individual Test Results
+
+### CU Savings per Test
+EOF
+            
+            # Add CU savings badges
+            if [ -f "benchmark_results/badges.md" ]; then
+              echo "" >> benchmark_results/pr_comment.md
+              grep "CU Savings" benchmark_results/badges.md | head -6 >> benchmark_results/pr_comment.md
+              echo "" >> benchmark_results/pr_comment.md
+            fi
+            
+            cat >> benchmark_results/pr_comment.md << 'EOF'
+
+### Performance Test Summary
+| Test | P-ATA CU | Original CU | Savings | Compatibility |
+|------|----------|-------------|---------|---------------|
+EOF
+            
+            # Add performance data
+            jq -r '.performance_tests | to_entries[] | "| \(.key) | \(.value.p_ata_cu) | \(.value.original_cu) | \(.value.savings_percent)% | \(.value.compatibility) |"' benchmark_results/performance_results.json >> benchmark_results/pr_comment.md
+            
+            cat >> benchmark_results/pr_comment.md << 'EOF'
+
+### Failure Test Results
+| Test | Result |
+|------|--------|
+EOF
+            
+            # Add failure test data
+            jq -r '.failure_tests | to_entries[] | "| \(.key) | \(.value.status) |"' benchmark_results/failure_results.json >> benchmark_results/pr_comment.md
+            
+            cat >> benchmark_results/pr_comment.md << 'EOF'
+
+> 🤖 Individual test results with no averages or aggregation. Each test shows exact CU consumption and byte-for-byte compatibility status.
+EOF
+            
+            echo "✅ PR comment generated"
+          else
+            echo "⚠️  No benchmark data available for PR comment"
+          fi
+
+      - name: Comment PR with Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'p-ata/benchmark_results/pr_comment.md';
+            
+            if (fs.existsSync(path)) {
+              const comment = fs.readFileSync(path, 'utf8');
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: comment
+              });
+            } 

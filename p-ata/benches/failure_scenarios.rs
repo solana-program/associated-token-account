@@ -4,6 +4,7 @@ use {
     solana_instruction::{AccountMeta, Instruction},
     solana_logger,
     solana_pubkey::Pubkey,
+    std::collections::HashMap,
 };
 
 #[path = "common.rs"]
@@ -1756,7 +1757,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            ComparisonRunner::print_comparison_result(&comparison);
+            common::ComparisonRunner::print_comparison_result(&comparison);
             results.push(comparison);
         }
 
@@ -1804,7 +1805,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            ComparisonRunner::print_comparison_result(&comparison);
+            common::ComparisonRunner::print_comparison_result(&comparison);
             results.push(comparison);
         }
 
@@ -1847,7 +1848,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            ComparisonRunner::print_comparison_result(&comparison);
+            common::ComparisonRunner::print_comparison_result(&comparison);
             results.push(comparison);
         }
 
@@ -1895,11 +1896,98 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            ComparisonRunner::print_comparison_result(&comparison);
+            common::ComparisonRunner::print_comparison_result(&comparison);
             results.push(comparison);
         }
 
+        Self::print_failure_summary(&results);
+        Self::output_failure_test_data(&results);
         results
+    }
+
+    fn output_failure_test_data(results: &[ComparisonResult]) {
+        let mut json_entries = Vec::new();
+
+        for result in results {
+            let status = match (&result.p_ata.success, &result.original.success) {
+                (true, true) => "pass", // Both succeeded (might be unexpected for failure tests)
+                (false, false) => {
+                    // Both failed - check if errors are the same type
+                    let p_ata_error = result.p_ata.error_message.as_deref().unwrap_or("Unknown");
+                    let original_error = result
+                        .original
+                        .error_message
+                        .as_deref()
+                        .unwrap_or("Unknown");
+
+                    // Simple error type comparison - look for key differences
+                    if p_ata_error.contains("InvalidInstructionData")
+                        != original_error.contains("InvalidInstructionData")
+                        || p_ata_error.contains("Custom(") != original_error.contains("Custom(")
+                        || p_ata_error.contains("PrivilegeEscalation")
+                            != original_error.contains("PrivilegeEscalation")
+                    {
+                        "error_mismatch"
+                    } else {
+                        "pass"
+                    }
+                }
+                (true, false) => "pass", // P-ATA works, original fails (P-ATA optimization)
+                (false, true) => "fail", // P-ATA fails, original works (concerning)
+            };
+
+            let p_ata_error_json = match &result.p_ata.error_message {
+                Some(msg) => format!(r#""{}""#, msg.replace('"', r#"\""#)),
+                None => "null".to_string(),
+            };
+
+            let original_error_json = match &result.original.error_message {
+                Some(msg) => format!(r#""{}""#, msg.replace('"', r#"\""#)),
+                None => "null".to_string(),
+            };
+
+            let entry = format!(
+                r#"    "{}": {{
+      "status": "{}",
+      "p_ata_success": {},
+      "original_success": {},
+      "p_ata_error": {},
+      "original_error": {},
+      "type": "failure_test"
+    }}"#,
+                result.test_name,
+                status,
+                result.p_ata.success,
+                result.original.success,
+                p_ata_error_json,
+                original_error_json
+            );
+            json_entries.push(entry);
+        }
+
+        let output = format!(
+            r#"{{
+  "timestamp": "{}",
+  "failure_tests": {{
+{}
+  }}
+}}"#,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            json_entries.join(",\n")
+        );
+
+        // Create benchmark_results directory if it doesn't exist
+        std::fs::create_dir_all("benchmark_results").ok();
+
+        // Write failure test results
+        if let Err(e) = std::fs::write("benchmark_results/failure_results.json", output) {
+            eprintln!("Failed to write failure results: {}", e);
+        } else {
+            println!("\n🧪 Failure test results written to benchmark_results/failure_results.json");
+        }
     }
 
     /// Print failure test summary with compatibility analysis

@@ -2,6 +2,12 @@
 
 A `pinocchio`-based Associated Token Account program.
 
+## Individual Test Results
+
+<!-- BENCHMARK_BADGES_START -->
+*Badges will be automatically updated on benchmark runs*
+<!-- BENCHMARK_BADGES_END -->
+
 ## Overview
 
 `p-ata` uses [`pinocchio`](https://github.com/anza-xyz/pinocchio) to optimize compute units while being fully compatible with the original implementation – i.e., support the exact same instruction and account layouts as SPL Associated Token Account, byte for byte.

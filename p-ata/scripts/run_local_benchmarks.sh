@@ -28,43 +28,46 @@ fi
 
 echo "✅ Prerequisites check passed"
 
-# Create results directory
-mkdir -p benchmark_results
+# Run benchmarks and generate badges
+run_benchmarks() {
+    # Create results directory
+    mkdir -p benchmark_results
 
-# Determine build mode
-if [ "$1" = "--comparison" ] || [ "$1" = "-c" ]; then
-    echo "🔨 Building both implementations for comparison..."
-    FEATURE_FLAG="--features build-programs"
-    MODE="comparison"
-else
-    echo "🔨 Building P-ATA only..."
-    FEATURE_FLAG=""
-    MODE="p-ata-only"
-fi
+    # Determine build mode
+    if [ "$1" = "--comparison" ] || [ "$1" = "-c" ]; then
+        echo "🔨 Building both implementations for comparison..."
+        export FEATURE_FLAG="--features build-programs"
+        export MODE="comparison"
+    else
+        echo "🔨 Building P-ATA only..."
+        export FEATURE_FLAG=""
+        export MODE="p-ata-only"
+    fi
 
-# Build programs
-echo "📦 Building programs..."
-cargo build-sbf $FEATURE_FLAG
+    # Build programs
+    echo "📦 Building programs..."
+    cargo build-sbf $FEATURE_FLAG
 
-# Run benchmarks
-echo "⚡ Running benchmarks..."
+    # Run benchmarks
+    echo "⚡ Running benchmarks..."
 
-echo "  📊 Running instruction benchmarks..."
-if cargo bench $FEATURE_FLAG ata_instruction_benches > benchmark_results/comparison.log 2>&1; then
-    echo "  ✅ Instruction benchmarks completed"
-else
-    echo "  ⚠️  Instruction benchmarks completed with warnings (this is normal)"
-fi
+    echo "  📊 Running instruction benchmarks..."
+    if cargo bench $FEATURE_FLAG ata_instruction_benches > benchmark_results/comparison.log 2>&1; then
+        echo "  ✅ Instruction benchmarks completed"
+    else
+        echo "  ⚠️  Instruction benchmarks completed with warnings (this is normal)"
+    fi
 
-echo "  🧪 Running failure scenario tests..."
-if cargo bench $FEATURE_FLAG failure_scenarios > benchmark_results/failures.log 2>&1; then
-    echo "  ✅ Failure scenarios completed"
-else
-    echo "  ⚠️  Failure scenarios completed with warnings (this is normal)"
-fi
+    echo "  🧪 Running failure scenario tests..."
+    if cargo bench $FEATURE_FLAG failure_scenarios > benchmark_results/failures.log 2>&1; then
+        echo "  ✅ Failure scenarios completed"
+    else
+        echo "  ⚠️  Failure scenarios completed with warnings (this is normal)"
+    fi
 
-# Generate badges from JSON output
-echo "🏷️  Generating badges..."
+    # Generate badges from JSON output
+    echo "🏷️  Generating badges..."
+}
 
 # Function to create shields.io URL
 create_badge_url() {
@@ -195,27 +198,37 @@ update_readme_badges() {
     if [ -f "benchmark_results/badges.md" ] && [ -f "README.md" ]; then
         echo "📝 Updating README.md with badges..."
         
+        # Debug: Check if markers exist
+        if ! grep -q "<!-- BENCHMARK_BADGES_START -->" README.md; then
+            echo "❌ Start marker not found in README.md"
+            return 1
+        fi
+        if ! grep -q "<!-- BENCHMARK_BADGES_END -->" README.md; then
+            echo "❌ End marker not found in README.md"
+            return 1
+        fi
+        
         # Create a temporary file with the updated README
         temp_file=$(mktemp)
         
-        # Read badges content
-        badges_content=$(cat benchmark_results/badges.md)
+        echo "🔍 Debugging: Processing README.md sections..."
         
-        # Replace content between markers
-        awk -v badges="$badges_content" '
-        /<!-- BENCHMARK_BADGES_START -->/ {
-            print $0
-            print badges
-            skip = 1
-            next
-        }
-        /<!-- BENCHMARK_BADGES_END -->/ {
-            skip = 0
-        }
-        !skip {
-            print $0
-        }
-        ' README.md > "$temp_file"
+        # Use a more robust approach to replace content between markers
+        # First, write everything up to and including the start marker
+        sed -n '1,/<!-- BENCHMARK_BADGES_START -->/p' README.md > "$temp_file"
+        echo "  ✅ Added content up to start marker"
+        
+        # Add the badges content
+        cat benchmark_results/badges.md >> "$temp_file"
+        echo "  ✅ Added badges content ($(wc -l < benchmark_results/badges.md) lines)"
+        
+        # Add everything from and including the end marker
+        sed -n '/<!-- BENCHMARK_BADGES_END -->/,$p' README.md >> "$temp_file"
+        echo "  ✅ Added content from end marker"
+        
+        # Debug: Show file sizes
+        echo "  📊 Original README.md: $(wc -l < README.md) lines"
+        echo "  📊 Updated README.md: $(wc -l < "$temp_file") lines"
         
         # Replace original README.md
         mv "$temp_file" README.md
@@ -223,74 +236,104 @@ update_readme_badges() {
         echo "✅ README.md updated with badges"
     else
         echo "⚠️  Could not update README.md (missing files)"
+        if [ ! -f "benchmark_results/badges.md" ]; then
+            echo "  - badges.md not found"
+        fi
+        if [ ! -f "README.md" ]; then
+            echo "  - README.md not found"
+        fi
     fi
 }
 
-# Check if JSON results exist and generate badges
-if [ -f "benchmark_results/performance_results.json" ] || [ -f "benchmark_results/failure_results.json" ]; then
-    echo "📊 Processing JSON results..."
+# Main execution function
+main() {
+    # Run benchmarks first
+    run_benchmarks "$@"
     
-    generate_badges
-    update_readme_badges
-    
-    # Show summary
-    echo ""
-    echo "📈 BENCHMARK SUMMARY"
-    echo "===================="
-    
-    if command -v jq &> /dev/null; then
-        if [ -f "benchmark_results/performance_results.json" ]; then
-            echo "Performance Test Results:"
-            jq -r '.performance_tests | to_entries[] | select(.value.savings_percent != null) | "  \(.key): \(.value.savings_percent)% CU savings, \(.value.compatibility) status"' benchmark_results/performance_results.json
-        fi
+    # Check if JSON results exist and generate badges
+    if [ -f "benchmark_results/performance_results.json" ] || [ -f "benchmark_results/failure_results.json" ]; then
+        echo "📊 Processing JSON results..."
         
-        if [ -f "benchmark_results/failure_results.json" ]; then
+        generate_badges
+        update_readme_badges
+        
+        # Show summary
+        echo ""
+        echo "📈 BENCHMARK SUMMARY"
+        echo "===================="
+        
+        if command -v jq &> /dev/null; then
+            if [ -f "benchmark_results/performance_results.json" ]; then
+                echo "Performance Test Results:"
+                jq -r '.performance_tests | to_entries[] | select(.value.savings_percent != null) | "  \(.key): \(.value.savings_percent)% CU savings, \(.value.compatibility) status"' benchmark_results/performance_results.json
+            fi
+            
+            if [ -f "benchmark_results/failure_results.json" ]; then
+                echo ""
+                echo "Failure Test Results:"
+                jq -r '.failure_tests | to_entries[] | select(.value.status != null) | "  \(.key): \(.value.status)"' benchmark_results/failure_results.json
+            fi
+            
+            # Count total badges (only count non-null entries)
+            total_badges=0
+            if [ -f "benchmark_results/performance_results.json" ]; then
+                perf_count=$(jq -r '.performance_tests | to_entries | map(select(.value.savings_percent != null)) | length' benchmark_results/performance_results.json 2>/dev/null || echo "0")
+                total_badges=$((total_badges + perf_count * 3)) # CU savings + P-ATA CU + compatibility
+            fi
+            if [ -f "benchmark_results/failure_results.json" ]; then
+                fail_count=$(jq -r '.failure_tests | to_entries | map(select(.value.status != null)) | length' benchmark_results/failure_results.json 2>/dev/null || echo "0")
+                total_badges=$((total_badges + fail_count)) # failure result badges
+            fi
             echo ""
-            echo "Failure Test Results:"
-            jq -r '.failure_tests | to_entries[] | select(.value.status != null) | "  \(.key): \(.value.status)"' benchmark_results/failure_results.json
+            echo "Total Badges Generated: $total_badges"
+        else
+            echo "💡 Install 'jq' for prettier JSON output"
+            echo "Raw results available in: benchmark_results/*.json"
         fi
         
-        # Count total badges (only count non-null entries)
-        total_badges=0
-        if [ -f "benchmark_results/performance_results.json" ]; then
-            perf_count=$(jq -r '.performance_tests | to_entries | map(select(.value.savings_percent != null)) | length' benchmark_results/performance_results.json 2>/dev/null || echo "0")
-            total_badges=$((total_badges + perf_count * 3)) # CU savings + P-ATA CU + compatibility
+        # Show badges
+        if [ -f "benchmark_results/badges.md" ]; then
+            echo ""
+            echo "🏷️  BADGE MARKDOWN"
+            echo "=================="
+            cat benchmark_results/badges.md
         fi
-        if [ -f "benchmark_results/failure_results.json" ]; then
-            fail_count=$(jq -r '.failure_tests | to_entries | map(select(.value.status != null)) | length' benchmark_results/failure_results.json 2>/dev/null || echo "0")
-            total_badges=$((total_badges + fail_count)) # failure result badges
-        fi
-        echo ""
-        echo "Total Badges Generated: $total_badges"
+        
+        echo "✅ Badge generation completed"
     else
-        echo "💡 Install 'jq' for prettier JSON output"
-        echo "Raw results available in: benchmark_results/*.json"
+        echo "⚠️  No JSON results found - badges not generated"
     fi
-    
-    # Show badges
-    if [ -f "benchmark_results/badges.md" ]; then
-        echo ""
-        echo "🏷️  BADGE MARKDOWN"
-        echo "=================="
-        cat benchmark_results/badges.md
+
+    echo ""
+    echo "✅ Benchmark run completed!"
+    echo ""
+    echo "📁 Results saved to:"
+    echo "   - benchmark_results/comparison.log        (raw benchmark output)"
+    echo "   - benchmark_results/failures.log          (failure test output)" 
+    echo "   - benchmark_results/performance_results.json (performance test data)"
+    echo "   - benchmark_results/failure_results.json     (failure test data)"
+    echo "   - benchmark_results/badges.md                (individual test badges)"
+    echo ""
+
+    if [ "$MODE" = "p-ata-only" ]; then
+        echo "💡 To run comparison benchmarks, use: $0 --comparison"
     fi
+}
+
+# Function to generate badges from existing results (for CI use)
+generate_badges_only() {
+    echo "📊 Generating badges from existing results..."
     
-    echo "✅ Badge generation completed"
-else
-    echo "⚠️  No JSON results found - badges not generated"
-fi
+    if [ -f "benchmark_results/performance_results.json" ] || [ -f "benchmark_results/failure_results.json" ]; then
+        generate_badges
+        update_readme_badges
+        echo "✅ Badge generation completed"
+    else
+        echo "⚠️  No JSON results found - badges not generated"
+    fi
+}
 
-echo ""
-echo "✅ Benchmark run completed!"
-echo ""
-echo "📁 Results saved to:"
-echo "   - benchmark_results/comparison.log        (raw benchmark output)"
-echo "   - benchmark_results/failures.log          (failure test output)" 
-echo "   - benchmark_results/performance_results.json (performance test data)"
-echo "   - benchmark_results/failure_results.json     (failure test data)"
-echo "   - benchmark_results/badges.md                (individual test badges)"
-echo ""
-
-if [ "$MODE" = "p-ata-only" ]; then
-    echo "💡 To run comparison benchmarks, use: $0 --comparison"
+# Only run main function if script is executed directly (not sourced)
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    main
 fi 

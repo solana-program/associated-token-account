@@ -4,26 +4,30 @@ use {
     solana_instruction::{AccountMeta, Instruction},
     solana_logger,
     solana_pubkey::Pubkey,
-    std::collections::HashMap,
 };
 
 #[path = "common.rs"]
 mod common;
 use common::*;
 
+#[path = "consolidated_builders.rs"]
+mod consolidated_builders;
+use consolidated_builders::{ConsolidatedTestCaseBuilder, FailureMode};
+
 // ================================ FAILURE TEST CONSTANTS ================================
 
 const FAKE_SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([1u8; 32]);
 const FAKE_TOKEN_PROGRAM_ID: Pubkey = Pubkey::new_from_array([2u8; 32]);
-const WRONG_PROGRAM_ID: Pubkey = Pubkey::new_from_array([3u8; 32]);
 
 // ================================ FAILURE TEST BUILDERS ================================
 
-// Helper functions for consistent account building (matching ata_instruction_benches.rs pattern)
+/// Failure test builders using the consolidated builder pattern where possible.
+/// Complex scenarios that require custom logic are implemented directly.
+
+// Helper function for complex cases that need custom logic
 fn build_base_failure_accounts(base_offset: u8) -> (Pubkey, Pubkey, Pubkey) {
     let payer = const_pk(base_offset);
     let mint = const_pk(base_offset + 1);
-    // Wallets are independent of ATA program - use fixed wallet address
     let wallet = const_pk(base_offset + 2);
     (payer, mint, wallet)
 }
@@ -35,272 +39,90 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(100);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (
-                payer,
-                Account {
-                    lamports: 1_000_000_000,
-                    data: Vec::new(),
-                    owner: *token_program_id,
-                    executable: false,
-                    rent_epoch: 0,
-                },
-            ),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8], // Create instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::WrongPayerOwner(*token_program_id),
+        )
     }
 
     fn build_fail_payer_not_signed(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(110);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, false), // NOT SIGNED! Should be true
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8], // Create instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::PayerNotSigned,
+        )
     }
 
     fn build_fail_wrong_system_program(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(120);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            // Fake system program instead of real one
-            (
-                FAKE_SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(FAKE_SYSTEM_PROGRAM_ID, false), // Wrong system program
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8], // Create instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::WrongSystemProgram(FAKE_SYSTEM_PROGRAM_ID),
+        )
     }
 
     fn build_fail_wrong_token_program(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(130);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            // Fake token program instead of real one
-            (
-                FAKE_TOKEN_PROGRAM_ID,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(FAKE_TOKEN_PROGRAM_ID, false), // Wrong token program
-            ],
-            data: vec![0u8], // Create instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::WrongTokenProgram(FAKE_TOKEN_PROGRAM_ID),
+        )
     }
 
     fn build_fail_insufficient_funds(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(140);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8], // Create instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::InsufficientFunds(1000),
+        )
     }
 
     fn build_fail_wrong_ata_address(
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(170);
-        let wrong_ata = const_pk(173);
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (wrong_ata, AccountBuilder::system_account(0)), // Wrong ATA address
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(wrong_ata, false), // Wrong ATA address
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8], // Create instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::WrongAtaAddress(const_pk(173)),
+        )
     }
 
     /// Build CREATE failure test with mint owned by wrong program
@@ -308,51 +130,15 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(180);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            // Mint owned by system program instead of token program
-            (
-                mint,
-                Account {
-                    lamports: 1_000_000_000,
-                    data: AccountBuilder::mint_data(0),
-                    owner: SYSTEM_PROGRAM_ID, // Wrong owner!
-                    executable: false,
-                    rent_epoch: 0,
-                },
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8], // Create instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::MintWrongOwner(SYSTEM_PROGRAM_ID),
+        )
     }
 
     /// Build CREATE failure test with invalid mint structure
@@ -360,51 +146,15 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(190);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            // Mint with invalid structure (wrong size)
-            (
-                mint,
-                Account {
-                    lamports: 1_000_000_000,
-                    data: vec![0u8; 50], // Wrong size - should be 82
-                    owner: *token_program_id,
-                    executable: false,
-                    rent_epoch: 0,
-                },
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8],
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::InvalidMintStructure(50), // Wrong size - should be 82
+        )
     }
 
     /// Build CREATE_IDEMPOTENT failure test with invalid token account structure
@@ -412,54 +162,15 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(200);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            // ATA exists but has invalid token account structure
-            (
-                ata,
-                Account {
-                    lamports: 2_000_000,
-                    data: vec![0xFF; 165], // Invalid token account data (all 0xFF)
-                    owner: *token_program_id, // Correct owner
-                    executable: false,
-                    rent_epoch: 0,
-                },
-            ),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![1u8], // CreateIdempotent instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::CreateIdempotent,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::InvalidTokenAccountStructure,
+        )
     }
 
     /// Build RECOVER failure test with wallet not signer
@@ -467,61 +178,15 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let nested_ata = const_pk(10);
-        let nested_mint = const_pk(11);
-        let dest_ata = const_pk(12);
-        let owner_ata = const_pk(13);
-        let owner_mint = const_pk(14);
-        let wallet = const_pk(15);
-
-        let accounts = vec![
-            (
-                nested_ata,
-                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
-            ),
-            (
-                nested_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                dest_ata,
-                AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_ata,
-                AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (wallet, AccountBuilder::system_account(1_000_000_000)),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-            (
-                Pubkey::from(spl_token_interface::program::ID),
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(nested_ata, false),
-                AccountMeta::new_readonly(nested_mint, false),
-                AccountMeta::new(dest_ata, false),
-                AccountMeta::new(owner_ata, false),
-                AccountMeta::new_readonly(owner_mint, false),
-                AccountMeta::new(wallet, false), // NOT SIGNED! Should be true
-                AccountMeta::new_readonly(*token_program_id, false),
-                AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
-            ],
-            data: vec![2u8], // RecoverNested instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::RecoverNested,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::RecoverWalletNotSigner,
+        )
     }
 
     /// Build RECOVER failure test with multisig insufficient signers
@@ -529,80 +194,15 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let nested_ata = const_pk(20);
-        let nested_mint = const_pk(21);
-        let dest_ata = const_pk(22);
-        let owner_ata = const_pk(23);
-        let owner_mint = const_pk(24);
-        let wallet_ms = const_pk(25);
-
-        let signer1 = Pubkey::new_unique();
-        let signer2 = Pubkey::new_unique();
-        let signer3 = Pubkey::new_unique();
-
-        let accounts = vec![
-            (
-                nested_ata,
-                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
-            ),
-            (
-                nested_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                dest_ata,
-                AccountBuilder::token_account(&nested_mint, &wallet_ms, 0, token_program_id),
-            ),
-            (
-                owner_ata,
-                AccountBuilder::token_account(&owner_mint, &wallet_ms, 0, token_program_id),
-            ),
-            (
-                owner_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                wallet_ms,
-                Account {
-                    lamports: 1_000_000_000,
-                    data: AccountBuilder::multisig_data(2, &[signer1, signer2, signer3]), // m=2, need 2 signers
-                    owner: *token_program_id,
-                    executable: false,
-                    rent_epoch: 0,
-                },
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-            (
-                Pubkey::from(spl_token_interface::program::ID),
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-            (signer1, AccountBuilder::system_account(1_000_000_000)),
-            (signer2, AccountBuilder::system_account(1_000_000_000)),
-            (signer3, AccountBuilder::system_account(1_000_000_000)),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(nested_ata, false),
-                AccountMeta::new_readonly(nested_mint, false),
-                AccountMeta::new(dest_ata, false),
-                AccountMeta::new(owner_ata, false),
-                AccountMeta::new_readonly(owner_mint, false),
-                AccountMeta::new(wallet_ms, false), // Multisig wallet
-                AccountMeta::new_readonly(*token_program_id, false),
-                AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
-                AccountMeta::new_readonly(signer1, true), // Only 1 signer, need 2
-                AccountMeta::new_readonly(signer2, false), // Not signed
-                AccountMeta::new_readonly(signer3, false), // Not signed
-            ],
-            data: vec![2u8], // RecoverNested instruction
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::RecoverMultisig,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::RecoverMultisigInsufficientSigners,
+        )
     }
 
     /// Build failure test with invalid instruction discriminator
@@ -610,44 +210,15 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(230);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![99u8], // Invalid discriminator (should be 0, 1, or 2)
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::InvalidDiscriminator(99), // Invalid discriminator (should be 0, 1, or 2)
+        )
     }
 
     /// Build failure test with invalid bump value
@@ -655,44 +226,18 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(240);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8, 99u8], // Create with invalid bump (not the correct bump)
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant {
+                bump_arg: true,
+                ..TestVariant::BASE
+            },
+            &ata_impl,
+            token_program_id,
+            FailureMode::InvalidBumpValue(99), // Invalid bump (not the correct bump)
+        )
     }
 
     /// Build CREATE failure test with ATA owned by system program (existing ATA with wrong owner)
@@ -700,54 +245,15 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(65);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            // ATA already exists but owned by system program (not token program)
-            (
-                ata,
-                Account {
-                    lamports: 2_000_000,
-                    data: vec![0u8; 165],     // Token account size
-                    owner: SYSTEM_PROGRAM_ID, // Wrong owner - should be token program
-                    executable: false,
-                    rent_epoch: 0,
-                },
-            ),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8],
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::AtaWrongOwner(SYSTEM_PROGRAM_ID),
+        )
     }
 
     /// Build RECOVER failure test with wrong nested ATA address
@@ -1102,44 +608,15 @@ impl FailureTestBuilder {
         program_id: &Pubkey,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(50);
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            program_id,
-        );
-
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let ix = Instruction {
-            program_id: *program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new_readonly(ata, false), // ATA marked as non-writable
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![0u8],
-        };
-
-        (ix, accounts)
+        let ata_impl =
+            ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+        ConsolidatedTestCaseBuilder::build_failure_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            &ata_impl,
+            token_program_id,
+            FailureMode::AtaNotWritable,
+        )
     }
 
     /// Build RECOVER failure test with nested account having wrong owner
@@ -2271,6 +1748,69 @@ fn run_single_failure_test(
     }
 }
 
+/// Debug function to validate the multisig insufficient signers test
+fn debug_multisig_insufficient_signers_test(program_id: &Pubkey, token_program_id: &Pubkey) {
+    println!("\n=== DEBUGGING MULTISIG INSUFFICIENT SIGNERS TEST ===");
+
+    let ata_impl =
+        ConsolidatedTestCaseBuilder::create_ata_implementation_from_program_id(*program_id);
+    let (ix, accounts) = ConsolidatedTestCaseBuilder::build_failure_test_case(
+        BaseTestType::RecoverMultisig,
+        TestVariant::BASE,
+        &ata_impl,
+        token_program_id,
+        FailureMode::RecoverMultisigInsufficientSigners,
+    );
+
+    println!("Instruction accounts ({} total):", ix.accounts.len());
+    for (i, account_meta) in ix.accounts.iter().enumerate() {
+        println!(
+            "  [{}] {} (signer: {}, writable: {})",
+            i, account_meta.pubkey, account_meta.is_signer, account_meta.is_writable
+        );
+    }
+
+    // Find the wallet account to check multisig data
+    if let Some(wallet_account) = accounts.iter().find(|(pk, _)| *pk == ix.accounts[5].pubkey) {
+        println!("Wallet account owner: {}", wallet_account.1.owner);
+        println!(
+            "Wallet account data length: {}",
+            wallet_account.1.data.len()
+        );
+
+        if wallet_account.1.data.len() >= 355 {
+            let m = wallet_account.1.data[0];
+            let n = wallet_account.1.data[1];
+            let is_initialized = wallet_account.1.data[2];
+            println!(
+                "Multisig data: m={}, n={}, initialized={}",
+                m, n, is_initialized
+            );
+        }
+    }
+
+    // Count signers in instruction
+    let mut signer_count = 0;
+    for (i, account_meta) in ix.accounts.iter().enumerate() {
+        if account_meta.is_signer && i >= 8 {
+            // Multisig signers start at index 8
+            signer_count += 1;
+            println!("Signer found at index {}: {}", i, account_meta.pubkey);
+        }
+    }
+    println!("Total signers in instruction: {}", signer_count);
+
+    // Run the test
+    let mollusk = fresh_mollusk(program_id, token_program_id);
+    let cloned_accounts = clone_accounts(&accounts);
+    let result = mollusk.process_instruction(&ix, &cloned_accounts);
+
+    println!("Test result: {:?}", result.program_result);
+    if let mollusk_svm::result::ProgramResult::Failure(error) = &result.program_result {
+        println!("Error: {:?}", error);
+    }
+}
+
 // ================================ MAIN FUNCTION ================================
 
 fn main() {
@@ -2324,6 +1864,9 @@ fn main() {
         ) {
             panic!("Original ATA failure test setup validation failed: {}", e);
         }
+
+        // DEBUG: Check the multisig insufficient signers test
+        debug_multisig_insufficient_signers_test(&p_ata_program_id, &token_program_id);
 
         // Run comprehensive failure comparison
         let comparison_results = FailureTestRunner::run_comprehensive_failure_comparison(

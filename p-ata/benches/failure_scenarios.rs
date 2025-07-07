@@ -44,21 +44,6 @@ fn build_base_failure_accounts(
     (payer, mint, wallet)
 }
 
-// Helper macro to reduce repetition in simple failure tests
-macro_rules! build_simple_failure_test {
-    ($test_type:expr, $variant:expr, $failure_mode:expr) => {
-        |ata_impl: &AtaImplementation, token_program_id: &Pubkey| {
-            CommonTestCaseBuilder::build_failure_test_case(
-                $test_type,
-                $variant,
-                ata_impl,
-                token_program_id,
-                $failure_mode,
-            )
-        }
-    };
-}
-
 struct FailureTestBuilder;
 
 impl FailureTestBuilder {
@@ -693,6 +678,104 @@ impl FailureTestBuilder {
 struct FailureTestRunner;
 
 impl FailureTestRunner {
+    /// Print failure test results - detailed only for unexpected successes (security issues)
+    fn print_failure_test_result_summary(result: &ComparisonResult) {
+        // Check if we need detailed output (security issues or unexpected results)
+        let needs_detailed_output = matches!(
+            result.compatibility_status,
+            CompatibilityStatus::IncompatibleSuccess | CompatibilityStatus::Identical
+        ) && (result.p_ata.success || result.original.success);
+
+        match result.compatibility_status {
+            CompatibilityStatus::BothRejected => {
+                // Expected: both failed - brief output
+                println!("    ❌ Both rejected (expected)");
+            }
+            CompatibilityStatus::OptimizedBehavior => {
+                // P-ATA-only feature - brief output
+                if result
+                    .original
+                    .error_message
+                    .as_ref()
+                    .map_or(false, |msg| msg.contains("N/A"))
+                {
+                    println!("    🚀 P-ATA-only feature");
+                } else {
+                    println!("    🚀 P-ATA optimization");
+                }
+            }
+            CompatibilityStatus::IncompatibleFailure => {
+                // Different error messages but both failed - brief output (detailed in summary)
+                println!("    ⚠️ Different error messages (both failed)");
+            }
+            _ => {
+                // Unexpected successes or critical issues - FULL detailed output
+                println!("    🚨 UNEXPECTED RESULT - DETAILED ANALYSIS:");
+
+                let p_ata_status = if result.p_ata.success {
+                    "✅ SUCCESS (UNEXPECTED!)".to_string()
+                } else {
+                    "❌ Failed (expected)".to_string()
+                };
+
+                let original_status = if result.original.success {
+                    "✅ SUCCESS (UNEXPECTED!)".to_string()
+                } else {
+                    "❌ Failed (expected)".to_string()
+                };
+
+                println!("      P-ATA: {}", p_ata_status);
+                println!("      Original: {}", original_status);
+
+                // Show error details for failures
+                if !result.p_ata.success {
+                    if let Some(ref error) = result.p_ata.error_message {
+                        println!("      P-ATA Error: {}", error);
+                    }
+                }
+                if !result.original.success {
+                    if let Some(ref error) = result.original.error_message {
+                        println!("      Original Error: {}", error);
+                    }
+                }
+
+                // Show compatibility assessment
+                match result.compatibility_status {
+                    CompatibilityStatus::IncompatibleSuccess => {
+                        if result.p_ata.success && !result.original.success {
+                            println!("      🔴 SECURITY ISSUE: P-ATA bypassed validation!");
+                        } else if !result.p_ata.success && result.original.success {
+                            println!("      🔴 SECURITY ISSUE: Original ATA bypassed validation!");
+                        }
+                    }
+                    CompatibilityStatus::Identical => {
+                        if result.p_ata.success && result.original.success {
+                            println!("      🔴 TEST ISSUE: Both succeeded when they should fail!");
+                        }
+                    }
+                    _ => {
+                        println!("      Status: {:?}", result.compatibility_status);
+                    }
+                }
+            }
+        }
+
+        // Show captured debug output only for security issues
+        if needs_detailed_output {
+            if !result.p_ata.captured_output.is_empty() {
+                println!("      P-ATA Debug Output:");
+                for line in result.p_ata.captured_output.lines() {
+                    println!("        {}", line);
+                }
+            }
+            if !result.original.captured_output.is_empty() {
+                println!("      Original Debug Output:");
+                for line in result.original.captured_output.lines() {
+                    println!("        {}", line);
+                }
+            }
+        }
+    }
     /// Run a failure test against both implementations and compare results
     fn run_failure_comparison_test<F>(
         name: &str,
@@ -704,30 +787,102 @@ impl FailureTestRunner {
     where
         F: Fn(&AtaImplementation, &Pubkey) -> (Instruction, Vec<(Pubkey, Account)>),
     {
+        // Check if this is a P-ATA-only test (uses bump args that original ATA doesn't support)
+        let is_p_ata_only =
+            name == "fail_invalid_bump_value" || name == "fail_recover_invalid_bump_value";
+
         // Build test for P-ATA
         let (p_ata_ix, p_ata_accounts) = test_builder(p_ata_impl, token_program_id);
 
-        // Build test for Original ATA (separate account set with correct ATA addresses)
-        let (original_ix, original_accounts) = test_builder(original_impl, token_program_id);
-
-        // Run benchmarks
-        let p_ata_result = ComparisonRunner::run_single_benchmark(
+        // Run P-ATA benchmark with quiet logging first
+        let mut p_ata_result = ComparisonRunner::run_single_benchmark(
             name,
             &p_ata_ix,
             &p_ata_accounts,
             p_ata_impl,
             token_program_id,
         );
-        let original_result = ComparisonRunner::run_single_benchmark(
-            name,
-            &original_ix,
-            &original_accounts,
-            original_impl,
-            token_program_id,
-        );
 
-        // Create comparison result
-        ComparisonRunner::create_comparison_result(name, p_ata_result, original_result)
+        let mut comparison_result = if is_p_ata_only {
+            // For P-ATA-only tests, create a N/A result for original ATA
+            let original_result = BenchmarkResult {
+                implementation: "original-ata".to_string(),
+                test_name: name.to_string(),
+                compute_units: 0,
+                success: false,
+                error_message: Some(
+                    "N/A - Test not applicable to original ATA (uses P-ATA-specific bump args)"
+                        .to_string(),
+                ),
+                captured_output: String::new(),
+            };
+            ComparisonRunner::create_comparison_result(name, p_ata_result, original_result)
+        } else {
+            // Build test for Original ATA (separate account set with correct ATA addresses)
+            let (original_ix, original_accounts) = test_builder(original_impl, token_program_id);
+
+            // Run Original ATA benchmark with quiet logging first
+            let original_result = ComparisonRunner::run_single_benchmark(
+                name,
+                &original_ix,
+                &original_accounts,
+                original_impl,
+                token_program_id,
+            );
+
+            // Create comparison result
+            ComparisonRunner::create_comparison_result(name, p_ata_result, original_result)
+        };
+
+        // Check if we need debug logging for problematic results
+        let needs_debug_logging = Self::is_problematic_result(&comparison_result);
+
+        if needs_debug_logging {
+            // Re-run with debug logging to capture verbose output
+            p_ata_result = ComparisonRunner::run_single_benchmark_with_debug(
+                name,
+                &p_ata_ix,
+                &p_ata_accounts,
+                p_ata_impl,
+                token_program_id,
+            );
+
+            if !is_p_ata_only {
+                // Also re-run original ATA with debug logging
+                let (original_ix, original_accounts) =
+                    test_builder(original_impl, token_program_id);
+                let original_result = ComparisonRunner::run_single_benchmark_with_debug(
+                    name,
+                    &original_ix,
+                    &original_accounts,
+                    original_impl,
+                    token_program_id,
+                );
+
+                // Update comparison result with debug output
+                comparison_result =
+                    ComparisonRunner::create_comparison_result(name, p_ata_result, original_result);
+            } else {
+                // For P-ATA-only tests, just update the P-ATA result
+                comparison_result.p_ata = p_ata_result;
+            }
+        }
+
+        comparison_result
+    }
+
+    /// Check if a comparison result is problematic and needs debug logging
+    fn is_problematic_result(result: &ComparisonResult) -> bool {
+        match result.compatibility_status {
+            // Security issues - definitely need debug logs
+            CompatibilityStatus::IncompatibleSuccess => true,
+            // Both succeeded when they should fail - test issue
+            CompatibilityStatus::Identical if result.p_ata.success && result.original.success => {
+                true
+            }
+            // All other cases are expected or acceptable
+            _ => false,
+        }
     }
 
     /// Run comprehensive failure test comparison between implementations
@@ -780,7 +935,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            common::ComparisonRunner::print_comparison_result(&comparison);
+            Self::print_failure_test_result_summary(&comparison);
             results.push(comparison);
         }
 
@@ -822,7 +977,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            common::ComparisonRunner::print_comparison_result(&comparison);
+            Self::print_failure_test_result_summary(&comparison);
             results.push(comparison);
         }
 
@@ -860,7 +1015,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            common::ComparisonRunner::print_comparison_result(&comparison);
+            Self::print_failure_test_result_summary(&comparison);
             results.push(comparison);
         }
 
@@ -898,7 +1053,7 @@ impl FailureTestRunner {
                 original_impl,
                 token_program_id,
             );
-            common::ComparisonRunner::print_comparison_result(&comparison);
+            Self::print_failure_test_result_summary(&comparison);
             results.push(comparison);
         }
 
@@ -1162,9 +1317,12 @@ impl FailureTestRunner {
 // ================================ MAIN FUNCTION ================================
 
 fn main() {
-    // Setup logging
+    // Completely suppress debug output from Mollusk and Solana runtime
+    std::env::set_var("RUST_LOG", "error");
+
+    // Setup quiet logging by default - only show warnings and errors
     let _ = solana_logger::setup_with(
-        "info,solana_runtime=info,solana_program_runtime=info,mollusk=debug",
+        "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
     );
 
     // Get manifest directory and setup environment

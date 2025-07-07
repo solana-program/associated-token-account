@@ -54,6 +54,7 @@ pub enum SpecialAccountMod {
 }
 
 /// Failure modes for deliberate test failures
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum FailureMode {
     /// Payer owned by wrong program (not system program)
@@ -116,7 +117,8 @@ pub enum FailureMode {
 pub struct CommonTestCaseBuilder;
 
 impl CommonTestCaseBuilder {
-    /// Main entry point that replaces all build_*_variant methods
+    /// Main entry point
+    #[allow(dead_code)]
     pub fn build_test_case(
         base_test: BaseTestType,
         variant: TestVariant,
@@ -128,6 +130,7 @@ impl CommonTestCaseBuilder {
     }
 
     /// Build a failure test case with the specified failure mode
+    #[allow(dead_code)]
     pub fn build_failure_test_case(
         base_test: BaseTestType,
         variant: TestVariant,
@@ -373,22 +376,7 @@ impl CommonTestCaseBuilder {
                 &derivation_program_id,
             );
 
-            if config.setup_topup {
-                println!("🔧 DEBUG: ATA derivation for {}", config.base_test.name());
-                println!("   Wallet: {}", wallet);
-                println!("   Token program: {}", config.token_program);
-                println!("   Mint: {}", mint);
-                println!(
-                    "   Program ID (always executing): {}",
-                    derivation_program_id
-                );
-                println!("   Derived ATA: {}", result.0);
-                println!("   Calculated bump: {}", result.1);
-                println!(
-                    "   Variant: bump_arg={}, len_arg={}",
-                    variant.bump_arg, variant.len_arg
-                );
-            }
+            // Debug output suppressed for cleaner test runs
 
             result
         };
@@ -514,14 +502,7 @@ impl CommonTestCaseBuilder {
             let mut acc = AccountBuilder::system_account(0);
             if config.setup_topup {
                 modify_account_for_topup(&mut acc);
-                println!(
-                    "🔧 DEBUG: Topup account setup for {}",
-                    config.base_test.name()
-                );
-                println!("   ATA address: {}", ata);
-                println!("   Lamports: {}", acc.lamports);
-                println!("   Owner: {}", acc.owner);
-                println!("   Data length: {}", acc.data.len());
+                // Debug output suppressed for cleaner test runs
             }
             acc
         };
@@ -810,17 +791,7 @@ impl CommonTestCaseBuilder {
         // If len_arg is specified, we MUST also include bump (P-ATA requirement)
         if variant.bump_arg || variant.len_arg {
             raw_data.push(bump);
-            if config.setup_topup {
-                println!(
-                    "🔧 DEBUG: Instruction data for {} with bump optimization",
-                    config.base_test.name()
-                );
-                println!("   Bump included in instruction: {}", bump);
-                println!(
-                    "   Variant: bump_arg={}, len_arg={}",
-                    variant.bump_arg, variant.len_arg
-                );
-            }
+            // Debug output suppressed for cleaner test runs
         }
 
         if variant.len_arg {
@@ -843,13 +814,7 @@ impl CommonTestCaseBuilder {
 
         let final_data = ata_implementation.adapt_instruction_data(raw_data);
 
-        if config.setup_topup {
-            println!(
-                "🔧 DEBUG: Final instruction data for {}: {:?}",
-                config.base_test.name(),
-                final_data
-            );
-        }
+        // Debug output suppressed for cleaner test runs
 
         final_data
     }
@@ -972,15 +937,7 @@ impl CommonTestCaseBuilder {
                         rent_epoch: 0,
                     };
 
-                    println!("🔧 DEBUG AtaWrongOwner: Setting ATA account");
-                    println!("   ATA address: {}", ata);
-                    println!("   Original owner: {}", accounts[pos].1.owner);
-                    println!("   Original lamports: {}", accounts[pos].1.lamports);
-                    println!("   Original data len: {}", accounts[pos].1.data.len());
-                    println!("   New owner: {}", new_account.owner);
-                    println!("   New lamports: {}", new_account.lamports);
-                    println!("   New data len: {}", new_account.data.len());
-                    println!("   Expected wrong_owner: {}", wrong_owner);
+                    // Debug output suppressed for cleaner test runs
 
                     accounts[pos].1 = new_account;
                 }

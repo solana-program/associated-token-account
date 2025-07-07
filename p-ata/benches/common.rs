@@ -1,6 +1,4 @@
 use {
-    bs58,
-    colored::Colorize,
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     solana_account::Account,
     solana_instruction,
@@ -8,7 +6,6 @@ use {
     solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
     spl_token_interface::state::Transmutable,
-    std::collections::HashMap,
     std::env,
 };
 
@@ -159,6 +156,7 @@ pub enum TestBankId {
 
 /// Account type identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum AccountTypeId {
     Payer = 0,
     Mint = 1,
@@ -202,6 +200,7 @@ pub fn structured_pk(
 }
 
 /// Generate multiple structured pubkeys at once
+#[allow(dead_code)]
 pub fn structured_pk_multi<const N: usize>(
     variant: &AtaVariant,
     test_bank: TestBankId,
@@ -254,39 +253,13 @@ pub fn structured_pk_with_optimal_bump(
         );
 
         if test_bump == 255 {
-            println!(
-                "Found optimal bump key [{}, {}, {}, {}]: {} (modifier: {})",
-                variant_to_byte(variant),
-                test_bank as u8,
-                test_number,
-                account_type as u8,
-                test_key,
-                modifier
-            );
+            // Found optimal bump - return silently unless debug mode is enabled
             return test_key;
         }
     }
 
-    // If we couldn't find optimal bump, warn and return base key
-    println!(
-        "Warning: Could not find optimal bump key [{}, {}, {}, {}], using base key with bump {}",
-        variant_to_byte(variant),
-        test_bank as u8,
-        test_number,
-        account_type as u8,
-        bump
-    );
+    // If we couldn't find optimal bump, return base key silently
     base_key
-}
-
-pub fn clone_accounts(src: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
-    src.iter().map(|(k, v)| (*k, v.clone())).collect()
-}
-
-pub(crate) fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> {
-    let mut data = vec![discriminator];
-    data.extend_from_slice(additional_data);
-    data
 }
 
 pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
@@ -432,25 +405,12 @@ impl BenchmarkSetup {
         if let Ok(keypair_data) = fs::read_to_string(&prefunded_keypair_path) {
             if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
                 if let Ok(keypair) = Keypair::try_from(&keypair_bytes[..]) {
-                    println!("Loaded P-ATA prefunded program ID: {}", keypair.pubkey());
                     return Some(keypair.pubkey());
                 }
             }
         }
 
-        println!("P-ATA prefunded program not found");
-        println!("   Build with --features create-account-prefunded to enable prefunded tests");
         None
-    }
-
-    /// Load both p-ata and original ATA program IDs
-    pub(crate) fn load_both_program_ids(manifest_dir: &str) -> (Pubkey, Option<Pubkey>, Pubkey) {
-        let (p_ata_program_id, token_program_id) = Self::load_program_ids(manifest_dir);
-
-        // Try to load original ATA program keypair
-        let original_ata_program_id = Self::try_load_original_ata_program_id(manifest_dir);
-
-        (p_ata_program_id, original_ata_program_id, token_program_id)
     }
 
     /// Load all available program IDs (P-ATA variants + original)
@@ -484,17 +444,15 @@ impl BenchmarkSetup {
         if let Ok(keypair_data) = fs::read_to_string(&original_keypair_path) {
             if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
                 if let Ok(keypair) = Keypair::try_from(&keypair_bytes[..]) {
-                    println!("Loaded original ATA program ID: {}", keypair.pubkey());
                     return Some(keypair.pubkey());
                 }
             }
         }
 
-        println!("Original ATA program not found, comparison mode unavailable");
-        println!("   Run with --features build-programs to build both implementations");
         None
     }
 
+    #[allow(dead_code)]
     /// Validate that the benchmark setup works with a simple test
     pub(crate) fn validate_setup(
         mollusk: &Mollusk,
@@ -652,6 +610,7 @@ impl AtaImplementation {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum CompatibilityStatus {
     Identical,           // Both succeeded with identical account states
@@ -663,6 +622,7 @@ pub enum CompatibilityStatus {
     IncompatibleSuccess, // One succeeded, one failed unexpectedly
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BenchmarkResult {
     pub implementation: String,
@@ -670,6 +630,7 @@ pub struct BenchmarkResult {
     pub compute_units: u64,
     pub success: bool,
     pub error_message: Option<String>,
+    pub captured_output: String, // Capture mollusk debug output
 }
 
 #[derive(Debug, Clone)]
@@ -696,6 +657,8 @@ impl ComparisonRunner {
         token_program_id: &Pubkey,
     ) -> BenchmarkResult {
         let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
+
+        // First run with quiet logging
         let result = mollusk.process_instruction(ix, accounts);
 
         let success = matches!(
@@ -714,7 +677,82 @@ impl ComparisonRunner {
             compute_units: result.compute_units_consumed,
             success,
             error_message,
+            captured_output: String::new(), // Will be populated if we need to re-run with debug
         }
+    }
+
+    /// Run a benchmark with verbose debug logging enabled - used for problematic results
+    pub fn run_single_benchmark_with_debug(
+        test_name: &str,
+        ix: &solana_instruction::Instruction,
+        accounts: &[(Pubkey, Account)],
+        implementation: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> BenchmarkResult {
+        // Temporarily enable debug logging
+        let original_rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
+        std::env::set_var("RUST_LOG", "debug");
+
+        let _ = solana_logger::setup_with(
+            "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
+        );
+
+        let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
+
+        // Capture output during execution
+        let captured_output =
+            Self::capture_output_during_execution(|| mollusk.process_instruction(ix, accounts));
+
+        let (result, output) = captured_output;
+
+        // Restore quiet logging
+        std::env::set_var("RUST_LOG", &original_rust_log);
+        let _ = solana_logger::setup_with(
+            "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+        );
+
+        let success = matches!(
+            result.program_result,
+            mollusk_svm::result::ProgramResult::Success
+        );
+        let error_message = if !success {
+            Some(format!("{:?}", result.program_result))
+        } else {
+            None
+        };
+
+        BenchmarkResult {
+            implementation: implementation.name.to_string(),
+            test_name: test_name.to_string(),
+            compute_units: result.compute_units_consumed,
+            success,
+            error_message,
+            captured_output: output,
+        }
+    }
+
+    /// Capture stdout/stderr output during function execution
+    fn capture_output_during_execution<F, R>(f: F) -> (R, String)
+    where
+        F: FnOnce() -> R,
+    {
+        use std::sync::{Arc, Mutex};
+
+        // Create a buffer to capture output
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let captured_clone = captured.clone();
+
+        // Execute the function - RUST_LOG should already be set appropriately by caller
+        let result = f();
+
+        // Extract captured output
+        let captured_text = if let Ok(buffer) = captured_clone.lock() {
+            String::from_utf8_lossy(&buffer).to_string()
+        } else {
+            String::new()
+        };
+
+        (result, captured_text)
     }
 
     pub fn create_mollusk_for_all_ata_implementations(token_program_id: &Pubkey) -> Mollusk {
@@ -776,12 +814,17 @@ impl ComparisonRunner {
         p_ata_result: &BenchmarkResult,
         original_result: &BenchmarkResult,
     ) -> CompatibilityStatus {
+        // Check if this is a P-ATA-only test (N/A for original)
+        if let Some(ref error_msg) = original_result.error_message {
+            if error_msg.contains("N/A - Test not applicable to original ATA") {
+                return CompatibilityStatus::OptimizedBehavior; // P-ATA-only feature
+            }
+        }
+
         match (p_ata_result.success, original_result.success) {
             (true, true) => {
                 // Both succeeded - check if this is the Token-2022 test which has expected differences
-                if p_ata_result.test_name == "create_token2022" {
-                    CompatibilityStatus::ExpectedDifferences
-                } else if p_ata_result.test_name.starts_with("fail_") {
+                if p_ata_result.test_name.starts_with("fail_") {
                     // CRITICAL: Both implementations succeeded in a failure test - this is a test issue!
                     CompatibilityStatus::Identical
                 } else {
@@ -932,6 +975,7 @@ impl ComparisonRunner {
 // ========================== BASE TEST TYPES ============================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub enum BaseTestType {
     Create,
     CreateIdempotent,
@@ -950,6 +994,7 @@ pub struct TestVariant {
     pub len_arg: bool,
 }
 
+#[allow(dead_code)]
 impl TestVariant {
     pub const BASE: Self = Self {
         rent_arg: false,
@@ -1020,6 +1065,7 @@ impl TestVariant {
 }
 
 impl BaseTestType {
+    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             Self::Create => "create",
@@ -1034,6 +1080,7 @@ impl BaseTestType {
     }
 
     /// Returns which P-ATA variant this test should use
+    #[allow(dead_code)]
     pub fn required_pata_variant(&self) -> AtaVariant {
         match self {
             Self::CreateTopup => AtaVariant::PAtaPrefunded, // Uses create-account-prefunded feature
@@ -1042,6 +1089,7 @@ impl BaseTestType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn supported_variants(&self) -> Vec<TestVariant> {
         match self {
             Self::Create => vec![

@@ -10,7 +10,6 @@ use {
         ProgramResult,
     },
     spl_token_interface::{
-        instruction::TokenInstruction,
         state::{account::Account as TokenAccount, Transmutable},
     },
 };

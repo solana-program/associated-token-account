@@ -411,12 +411,8 @@ impl ConsolidatedTestCaseBuilder {
             }
         }
 
-        // Standard account generation
         let payer = const_pk(base_offset);
         let mint = const_pk(base_offset + 1);
-
-        // Use optimal bump key for wallet to ensure fair comparison
-        // Each implementation gets its own optimal wallet for its own program ID
         let wallet = crate::const_pk_with_optimal_bump(
             base_offset + 2,
             &ata_implementation.program_id,
@@ -696,13 +692,17 @@ impl ConsolidatedTestCaseBuilder {
         config: &TestCaseConfig,
         accounts: &[(Pubkey, Account)],
     ) -> Vec<AccountMeta> {
+        // For multisig tests, the wallet (multisig account) should not be a signer
+        // Only individual signers should be marked as signers
+        let wallet_is_signer = !matches!(config.base_test, BaseTestType::RecoverMultisig);
+
         let mut metas = vec![
             AccountMeta::new(accounts[0].0, false),          // nested_ata
             AccountMeta::new_readonly(accounts[1].0, false), // nested_mint
             AccountMeta::new(accounts[2].0, false),          // dest_ata
             AccountMeta::new(accounts[3].0, false),          // owner_ata
             AccountMeta::new_readonly(accounts[4].0, false), // owner_mint
-            AccountMeta::new(accounts[5].0, true),           // wallet
+            AccountMeta::new(accounts[5].0, wallet_is_signer), // wallet
             AccountMeta::new_readonly(accounts[6].0, false), // token_program
             AccountMeta::new_readonly(accounts[7].0, false), // spl_token_interface
         ];
@@ -973,14 +973,12 @@ impl ConsolidatedTestCaseBuilder {
                 }
             }
             FailureMode::RecoverMultisigInsufficientSigners => {
-                // Mark wallet (multisig account) as not signer to trigger multisig validation
-                if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == wallet) {
-                    meta.is_signer = false;
-                }
-                // Mark only one multisig signer as signed (need 2)
-                if ix.accounts.len() > 8 {
-                    ix.accounts[9].is_signer = false; // Second signer not signed
-                    ix.accounts[10].is_signer = false; // Third signer not signed
+                if ix.accounts.len() > 9 {
+                    ix.accounts[8].is_signer = true;
+                    ix.accounts[9].is_signer = false;
+                    if ix.accounts.len() > 10 {
+                        ix.accounts[10].is_signer = false;
+                    }
                 }
             }
             FailureMode::RecoverWrongNestedAta(wrong_nested) => {

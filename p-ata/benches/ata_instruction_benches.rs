@@ -312,11 +312,10 @@ impl ComparisonRunner {
                     println!("Using P-ATA prefunded binary for {}", base_test.name());
                     prefunded
                 } else {
-                    println!(
-                        "Warning: {} requires prefunded variant but not available, using standard",
+                    panic!(
+                        "FATAL: {} requires prefunded variant but it's not available!",
                         base_test.name()
                     );
-                    standard_impl
                 }
             }
             _ => standard_impl,
@@ -359,7 +358,6 @@ impl ComparisonRunner {
             BaseTestType::CreateToken2022,
             BaseTestType::RecoverNested,
             BaseTestType::RecoverMultisig,
-            BaseTestType::WorstCase,
         ];
 
         let display_variants = [
@@ -383,48 +381,48 @@ impl ComparisonRunner {
             let supported_variants = base_test.supported_variants();
             let mut test_row = std::collections::HashMap::new();
 
-            // Run all supported variants (including combinations) but only store some for display
-            let mut best_optimization_result: Option<ComparisonResult> = None;
-            let mut best_optimization_cu = 0u64;
-
+            // Run all supported variants for display
             for variant in &supported_variants {
-                let test_name = format!("{}_{}", base_test.name(), variant.test_suffix());
-                println!("  Running {}", test_name);
-                let comparison = Self::run_single_test_comparison(
-                    &test_name,
-                    base_test,
-                    *variant,
-                    pata_impl,
-                    original_impl,
-                    token_program_id,
-                );
-
-                all_results.push(comparison.clone());
-
-                // Store for display if it's a simple variant
                 if display_variants.contains(variant) {
-                    test_row.insert(*variant, comparison.clone());
-                }
-
-                // Track best optimization (lowest CU count)
-                if comparison.p_ata.success && comparison.p_ata.compute_units > 0 {
-                    let cu = comparison.p_ata.compute_units;
-                    if best_optimization_result.is_none() || cu < best_optimization_cu {
-                        best_optimization_cu = cu;
-                        best_optimization_result = Some(comparison);
-                    }
+                    let test_name = format!("{}_{}", base_test.name(), variant.test_suffix());
+                    println!("  Running {}", test_name);
+                    let comparison = Self::run_single_test_comparison(
+                        &test_name,
+                        base_test,
+                        *variant,
+                        pata_impl,
+                        original_impl,
+                        token_program_id,
+                        &standard_impl.program_id,
+                    );
+                    all_results.push(comparison.clone());
+                    test_row.insert(*variant, comparison);
                 }
             }
 
-            // Add "all optimizations" column with the best result
-            if let Some(best_result) = best_optimization_result {
-                // Create a special variant marker for "all optimizations"
-                let all_opt_variant = TestVariant {
+            // Run actual "all optimizations" test - combine all applicable optimizations
+            let all_optimizations_variant = Self::get_all_optimizations_variant(base_test);
+            if let Some(all_opt_variant) = all_optimizations_variant {
+                let test_name = format!("{}_all_optimizations", base_test.name());
+                println!("  Running {} (all applicable optimizations)", test_name);
+                let comparison = Self::run_single_test_comparison(
+                    &test_name,
+                    base_test,
+                    all_opt_variant,
+                    pata_impl,
+                    original_impl,
+                    token_program_id,
+                    &standard_impl.program_id,
+                );
+                all_results.push(comparison.clone());
+
+                // Add to matrix with special marker
+                let all_opt_marker = TestVariant {
                     rent_arg: true,
                     bump_arg: true,
                     len_arg: true,
-                }; // Special marker
-                test_row.insert(all_opt_variant, best_result);
+                }; // Special marker for display
+                test_row.insert(all_opt_marker, comparison);
             }
 
             matrix_results.insert(base_test, test_row);
@@ -442,6 +440,7 @@ impl ComparisonRunner {
         p_ata_impl: &AtaImplementation,
         original_impl: &AtaImplementation,
         token_program_id: &Pubkey,
+        _standard_program_id: &Pubkey,
     ) -> ComparisonResult {
         let (p_ata_ix, p_ata_accounts) =
             TestCaseBuilder::build_test_case(base_test, variant, p_ata_impl, token_program_id);
@@ -489,6 +488,21 @@ impl ComparisonRunner {
         match base_test {
             BaseTestType::RecoverMultisig => false, // Original ATA doesn't support multisig recovery
             _ => true,
+        }
+    }
+
+    /// Determine the actual "all optimizations" variant for each test type
+    /// This combines all meaningful optimizations for the specific test, not just everything
+    fn get_all_optimizations_variant(base_test: BaseTestType) -> Option<TestVariant> {
+        match base_test {
+            BaseTestType::Create => Some(TestVariant::RENT_BUMP), // rent + bump
+            BaseTestType::CreateIdempotent => Some(TestVariant::RENT), // only rent makes sense
+            BaseTestType::CreateTopup => Some(TestVariant::RENT_BUMP), // rent + bump
+            BaseTestType::CreateTopupNoCap => Some(TestVariant::RENT_BUMP), // rent + bump
+            BaseTestType::CreateToken2022 => Some(TestVariant::RENT_BUMP_LEN), // rent + bump + len
+            BaseTestType::RecoverNested => Some(TestVariant::BUMP), // only bump makes sense
+            BaseTestType::RecoverMultisig => Some(TestVariant::BUMP), // only bump makes sense
+            _ => None,
         }
     }
 
@@ -1102,8 +1116,6 @@ fn build_base_test_accounts(
     (payer, mint, wallet)
 }
 
-
-
 fn calculate_bump_base_offset(extended_mint: bool, with_rent: bool) -> u8 {
     match (extended_mint, with_rent) {
         (false, false) => 90, // create_with_bump_base
@@ -1151,5 +1163,3 @@ fn run_benchmark_with_validation(
     let mut bencher = execute_benchmark_case(bencher, name, ix, &cloned_accounts);
     bencher.execute();
 }
-
-

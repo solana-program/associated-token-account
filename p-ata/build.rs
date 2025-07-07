@@ -192,13 +192,7 @@ mod builder {
             .expect("Failed to execute cargo build-sbf for P-ATA prefunded");
 
         if !output.status.success() {
-            // If prefunded build fails, warn but don't panic - restore standard files
-            println!(
-                "cargo:warning=P-ATA prefunded build failed (this is okay if the feature is not available): {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-
-            // Restore standard files
+            // Restore standard files first
             if backup_so.exists() {
                 let _ = fs::copy(&backup_so, &standard_so);
                 let _ = fs::remove_file(&backup_so);
@@ -207,7 +201,11 @@ mod builder {
                 let _ = fs::copy(&backup_keypair, &standard_keypair);
                 let _ = fs::remove_file(&backup_keypair);
             }
-            return;
+
+            panic!(
+                "P-ATA prefunded build failed. This is required for benchmarking. Error: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
         }
 
         // Copy the prefunded build to prefunded names

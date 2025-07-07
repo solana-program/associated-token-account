@@ -43,99 +43,12 @@ jobs:
           cargo-cache-key: cargo-benchmarks
           solana: true
 
-      - name: Generate Build Cache Keys
-        id: build-cache-keys
+      - name: Build Programs
+        id: build-programs
         run: |
-          # Generate separate cache keys for each program
-          original_ata_key=$(find program -name "*.rs" -o -name "Cargo.toml" -o -name "Cargo.lock" -o -name "build.rs" | \
-                            xargs sha256sum | sha256sum | cut -d' ' -f1)
-          p_ata_key=$(find p-ata -name "*.rs" -o -name "Cargo.toml" -o -name "Cargo.lock" -o -name "build.rs" | \
-                     xargs sha256sum | sha256sum | cut -d' ' -f1)
-          
-          echo "original-ata-key=original-ata-$original_ata_key" >> $GITHUB_OUTPUT
-          echo "p-ata-key=p-ata-$p_ata_key" >> $GITHUB_OUTPUT
-          
-          echo "🔑 Original ATA cache key: original-ata-$original_ata_key"
-          echo "🔑 P-ATA cache key: p-ata-$p_ata_key"
-
-      - name: Cache Original ATA Program
-        id: cache-original-ata
-        uses: actions/cache@v4
-        if: ${{ !github.event.inputs.clear_cache }}
-        with:
-          path: program/target/deploy/
-          key: ${{ steps.build-cache-keys.outputs.original-ata-key }}
-          restore-keys: |
-            original-ata-
-
-      - name: Cache P-ATA Program
-        id: cache-p-ata
-        uses: actions/cache@v4
-        if: ${{ !github.event.inputs.clear_cache }}
-        with:
-          path: |
-            p-ata/target/deploy/
-            p-ata/programs/
-          key: ${{ steps.build-cache-keys.outputs.p-ata-key }}
-          restore-keys: |
-            p-ata-
-
-      - name: Clear Cache (Manual)
-        if: ${{ github.event.inputs.clear_cache }}
-        run: |
-          echo "🧹 Manual cache clear requested - forcing rebuild"
-          rm -rf program/target/deploy/ p-ata/target/deploy/ p-ata/programs/ 2>/dev/null || true
-
-      - name: Build Original ATA Program
-        if: steps.cache-original-ata.outputs.cache-hit != 'true' || github.event.inputs.clear_cache
-        run: |
-          echo "🔨 Building Original ATA program (cache miss)..."
-          cd program
-          cargo build-sbf
-          cd ..
-          echo "✅ Original ATA program built successfully"
-
-      - name: Build P-ATA Program
-        if: steps.cache-p-ata.outputs.cache-hit != 'true' || github.event.inputs.clear_cache
-        run: |
-          echo "🔨 Building P-ATA program (cache miss)..."
           cd p-ata
-          cargo build-sbf --features build-programs
-          cd ..
-          echo "✅ P-ATA program built successfully"
-
-      - name: Verify Cached Programs
-        run: |
-          echo "📋 Program build summary:"
-          
-          # Check Original ATA
-          if [ "${{ steps.cache-original-ata.outputs.cache-hit }}" == "true" ]; then
-            echo "  💾 Original ATA: Restored from cache"
-          else
-            echo "  🔨 Original ATA: Built from source"
-          fi
-          
-          # Check P-ATA
-          if [ "${{ steps.cache-p-ata.outputs.cache-hit }}" == "true" ]; then
-            echo "  💾 P-ATA: Restored from cache"
-          else
-            echo "  🔨 P-ATA: Built from source"
-          fi
-          
-          echo ""
-          echo "📁 Available program binaries:"
-          find program p-ata -name "*.so" -type f | while read file; do
-            echo "  ✅ $file ($(stat -c%s "$file") bytes)"
-          done
-          
-          echo ""
-          echo "🔑 Available keypairs:"
-          find program p-ata -name "*-keypair.json" -type f | while read file; do
-            echo "  🔑 $file"
-          done
-          
-          echo ""
-          echo "✅ Program verification completed"
+          cargo build --features build-programs
+          echo "✅ Programs built successfully"
 
       - name: Run Benchmarks
         run: |

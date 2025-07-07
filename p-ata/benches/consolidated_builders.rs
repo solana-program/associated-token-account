@@ -263,11 +263,12 @@ impl ConsolidatedTestCaseBuilder {
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         let base_offset = Self::calculate_offset_for_test(&config, variant);
 
-        // Get base account addresses
         let (payer, mint, wallet) =
             Self::get_base_addresses(&config, base_offset, ata_implementation);
 
-        // Calculate ATA address and bump
+        // The processor will always use instruction.program_id for PDA operations
+        let derivation_program_id = ata_implementation.program_id;
+
         let (ata, bump) = if matches!(
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
@@ -294,18 +295,37 @@ impl ConsolidatedTestCaseBuilder {
                     config.token_program.as_ref(),
                     owner_mint.as_ref(),
                 ],
-                &ata_implementation.program_id,
+                &derivation_program_id,
             )
         } else {
-            // Standard case
-            Pubkey::find_program_address(
+            // Standard case - use derivation program ID (executing ID for bump, reference ID for non-bump)
+            let result = Pubkey::find_program_address(
                 &[
                     wallet.as_ref(),
                     config.token_program.as_ref(),
                     mint.as_ref(),
                 ],
-                &ata_implementation.program_id,
-            )
+                &derivation_program_id,
+            );
+
+            if config.setup_topup {
+                println!("🔧 DEBUG: ATA derivation for {}", config.base_test.name());
+                println!("   Wallet: {}", wallet);
+                println!("   Token program: {}", config.token_program);
+                println!("   Mint: {}", mint);
+                println!(
+                    "   Program ID (always executing): {}",
+                    derivation_program_id
+                );
+                println!("   Derived ATA: {}", result.0);
+                println!("   Calculated bump: {}", result.1);
+                println!(
+                    "   Variant: bump_arg={}, len_arg={}",
+                    variant.bump_arg, variant.len_arg
+                );
+            }
+
+            result
         };
 
         // Build accounts based on test type
@@ -437,6 +457,14 @@ impl ConsolidatedTestCaseBuilder {
             let mut acc = AccountBuilder::system_account(0);
             if config.setup_topup {
                 modify_account_for_topup(&mut acc);
+                println!(
+                    "🔧 DEBUG: Topup account setup for {}",
+                    config.base_test.name()
+                );
+                println!("   ATA address: {}", ata);
+                println!("   Lamports: {}", acc.lamports);
+                println!("   Owner: {}", acc.owner);
+                println!("   Data length: {}", acc.data.len());
             }
             acc
         };
@@ -694,6 +722,17 @@ impl ConsolidatedTestCaseBuilder {
         // If len_arg is specified, we MUST also include bump (P-ATA requirement)
         if variant.bump_arg || variant.len_arg {
             raw_data.push(bump);
+            if config.setup_topup {
+                println!(
+                    "🔧 DEBUG: Instruction data for {} with bump optimization",
+                    config.base_test.name()
+                );
+                println!("   Bump included in instruction: {}", bump);
+                println!(
+                    "   Variant: bump_arg={}, len_arg={}",
+                    variant.bump_arg, variant.len_arg
+                );
+            }
         }
 
         if variant.len_arg {
@@ -714,7 +753,17 @@ impl ConsolidatedTestCaseBuilder {
             raw_data.extend_from_slice(&account_len.to_le_bytes());
         }
 
-        ata_implementation.adapt_instruction_data(raw_data)
+        let final_data = ata_implementation.adapt_instruction_data(raw_data);
+
+        if config.setup_topup {
+            println!(
+                "🔧 DEBUG: Final instruction data for {}: {:?}",
+                config.base_test.name(),
+                final_data
+            );
+        }
+
+        final_data
     }
 
     /// Helper method to create AtaImplementation from program ID

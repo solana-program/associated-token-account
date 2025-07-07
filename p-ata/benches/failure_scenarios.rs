@@ -1896,7 +1896,6 @@ fn main() {
             })
             .count();
 
-        // Determine overall status based on critical issues only
         if unexpected_success == 0 && both_succeeded == 0 {
             println!("\n✅ Failure comparison completed successfully - No critical security issues detected");
         } else {

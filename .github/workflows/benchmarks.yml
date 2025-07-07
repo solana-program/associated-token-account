@@ -7,18 +7,6 @@ on:
       - 'program/**'
       - '.github/workflows/benchmarks.yml'
     branches: [main, p-ata, p-ata-dev]
-  pull_request:
-    paths:
-      - 'p-ata/**'
-      - 'program/**'
-      - '.github/workflows/benchmarks.yml'
-    branches: [main, p-ata]
-  workflow_dispatch:
-    inputs:
-      clear_cache:
-        description: 'Clear build cache before running'
-        type: boolean
-        default: false
 
 env:
   RUST_BACKTRACE: 1

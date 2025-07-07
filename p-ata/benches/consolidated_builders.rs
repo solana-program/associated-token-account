@@ -414,7 +414,15 @@ impl ConsolidatedTestCaseBuilder {
         // Standard account generation
         let payer = const_pk(base_offset);
         let mint = const_pk(base_offset + 1);
-        let wallet = const_pk(base_offset + 2);
+
+        // Use optimal bump key for wallet to ensure fair comparison
+        // Each implementation gets its own optimal wallet for its own program ID
+        let wallet = crate::const_pk_with_optimal_bump(
+            base_offset + 2,
+            &ata_implementation.program_id,
+            &config.token_program,
+            &mint,
+        );
         (payer, mint, wallet)
     }
 
@@ -532,7 +540,14 @@ impl ConsolidatedTestCaseBuilder {
 
         // Calculate ATA addresses
         let base_offset = Self::calculate_offset_for_test(config, variant);
-        let actual_wallet = const_pk(base_offset + 2);
+        // Use optimal bump key for wallet to ensure fair comparison
+        // Each implementation gets its own optimal wallet for its own program ID
+        let actual_wallet = crate::const_pk_with_optimal_bump(
+            base_offset + 2,
+            &ata_implementation.program_id,
+            &config.token_program,
+            &owner_mint,
+        );
 
         let (owner_ata, _) = Pubkey::find_program_address(
             &[

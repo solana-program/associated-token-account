@@ -149,6 +149,59 @@ pub fn const_pk(byte: u8) -> Pubkey {
     Pubkey::new_from_array([byte; 32])
 }
 
+/// Find a public key that gives optimal bump (255) for ATA derivation
+pub fn const_pk_with_optimal_bump(
+    base_byte: u8,
+    ata_program_id: &Pubkey,
+    token_program_id: &Pubkey,
+    mint: &Pubkey,
+) -> Pubkey {
+    // Start with the base key
+    let base_key = const_pk(base_byte);
+
+    // Test if base key already has optimal bump
+    let (_, bump) = Pubkey::find_program_address(
+        &[base_key.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+        ata_program_id,
+    );
+
+    if bump == 255 {
+        return base_key;
+    }
+
+    // Search for a key that gives optimal bump
+    // We'll modify the key slightly by changing the last few bytes
+    let mut key_bytes = [base_byte; 32];
+
+    // Try different variations until we find one with bump 255
+    for modifier in 0u32..10000 {
+        // Modify the last 4 bytes with the modifier
+        let modifier_bytes = modifier.to_le_bytes();
+        key_bytes[28..32].copy_from_slice(&modifier_bytes);
+
+        let test_key = Pubkey::new_from_array(key_bytes);
+        let (_, test_bump) = Pubkey::find_program_address(
+            &[test_key.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+            ata_program_id,
+        );
+
+        if test_bump == 255 {
+            println!(
+                "Found optimal bump key for base {}: {} (modifier: {})",
+                base_byte, test_key, modifier
+            );
+            return test_key;
+        }
+    }
+
+    // If we couldn't find optimal bump, warn and return base key
+    println!(
+        "Warning: Could not find optimal bump key for base {}, using base key with bump {}",
+        base_byte, bump
+    );
+    base_key
+}
+
 pub fn clone_accounts(src: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
     src.iter().map(|(k, v)| (*k, v.clone())).collect()
 }

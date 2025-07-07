@@ -191,7 +191,7 @@ impl TestCaseBuilder {
         (Instruction, Vec<(Pubkey, Account)>),
     ) {
         // Use fixed wallet and mint - independent of ATA program
-        // These values were chosen to produce a low bump for worst-case testing
+        // For worst case, we actually want a bad bump, so use original const_pk
         let worst_wallet = const_pk(200);
         let mint = const_pk(199); // Fixed mint for consistency
 
@@ -1106,13 +1106,14 @@ fn build_ata_instruction_metas(
 
 fn build_base_test_accounts(
     base_offset: u8,
-    _token_program_id: &Pubkey,
-    _program_id: &Pubkey,
+    token_program_id: &Pubkey,
+    program_id: &Pubkey,
 ) -> (Pubkey, Pubkey, Pubkey) {
     let payer = const_pk(base_offset);
     let mint = const_pk(base_offset + 1);
-    // Wallets are independent of ATA program - use fixed wallet address
-    let wallet = const_pk(base_offset + 2);
+    // Use optimal bump key for wallet to ensure fair comparison
+    // Each implementation gets its own optimal wallet for its own program ID
+    let wallet = const_pk_with_optimal_bump(base_offset + 2, program_id, token_program_id, &mint);
     (payer, mint, wallet)
 }
 

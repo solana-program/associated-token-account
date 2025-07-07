@@ -164,14 +164,7 @@ jobs:
           source scripts/run_local_benchmarks.sh
           generate_badges_only
 
-      - name: Upload Benchmark Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-results
-          path: p-ata/benchmark_results/
-          retention-days: 30
-
-      - name: Update Repository with Results
+      - name: Update README with Results
         if: github.ref == 'refs/heads/main'
         run: |
           cd p-ata
@@ -188,70 +181,4 @@ jobs:
             git add README.md
             git commit -m "Update README with benchmark badges - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             git push origin HEAD
-          fi
-          
-          # Also create/update benchmark results branch for historical data
-          git checkout -B benchmark-results
-          
-          # Copy results to root level for easy access
-          cp benchmark_results/*.json . 2>/dev/null || true
-          cp benchmark_results/badges.md . 2>/dev/null || true
-          
-          # Add and commit results
-          git add *.json badges.md 2>/dev/null || true
-          git commit -m "Update benchmark results - $(date -u '+%Y-%m-%d %H:%M:%S UTC')" || exit 0
-          
-          # Push to benchmark-results branch
-          git push origin benchmark-results --force
-
-      - name: Archive Results for PR
-        if: github.event_name == 'pull_request'
-        run: |
-          cd p-ata
-          
-          # Create performance summary for PR (stored as artifact only)
-          if [ -f "benchmark_results/performance_results.json" ] && [ -f "benchmark_results/failure_results.json" ]; then
-            echo "## 📊 P-ATA Performance Matrix" > benchmark_results/pr_summary.md
-            echo "" >> benchmark_results/pr_summary.md
-            
-            # Add performance matrix table header
-            echo "### Performance Matrix Results" >> benchmark_results/pr_summary.md
-            echo "| Test | p-ata | rent arg | bump arg | len arg | all optimizations |" >> benchmark_results/pr_summary.md
-            echo "|------|-------|----------|----------|---------|-------------------|" >> benchmark_results/pr_summary.md
-            
-            # Add performance matrix data
-            jq -r '
-              .performance_tests | to_entries[] | 
-              . as $test | 
-              "| " + .key + 
-              " | " + (if $test.value["p-ata"] then ($test.value["p-ata"].p_ata_cu | tostring) else "" end) +
-              " | " + (if $test.value["rent_arg"] then ($test.value["rent_arg"].p_ata_cu | tostring) else "" end) +
-              " | " + (if $test.value["bump_arg"] then ($test.value["bump_arg"].p_ata_cu | tostring) else "" end) +
-              " | " + (if $test.value["len_arg"] then ($test.value["len_arg"].p_ata_cu | tostring) else "" end) +
-              " | " + (if $test.value["all_optimizations"] then ($test.value["all_optimizations"].p_ata_cu | tostring) else "" end) +
-              " |"
-            ' benchmark_results/performance_results.json >> benchmark_results/pr_summary.md
-              
-              # Add failure test header
-              echo "" >> benchmark_results/pr_summary.md
-              echo "### Failure Test Results" >> benchmark_results/pr_summary.md
-              echo "| Test | Result |" >> benchmark_results/pr_summary.md
-              echo "|------|--------|" >> benchmark_results/pr_summary.md
-              
-              # Add failure test data
-              jq -r '.failure_tests | to_entries[] | "| \(.key) | \(.value.status) |"' benchmark_results/failure_results.json >> benchmark_results/pr_summary.md
-              
-              # Add footer
-              echo "" >> benchmark_results/pr_summary.md
-              echo "> 🤖 Matrix shows P-ATA compute units across optimization variants:" >> benchmark_results/pr_summary.md
-              echo "> - **p-ata**: Base implementation" >> benchmark_results/pr_summary.md  
-              echo "> - **rent arg**: With rent sysvar provided" >> benchmark_results/pr_summary.md
-              echo "> - **bump arg**: With bump seed provided (skips find_program_address)" >> benchmark_results/pr_summary.md
-              echo "> - **len arg**: With account length provided" >> benchmark_results/pr_summary.md
-              echo "> - **all optimizations**: Best combination of optimizations available for each test" >> benchmark_results/pr_summary.md
-              echo "> - **Empty cells**: Unsupported combinations for that test type" >> benchmark_results/pr_summary.md
-              
-              echo "✅ PR summary generated and saved to artifact"
-          else
-            echo "⚠️  No benchmark data available for PR summary"
           fi 

@@ -15,6 +15,11 @@ use {
     },
 };
 
+pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
+pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
+pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
+pub const TRANSFER_DISCM: u8 = 3;
+
 /// Parsed ATA accounts: (payer, ata, wallet, mint, system_program, token_program, rent_sysvar?)
 type AtaAccounts<'a> = (
     &'a AccountInfo,
@@ -83,7 +88,7 @@ fn validate_token_account_mint(
 #[inline(always)]
 fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
     let mut data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
-    data[0] = 18u8; // TokenInstruction::InitializeAccount3
+    data[0] = INITIALIZE_ACCOUNT_3_DISCM;
     data[1..33].copy_from_slice(owner.as_ref());
     data
 }
@@ -91,14 +96,14 @@ fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
 /// Build InitializeImmutableOwner instruction data
 #[inline(always)]
 fn build_initialize_immutable_owner_data() -> [u8; 1] {
-    [22u8] // TokenInstruction::InitializeImmutableOwner
+    [INITIALIZE_IMMUTABLE_OWNER_DISCM]
 }
 
 /// Build Transfer instruction data
 #[inline(always)]
 fn build_transfer_data(amount: u64) -> [u8; 9] {
     let mut data = [0u8; 9];
-    data[0] = TokenInstruction::Transfer as u8;
+    data[0] = TRANSFER_DISCM;
     data[1..9].copy_from_slice(&amount.to_le_bytes());
     data
 }
@@ -106,7 +111,7 @@ fn build_transfer_data(amount: u64) -> [u8; 9] {
 /// Build CloseAccount instruction data
 #[inline(always)]
 fn build_close_account_data() -> [u8; 1] {
-    [TokenInstruction::CloseAccount as u8]
+    [CLOSE_ACCOUNT_DISCM]
 }
 
 /// Resolve rent from sysvar account or syscall

@@ -3088,6 +3088,7 @@ dependencies = [
  "bs58 0.4.0",
  "colored",
  "criterion",
+ "indicatif",
  "mollusk-svm",
  "mollusk-svm-bencher",
  "num-traits",

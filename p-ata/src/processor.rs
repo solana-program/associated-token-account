@@ -9,9 +9,7 @@ use {
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
-    spl_token_interface::{
-        state::{account::Account as TokenAccount, Transmutable},
-    },
+    spl_token_interface::state::{account::Account as TokenAccount, Transmutable},
 };
 
 pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
@@ -365,7 +363,6 @@ pub fn process_recover(
     }
 
     // Owner_ata and nested_ata validation no longer performed here.
-
     let amount_to_recover = get_token_account_unchecked(nested_ata).amount();
 
     let transfer_data = build_transfer_data(amount_to_recover);
@@ -449,5 +446,6 @@ pub fn process_recover(
         &ix_close,
         &[nested_ata, wallet, owner_ata, token_prog],
         &[pda_signer],
-    )
+    )?;
+    Ok(())
 }

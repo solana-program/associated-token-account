@@ -20,6 +20,10 @@ create-account-prefunded = []
 build-programs = []
 comparison-bench = ["build-programs"]
 
+[build-dependencies]
+serde_json = "1.0"
+solana-pubkey = "2.2.1"
+
 [patch.crates-io]
 pinocchio = { version = "0.8.4", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded", default-features = false }
 pinocchio-system = { version = "0.2.3", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded" }
@@ -35,6 +39,7 @@ spl-token-interface = { version = "^0", git = "https://github.com/solana-program
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 assert_matches = "1.5.0"
+indicatif = { version = "0.17.12" }
 num-traits = "0.2"
 solana-account = "2.2.1"
 solana-instruction = "2.3.0"

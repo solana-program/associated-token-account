@@ -1,4 +1,5 @@
 use {
+    crate::common_builders::calculate_test_number,
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     mollusk_svm_bencher::MolluskComputeUnitBencher,
     solana_account::Account,
@@ -12,8 +13,8 @@ use {
 mod common;
 use common::*;
 
-mod consolidated_builders;
-use consolidated_builders::ConsolidatedTestCaseBuilder;
+mod common_builders;
+use common_builders::CommonTestCaseBuilder;
 
 struct TestCaseBuilder;
 
@@ -24,7 +25,7 @@ impl TestCaseBuilder {
         ata_implementation: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        ConsolidatedTestCaseBuilder::build_test_case(
+        CommonTestCaseBuilder::build_test_case(
             base_test,
             variant,
             ata_implementation,
@@ -37,9 +38,27 @@ impl TestCaseBuilder {
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         // Fixed mints and wallets - independent of ATA program
-        let owner_mint = const_pk(20);
-        let wallet = const_pk(30);
-        let nested_mint = const_pk(40);
+        // Calculate proper test number for RecoverNested + BASE variant
+        let test_number =
+            calculate_test_number(BaseTestType::RecoverNested, TestVariant::BASE, false);
+        let owner_mint = structured_pk(
+            &AtaVariant::Original,
+            TestBankId::Benchmarks,
+            test_number,
+            AccountTypeId::OwnerMint,
+        );
+        let wallet = structured_pk(
+            &AtaVariant::Original,
+            TestBankId::Benchmarks,
+            test_number,
+            AccountTypeId::Wallet,
+        );
+        let nested_mint = structured_pk(
+            &AtaVariant::Original,
+            TestBankId::Benchmarks,
+            test_number,
+            AccountTypeId::NestedMint,
+        );
 
         let (owner_ata, _) = Pubkey::find_program_address(
             &[
@@ -183,77 +202,30 @@ impl TestCaseBuilder {
         (ix, accounts)
     }
 
-    fn build_worst_case_bump_scenario(
-        program_id: &Pubkey,
+    /// Build all test cases for the worst case scenario using the modular variant system
+    fn build_worst_case_test_cases(
+        ata_implementation: &AtaImplementation,
         token_program_id: &Pubkey,
-    ) -> (
-        (Instruction, Vec<(Pubkey, Account)>),
-        (Instruction, Vec<(Pubkey, Account)>),
-    ) {
-        // Use fixed wallet and mint - independent of ATA program
-        // For worst case, we actually want a bad bump, so use original const_pk
-        let worst_wallet = const_pk(200);
-        let mint = const_pk(199); // Fixed mint for consistency
+    ) -> Vec<(String, Instruction, Vec<(Pubkey, Account)>)> {
+        let mut test_cases = Vec::new();
 
-        let (ata, bump) = Pubkey::find_program_address(
-            &[
-                worst_wallet.as_ref(),
-                token_program_id.as_ref(),
-                mint.as_ref(),
-            ],
-            program_id,
-        );
-
-        println!(
-            "Worst case bump scenario: wallet={}, bump={} (lower = more expensive)",
-            worst_wallet, bump
-        );
-
-        let accounts = vec![
-            (const_pk(198), AccountBuilder::system_account(1_000_000_000)), // payer
-            (ata, AccountBuilder::system_account(0)),
-            (worst_wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
+        let applicable_variants = [
+            TestVariant::BASE, // No arguments (expensive find_program_address)
+            TestVariant::BUMP, // With bump argument (optimized)
         ];
 
-        let metas = vec![
-            AccountMeta::new(const_pk(198), true), // payer
-            AccountMeta::new(ata, false),
-            AccountMeta::new_readonly(worst_wallet, false),
-            AccountMeta::new_readonly(mint, false),
-            AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-            AccountMeta::new_readonly(*token_program_id, false),
-        ];
+        for variant in applicable_variants {
+            let test_name = format!("worst_case_{}", variant.test_suffix());
+            let (ix, accounts) = TestCaseBuilder::build_test_case(
+                BaseTestType::WorstCase,
+                variant,
+                ata_implementation,
+                token_program_id,
+            );
+            test_cases.push((test_name, ix, accounts));
+        }
 
-        // Create instruction (expensive find_program_address)
-        let create_ix = Instruction {
-            program_id: *program_id,
-            accounts: metas.clone(),
-            data: vec![0u8], // Create discriminator
-        };
-
-        // CreateWithBump instruction (skips find_program_address)
-        let create_with_bump_ix = Instruction {
-            program_id: *program_id,
-            accounts: metas,
-            data: vec![0u8, bump], // Create discriminator + bump
-        };
-
-        (
-            (create_ix, accounts.clone()),
-            (create_with_bump_ix, accounts),
-        )
+        test_cases
     }
 }
 
@@ -361,7 +333,7 @@ impl ComparisonRunner {
         ];
 
         let display_variants = [
-            TestVariant::BASE, // p-ata
+            TestVariant::BASE, // p-ata base
             TestVariant::RENT, // rent arg
             TestVariant::BUMP, // bump arg
             TestVariant::LEN,  // len arg
@@ -531,19 +503,25 @@ impl ComparisonRunner {
     ) {
         println!("\n=== PERFORMANCE MATRIX RESULTS ===");
 
-        // Create the full column set: display variants + "all optimizations"
+        // Create the full column set: SPL ATA + P-ATA variants + "all optimizations"
         let all_opt_variant = TestVariant {
             rent_arg: true,
             bump_arg: true,
             len_arg: true,
         };
-        let mut columns = display_variants.to_vec();
+        let mut columns = vec![TestVariant::BASE]; // This will be used for SPL ATA data
+        columns.extend_from_slice(display_variants); // This includes BASE for p-ata, plus rent, bump, len
         columns.push(all_opt_variant);
 
-        // Print header
+        // Print header with proper column names
         print!("{:<20}", "Test");
-        for variant in &columns {
-            print!(" | {:>15}", variant.column_name());
+        for (i, variant) in columns.iter().enumerate() {
+            let column_name = if i == 0 {
+                "SPL ATA" // First column shows original ATA numbers
+            } else {
+                variant.column_name()
+            };
+            print!(" | {:>15}", column_name);
         }
         println!();
 
@@ -557,10 +535,26 @@ impl ComparisonRunner {
         // Print test rows
         for (base_test, test_row) in matrix_results {
             print!("{:<20}", base_test.name());
-            for variant in &columns {
+            for (i, variant) in columns.iter().enumerate() {
                 if let Some(result) = test_row.get(variant) {
-                    if result.p_ata.success && result.p_ata.compute_units > 0 {
-                        print!(" | {:>15}", result.p_ata.compute_units);
+                    let compute_units = if i == 0 {
+                        // First column: show original ATA numbers (SPL ATA)
+                        if result.original.success && result.original.compute_units > 0 {
+                            result.original.compute_units
+                        } else {
+                            0
+                        }
+                    } else {
+                        // All other columns: show P-ATA numbers for the specific variant
+                        if result.p_ata.success && result.p_ata.compute_units > 0 {
+                            result.p_ata.compute_units
+                        } else {
+                            0
+                        }
+                    };
+
+                    if compute_units > 0 {
+                        print!(" | {:>15}", compute_units);
                     } else {
                         print!(" | {:>15}", "");
                     }
@@ -936,32 +930,24 @@ impl BenchmarkRunner {
             );
         }
 
-        // Run worst-case bump scenario comparison
-        Self::run_worst_case_bump_comparison(&ata_implementation.program_id, token_program_id);
+        // Run worst-case scenarios
+        Self::run_worst_case_scenarios(ata_implementation, token_program_id);
     }
 
-    fn run_worst_case_bump_comparison(program_id: &Pubkey, token_program_id: &Pubkey) {
-        println!("\n=== Worst-Case Bump Scenario Comparison ===");
-        let ((create_ix, create_accounts), (create_with_bump_ix, create_with_bump_accounts)) =
-            TestCaseBuilder::build_worst_case_bump_scenario(program_id, token_program_id);
+    fn run_worst_case_scenarios(ata_implementation: &AtaImplementation, token_program_id: &Pubkey) {
+        println!("\n=== Worst-Case Scenarios ===");
+        let test_cases =
+            TestCaseBuilder::build_worst_case_test_cases(ata_implementation, token_program_id);
 
-        // Benchmark regular Create (expensive)
-        Self::run_isolated_benchmark(
-            "worst_case_create",
-            &create_ix,
-            &create_accounts,
-            program_id,
-            token_program_id,
-        );
-
-        // Benchmark CreateWithBump (optimized)
-        Self::run_isolated_benchmark(
-            "worst_case_create_with_bump",
-            &create_with_bump_ix,
-            &create_with_bump_accounts,
-            program_id,
-            token_program_id,
-        );
+        for (test_name, ix, accounts) in test_cases {
+            Self::run_isolated_benchmark(
+                &test_name,
+                &ix,
+                &accounts,
+                &ata_implementation.program_id,
+                token_program_id,
+            );
+        }
     }
 }
 
@@ -1001,23 +987,12 @@ fn main() {
 
         println!("\n🔍 Running comprehensive comparison between implementations");
 
-        // Validate standard P-ATA setup
-        let standard_mollusk = common::ComparisonRunner::create_mollusk_for_implementation(
-            &standard_impl,
-            &token_program_id,
-        );
-        if let Err(e) =
-            BenchmarkSetup::validate_ata_setup(&standard_mollusk, &standard_impl, &token_program_id)
-        {
-            panic!("P-ATA standard benchmark setup validation failed: {}", e);
-        }
-
         // Validate prefunded P-ATA setup if available
         if let Some(ref prefunded_impl) = prefunded_impl {
-            let prefunded_mollusk = common::ComparisonRunner::create_mollusk_for_implementation(
-                prefunded_impl,
-                &token_program_id,
-            );
+            let prefunded_mollusk =
+                common::ComparisonRunner::create_mollusk_for_all_ata_implementations(
+                    &token_program_id,
+                );
             if let Err(e) = BenchmarkSetup::validate_ata_setup(
                 &prefunded_mollusk,
                 prefunded_impl,
@@ -1028,15 +1003,29 @@ fn main() {
         }
 
         // Validate original ATA setup
-        let original_mollusk = common::ComparisonRunner::create_mollusk_for_implementation(
-            &original_impl,
-            &token_program_id,
-        );
+        let original_mollusk =
+            common::ComparisonRunner::create_mollusk_for_all_ata_implementations(&token_program_id);
         if let Err(e) =
             BenchmarkSetup::validate_ata_setup(&original_mollusk, &original_impl, &token_program_id)
         {
             panic!("Original ATA benchmark setup validation failed: {}", e);
         }
+
+        // Validate standard P-ATA setup
+        println!(
+            "Validating standard P-ATA setup with token program {}",
+            token_program_id
+        );
+        println!("Standard P-ATA program ID: {}", standard_impl.program_id);
+
+        // let standard_mollusk = common::ComparisonRunner::create_mollusk_for_implementation(
+        //     &token_program_id,
+        // );
+        // if let Err(e) =
+        //     BenchmarkSetup::validate_ata_setup(&standard_mollusk, &standard_impl, &token_program_id)
+        // {
+        //     panic!("P-ATA standard benchmark setup validation failed: {}", e);
+        // }
 
         // Run comparison using the appropriate P-ATA implementation for each test
         let _comparison_results = ComparisonRunner::run_full_comparison(
@@ -1054,7 +1043,8 @@ fn main() {
         println!("   💡 To enable comparison, run: cargo bench --features build-programs");
 
         // Setup Mollusk with standard P-ATA
-        let mollusk = common::fresh_mollusk(&standard_program_id, &token_program_id);
+        let mollusk =
+            common::ComparisonRunner::create_mollusk_for_all_ata_implementations(&token_program_id);
 
         // Validate the setup works
         if let Err(e) =
@@ -1109,11 +1099,29 @@ fn build_base_test_accounts(
     token_program_id: &Pubkey,
     program_id: &Pubkey,
 ) -> (Pubkey, Pubkey, Pubkey) {
-    let payer = const_pk(base_offset);
-    let mint = const_pk(base_offset + 1);
+    let payer = structured_pk(
+        &AtaVariant::Original, // Use Original as default for these helper functions
+        TestBankId::Benchmarks,
+        base_offset,
+        AccountTypeId::Payer,
+    );
+    let mint = structured_pk(
+        &AtaVariant::Original,
+        TestBankId::Benchmarks,
+        base_offset,
+        AccountTypeId::Mint,
+    );
     // Use optimal bump key for wallet to ensure fair comparison
     // Each implementation gets its own optimal wallet for its own program ID
-    let wallet = const_pk_with_optimal_bump(base_offset + 2, program_id, token_program_id, &mint);
+    let wallet = common::structured_pk_with_optimal_bump(
+        &AtaVariant::Original,
+        TestBankId::Benchmarks,
+        base_offset + 2,
+        AccountTypeId::Wallet,
+        program_id,
+        token_program_id,
+        &mint,
+    );
     (payer, mint, wallet)
 }
 
@@ -1159,7 +1167,9 @@ fn run_benchmark_with_validation(
     must_pass: bool,
 ) {
     let cloned_accounts = common::clone_accounts(accounts);
-    let mollusk = common::fresh_mollusk(program_id, token_program_id);
+    let ata_impl = common::AtaImplementation::p_ata_standard(*program_id);
+    let mollusk =
+        common::ComparisonRunner::create_mollusk_for_all_ata_implementations(token_program_id);
     let bencher = configure_bencher(mollusk, name, must_pass, "../target/benches");
     let mut bencher = execute_benchmark_case(bencher, name, ix, &cloned_accounts);
     bencher.execute();

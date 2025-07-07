@@ -6,7 +6,6 @@ use {
         account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
         pubkey::Pubkey, ProgramResult,
     },
-    spl_token_interface::error::TokenError,
 };
 
 program_entrypoint!(entry);
@@ -40,9 +39,9 @@ pub fn entry(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Prog
                 [] => process_recover(program_id, accounts, None),
                 // Only bump provided
                 [bump] => process_recover(program_id, accounts, Some(*bump)),
-                _ => Err(TokenError::InvalidInstruction.into()),
+                _ => Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
             },
-            _ => Err(TokenError::InvalidInstruction.into()),
+            _ => Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
         },
     }
 }

@@ -1878,7 +1878,37 @@ fn main() {
         // Print summary
         FailureTestRunner::print_failure_summary(&comparison_results);
 
-        println!("\n✅ Comprehensive failure comparison completed successfully");
+        // Check for critical issues that indicate security problems or test failures
+        let unexpected_success = comparison_results
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.compatibility_status,
+                    CompatibilityStatus::IncompatibleSuccess
+                )
+            })
+            .count();
+        let both_succeeded = comparison_results
+            .iter()
+            .filter(|r| {
+                matches!(r.compatibility_status, CompatibilityStatus::Identical) 
+                && r.p_ata.success && r.original.success
+            })
+            .count();
+
+        // Determine overall status based on critical issues only
+        if unexpected_success == 0 && both_succeeded == 0 {
+            println!("\n✅ Failure comparison completed successfully - No critical security issues detected");
+        } else {
+            println!("\n🚨 FAILURE COMPARISON FAILED - CRITICAL ISSUES DETECTED");
+            if unexpected_success > 0 {
+                println!("    {} SECURITY VULNERABILITIES: P-ATA succeeded where original correctly failed!", unexpected_success);
+            }
+            if both_succeeded > 0 {
+                println!("    {} TEST ISSUES: Both implementations succeeded when they should have failed!", both_succeeded);
+            }
+            println!("    These issues must be resolved before P-ATA can be considered secure!");
+        }
     } else {
         // P-ATA ONLY MODE: Original ATA not available
         println!("\n🔧 Running P-ATA only failure tests (original ATA not built)");

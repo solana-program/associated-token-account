@@ -2,6 +2,7 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         instruction::{Seed, Signer},
+        program_error::ProgramError,
         pubkey::Pubkey,
         sysvars::rent::Rent,
         ProgramResult,
@@ -21,7 +22,7 @@ use pinocchio_system::instructions::{Allocate, Assign, Transfer};
 /// - space: size of the data field
 /// - owner: the program that will own the new account
 /// - pda: the address of the account to create (pre-derived by the caller)
-/// - pda_signer_seeds: seeds (without the bump already appended), needed for invoke_signed
+/// - pda_signer_seeds: full seed slice including the bump (wallet, token_program, mint, bump)
 #[inline(always)]
 pub fn create_pda_account(
     payer: &AccountInfo,
@@ -66,15 +67,21 @@ pub fn create_pda_account(
                 .invoke()?;
             }
 
-            if pda.data_len() != space {
+            let current_data_len = pda.data_len();
+            let current_owner = unsafe { pda.owner() };
+
+            if current_data_len != space {
+                // Allocate ensures account is empty
                 Allocate {
                     account: pda,
                     space: space as u64,
                 }
                 .invoke_signed(&[signer.clone()])?;
+            } else if current_data_len > 0 {
+                return Err(ProgramError::AccountAlreadyInitialized);
             }
 
-            if unsafe { pda.owner() } != target_program_owner {
+            if current_owner != target_program_owner {
                 Assign {
                     account: pda,
                     owner: target_program_owner,

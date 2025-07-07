@@ -131,7 +131,12 @@ impl AccountBuilder {
 
     pub fn token_2022_mint_data(decimals: u8) -> Vec<u8> {
         let mut data = [0u8; 82];
-        let mint_authority = const_pk(123);
+        let mint_authority = structured_pk(
+            &AtaVariant::Original,
+            TestBankId::Benchmarks,
+            123,
+            AccountTypeId::Mint,
+        );
 
         data[0..4].copy_from_slice(&1u32.to_le_bytes());
         data[4..36].copy_from_slice(mint_authority.as_ref());
@@ -143,21 +148,81 @@ impl AccountBuilder {
     }
 }
 
-// =============================== UTILITIES =================================
+// ========================== STRUCTURED ADDRESS ALLOCATION ==========================
 
-pub fn const_pk(byte: u8) -> Pubkey {
-    Pubkey::new_from_array([byte; 32])
+/// Test bank identifier  
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestBankId {
+    Benchmarks = 0,
+    Failures = 1,
 }
 
-/// Find a public key that gives optimal bump (255) for ATA derivation
-pub fn const_pk_with_optimal_bump(
-    base_byte: u8,
+/// Account type identifier
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccountTypeId {
+    Payer = 0,
+    Mint = 1,
+    Wallet = 2,
+    Ata = 3,
+    SystemProgram = 4,
+    TokenProgram = 5,
+    RentSysvar = 6,
+    OwnerMint = 7,
+    NestedMint = 8,
+    OwnerAta = 9,
+    NestedAta = 10,
+    Signer1 = 11,
+    Signer2 = 12,
+    Signer3 = 13,
+}
+
+/// Convert AtaVariant to byte value
+fn variant_to_byte(variant: &AtaVariant) -> u8 {
+    match variant {
+        AtaVariant::PAtaStandard => 0,
+        AtaVariant::PAtaPrefunded => 1,
+        AtaVariant::Original => 2,
+    }
+}
+
+/// Generate a structured pubkey from 4-byte coordinate system
+/// [variant, test_bank, test_number, account_type]
+pub fn structured_pk(
+    variant: &AtaVariant,
+    test_bank: TestBankId,
+    test_number: u8,
+    account_type: AccountTypeId,
+) -> Pubkey {
+    let mut bytes = [0u8; 32];
+    bytes[0] = variant_to_byte(variant);
+    bytes[1] = test_bank as u8;
+    bytes[2] = test_number;
+    bytes[3] = account_type as u8;
+    Pubkey::new_from_array(bytes)
+}
+
+/// Generate multiple structured pubkeys at once
+pub fn structured_pk_multi<const N: usize>(
+    variant: &AtaVariant,
+    test_bank: TestBankId,
+    test_number: u8,
+    account_types: [AccountTypeId; N],
+) -> [Pubkey; N] {
+    account_types.map(|account_type| structured_pk(variant, test_bank, test_number, account_type))
+}
+
+/// Find a structured public key that gives optimal bump (255) for ATA derivation
+pub fn structured_pk_with_optimal_bump(
+    variant: &AtaVariant,
+    test_bank: TestBankId,
+    test_number: u8,
+    account_type: AccountTypeId,
     ata_program_id: &Pubkey,
     token_program_id: &Pubkey,
     mint: &Pubkey,
 ) -> Pubkey {
-    // Start with the base key
-    let base_key = const_pk(base_byte);
+    // Start with the base structured key
+    let base_key = structured_pk(variant, test_bank, test_number, account_type);
 
     // Test if base key already has optimal bump
     let (_, bump) = Pubkey::find_program_address(
@@ -169,9 +234,12 @@ pub fn const_pk_with_optimal_bump(
         return base_key;
     }
 
-    // Search for a key that gives optimal bump
-    // We'll modify the key slightly by changing the last few bytes
-    let mut key_bytes = [base_byte; 32];
+    // Search for a key that gives optimal bump by modifying the last 4 bytes
+    let mut key_bytes = [0u8; 32];
+    key_bytes[0] = variant_to_byte(variant);
+    key_bytes[1] = test_bank as u8;
+    key_bytes[2] = test_number;
+    key_bytes[3] = account_type as u8;
 
     // Try different variations until we find one with bump 255
     for modifier in 0u32..10000 {
@@ -187,8 +255,13 @@ pub fn const_pk_with_optimal_bump(
 
         if test_bump == 255 {
             println!(
-                "Found optimal bump key for base {}: {} (modifier: {})",
-                base_byte, test_key, modifier
+                "Found optimal bump key [{}, {}, {}, {}]: {} (modifier: {})",
+                variant_to_byte(variant),
+                test_bank as u8,
+                test_number,
+                account_type as u8,
+                test_key,
+                modifier
             );
             return test_key;
         }
@@ -196,33 +269,18 @@ pub fn const_pk_with_optimal_bump(
 
     // If we couldn't find optimal bump, warn and return base key
     println!(
-        "Warning: Could not find optimal bump key for base {}, using base key with bump {}",
-        base_byte, bump
+        "Warning: Could not find optimal bump key [{}, {}, {}, {}], using base key with bump {}",
+        variant_to_byte(variant),
+        test_bank as u8,
+        test_number,
+        account_type as u8,
+        bump
     );
     base_key
 }
 
 pub fn clone_accounts(src: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
     src.iter().map(|(k, v)| (*k, v.clone())).collect()
-}
-
-pub fn fresh_mollusk(program_id: &Pubkey, token_program_id: &Pubkey) -> Mollusk {
-    let mut mollusk = Mollusk::default();
-    mollusk.add_program(program_id, "pinocchio_ata_program", &LOADER_V3);
-    mollusk.add_program(
-        &Pubkey::from(spl_token_interface::program::ID),
-        "pinocchio_token_program",
-        &LOADER_V3,
-    );
-    mollusk.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
-
-    // Add Token-2022 program with the actual Token-2022 binary
-    let token_2022_id = Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
-        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-    ));
-    mollusk.add_program(&token_2022_id, "spl_token_2022", &LOADER_V3);
-
-    mollusk
 }
 
 pub(crate) fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> {
@@ -446,9 +504,24 @@ impl BenchmarkSetup {
         use solana_instruction::{AccountMeta, Instruction};
 
         // Simple validation test - create a basic instruction and ensure it doesn't crash
-        let payer = const_pk(1);
-        let mint = const_pk(2);
-        let wallet = const_pk(3);
+        let payer = structured_pk(
+            &AtaVariant::Original,
+            TestBankId::Benchmarks,
+            1,
+            AccountTypeId::Payer,
+        );
+        let mint = structured_pk(
+            &AtaVariant::Original,
+            TestBankId::Benchmarks,
+            1,
+            AccountTypeId::Mint,
+        );
+        let wallet = structured_pk(
+            &AtaVariant::Original,
+            TestBankId::Benchmarks,
+            1,
+            AccountTypeId::Wallet,
+        );
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,
@@ -518,6 +591,24 @@ pub enum AtaVariant {
 }
 
 impl AtaImplementation {
+    pub fn all() -> Vec<Self> {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let (standard_program_id, prefunded_program_id, original_program_id, _token_program_id) =
+            BenchmarkSetup::load_all_program_ids(manifest_dir);
+
+        let mut implementations = vec![Self::p_ata_standard(standard_program_id)];
+
+        if let Some(prefunded_id) = prefunded_program_id {
+            implementations.push(Self::p_ata_prefunded(prefunded_id));
+        }
+
+        if let Some(original_id) = original_program_id {
+            implementations.push(Self::original(original_id));
+        }
+
+        implementations
+    }
+
     pub fn p_ata_standard(program_id: Pubkey) -> Self {
         Self {
             name: "p-ata-standard",
@@ -534,11 +625,6 @@ impl AtaImplementation {
             binary_name: "pinocchio_ata_program_prefunded",
             variant: AtaVariant::PAtaPrefunded,
         }
-    }
-
-    pub fn p_ata(program_id: Pubkey) -> Self {
-        // For backward compatibility, default to standard variant
-        Self::p_ata_standard(program_id)
     }
 
     pub fn original(program_id: Pubkey) -> Self {
@@ -609,7 +695,7 @@ impl ComparisonRunner {
         implementation: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> BenchmarkResult {
-        let mollusk = Self::create_mollusk_for_implementation(implementation, token_program_id);
+        let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
         let result = mollusk.process_instruction(ix, accounts);
 
         let success = matches!(
@@ -631,29 +717,19 @@ impl ComparisonRunner {
         }
     }
 
-    /// Create appropriate Mollusk instance for implementation
-    pub fn create_mollusk_for_implementation(
-        implementation: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> Mollusk {
+    pub fn create_mollusk_for_all_ata_implementations(token_program_id: &Pubkey) -> Mollusk {
         let mut mollusk = Mollusk::default();
 
-        // Add the ATA program
-        mollusk.add_program(
-            &implementation.program_id,
-            implementation.binary_name,
-            &LOADER_V3,
-        );
+        for implementation in AtaImplementation::all() {
+            mollusk.add_program(
+                &implementation.program_id,
+                implementation.binary_name,
+                &LOADER_V3,
+            );
+        }
 
-        // Add required token programs
-        mollusk.add_program(
-            &Pubkey::from(spl_token_interface::program::ID),
-            "pinocchio_token_program",
-            &LOADER_V3,
-        );
         mollusk.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
 
-        // Add Token-2022
         let token_2022_id = Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
             "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
         ));
@@ -737,7 +813,16 @@ impl ComparisonRunner {
                     CompatibilityStatus::OptimizedBehavior
                 }
             }
-            (false, true) => CompatibilityStatus::IncompatibleSuccess,
+            (false, true) => {
+                // P-ATA failed, Original succeeded
+                if p_ata_result.test_name.starts_with("fail_") {
+                    // CRITICAL SECURITY ISSUE: Original succeeded in a failure test where P-ATA correctly failed!
+                    CompatibilityStatus::IncompatibleSuccess
+                } else {
+                    // Performance test - Original works but P-ATA fails (concerning)
+                    CompatibilityStatus::IncompatibleSuccess
+                }
+            }
         }
     }
 
@@ -813,7 +898,16 @@ impl ComparisonRunner {
             }
             CompatibilityStatus::IncompatibleSuccess => {
                 if result.test_name.starts_with("fail_") {
-                    println!("  Status: 🚨 CRITICAL SECURITY ISSUE - P-ATA bypassed validation!")
+                    // Check which implementation actually succeeded
+                    if result.p_ata.success && !result.original.success {
+                        println!(
+                            "  Status: 🚨 CRITICAL SECURITY ISSUE - P-ATA bypassed validation!"
+                        )
+                    } else if !result.p_ata.success && result.original.success {
+                        println!("  Status: 🚨 CRITICAL SECURITY ISSUE - Original ATA bypassed validation!")
+                    } else {
+                        println!("  Status: 🚨 CRITICAL SECURITY ISSUE - Validation mismatch!")
+                    }
                 } else {
                     println!("  Status: Incompatible success/failure (concerning)")
                 }
@@ -1303,7 +1397,7 @@ impl ComparisonRunner {
         token_program_id: &Pubkey,
     ) -> (BenchmarkResult, VerboseResults) {
         let cloned_accounts = clone_accounts(accounts);
-        let mollusk = Self::create_mollusk_for_implementation(implementation, token_program_id);
+        let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
 
         // Store the original accounts before execution
         let original_accounts = cloned_accounts.clone();

@@ -9,7 +9,7 @@ use {
 
 // Import types from parent crate's common module
 use crate::{
-    const_pk, AccountBuilder, AtaImplementation, BaseTestType, TestVariant, NATIVE_LOADER_ID,
+    AccountBuilder, AtaImplementation, BaseTestType, TestVariant, NATIVE_LOADER_ID,
     SYSTEM_PROGRAM_ID,
 };
 
@@ -113,9 +113,9 @@ pub enum FailureMode {
 }
 
 /// Consolidated test case builder that replaces repetitive build_*_variant methods
-pub struct ConsolidatedTestCaseBuilder;
+pub struct CommonTestCaseBuilder;
 
-impl ConsolidatedTestCaseBuilder {
+impl CommonTestCaseBuilder {
     /// Main entry point that replaces all build_*_variant methods
     pub fn build_test_case(
         base_test: BaseTestType,
@@ -209,8 +209,18 @@ impl ConsolidatedTestCaseBuilder {
                 setup_existing_ata: false,
                 use_fixed_accounts: true,
                 special_account_mods: vec![SpecialAccountMod::NestedAta {
-                    owner_mint: const_pk(20),
-                    nested_mint: const_pk(40),
+                    owner_mint: crate::common::structured_pk(
+                        &crate::common::AtaVariant::Original,
+                        crate::common::TestBankId::Benchmarks,
+                        base_test as u8,
+                        crate::common::AccountTypeId::OwnerMint,
+                    ),
+                    nested_mint: crate::common::structured_pk(
+                        &crate::common::AtaVariant::Original,
+                        crate::common::TestBankId::Benchmarks,
+                        base_test as u8,
+                        crate::common::AccountTypeId::NestedMint,
+                    ),
                 }],
                 failure_mode: None,
             },
@@ -224,8 +234,18 @@ impl ConsolidatedTestCaseBuilder {
                 use_fixed_accounts: true,
                 special_account_mods: vec![
                     SpecialAccountMod::NestedAta {
-                        owner_mint: const_pk(20),
-                        nested_mint: const_pk(40),
+                        owner_mint: crate::common::structured_pk(
+                            &crate::common::AtaVariant::Original,
+                            crate::common::TestBankId::Benchmarks,
+                            base_test as u8,
+                            crate::common::AccountTypeId::OwnerMint,
+                        ),
+                        nested_mint: crate::common::structured_pk(
+                            &crate::common::AtaVariant::Original,
+                            crate::common::TestBankId::Benchmarks,
+                            base_test as u8,
+                            crate::common::AccountTypeId::NestedMint,
+                        ),
                     },
                     SpecialAccountMod::MultisigWallet {
                         threshold: 2,
@@ -247,8 +267,18 @@ impl ConsolidatedTestCaseBuilder {
                 setup_existing_ata: false,
                 use_fixed_accounts: true,
                 special_account_mods: vec![SpecialAccountMod::FixedAddresses {
-                    wallet: const_pk(200),
-                    mint: const_pk(199),
+                    wallet: crate::common::structured_pk(
+                        &crate::common::AtaVariant::Original,
+                        crate::common::TestBankId::Benchmarks,
+                        base_test as u8,
+                        crate::common::AccountTypeId::Wallet,
+                    ),
+                    mint: crate::common::structured_pk(
+                        &crate::common::AtaVariant::Original,
+                        crate::common::TestBankId::Benchmarks,
+                        base_test as u8,
+                        crate::common::AccountTypeId::Mint,
+                    ),
                 }],
                 failure_mode: None,
             },
@@ -261,10 +291,21 @@ impl ConsolidatedTestCaseBuilder {
         variant: TestVariant,
         ata_implementation: &AtaImplementation,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let base_offset = Self::calculate_offset_for_test(&config, variant);
+        // Use structured addressing to prevent cross-contamination
+        let test_bank = if config.failure_mode.is_some() {
+            crate::common::TestBankId::Failures
+        } else {
+            crate::common::TestBankId::Benchmarks
+        };
+        let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
 
-        let (payer, mint, wallet) =
-            Self::get_base_addresses(&config, base_offset, ata_implementation);
+        let (payer, mint, wallet) = Self::get_structured_addresses(
+            &config,
+            &ata_implementation.variant,
+            test_bank,
+            test_number,
+            ata_implementation,
+        );
 
         // The processor will always use instruction.program_id for PDA operations
         let derivation_program_id = ata_implementation.program_id;
@@ -285,7 +326,20 @@ impl ConsolidatedTestCaseBuilder {
             {
                 (*owner_mint, *nested_mint)
             } else {
-                (const_pk(20), const_pk(40))
+                (
+                    crate::common::structured_pk(
+                        &ata_implementation.variant,
+                        test_bank,
+                        test_number,
+                        crate::common::AccountTypeId::OwnerMint,
+                    ),
+                    crate::common::structured_pk(
+                        &ata_implementation.variant,
+                        test_bank,
+                        test_number,
+                        crate::common::AccountTypeId::NestedMint,
+                    ),
+                )
             };
 
             // Calculate owner_ata address (this is what the processor uses for PDA signing)
@@ -361,43 +415,12 @@ impl ConsolidatedTestCaseBuilder {
         (ix, accounts)
     }
 
-    /// Calculate offset for test case
-    fn calculate_offset_for_test(config: &TestCaseConfig, variant: TestVariant) -> u8 {
-        let base = match config.base_test {
-            BaseTestType::Create => {
-                if config.setup_topup {
-                    30
-                } else {
-                    10
-                }
-            }
-            BaseTestType::CreateIdempotent => 50,
-            BaseTestType::CreateTopup => 70,
-            BaseTestType::CreateTopupNoCap => 90,
-            BaseTestType::CreateToken2022 => 110,
-            BaseTestType::RecoverNested => 130,
-            BaseTestType::RecoverMultisig => 150,
-            BaseTestType::WorstCase => 170,
-        };
-
-        let variant_offset = match (variant.rent_arg, variant.bump_arg, variant.len_arg) {
-            (false, false, false) => 0,
-            (true, false, false) => 1,
-            (false, true, false) => 2,
-            (false, false, true) => 3,
-            (true, true, false) => 4,
-            (true, false, true) => 5,
-            (true, true, true) => 6,
-            _ => 7,
-        };
-
-        base + variant_offset
-    }
-
-    /// Get base account addresses
-    fn get_base_addresses(
+    /// Get structured account addresses
+    fn get_structured_addresses(
         config: &TestCaseConfig,
-        base_offset: u8,
+        variant: &crate::common::AtaVariant,
+        test_bank: crate::common::TestBankId,
+        test_number: u8,
         ata_implementation: &AtaImplementation,
     ) -> (Pubkey, Pubkey, Pubkey) {
         if config.use_fixed_accounts {
@@ -407,14 +430,33 @@ impl ConsolidatedTestCaseBuilder {
                 .iter()
                 .find(|m| matches!(m, SpecialAccountMod::FixedAddresses { .. }))
             {
-                return (const_pk(base_offset), *mint, *wallet);
+                let payer = crate::common::structured_pk(
+                    variant,
+                    test_bank,
+                    test_number,
+                    crate::common::AccountTypeId::Payer,
+                );
+                return (payer, *mint, *wallet);
             }
         }
 
-        let payer = const_pk(base_offset);
-        let mint = const_pk(base_offset + 1);
-        let wallet = crate::const_pk_with_optimal_bump(
-            base_offset + 2,
+        let payer = crate::common::structured_pk(
+            variant,
+            test_bank,
+            test_number,
+            crate::common::AccountTypeId::Payer,
+        );
+        let mint = crate::common::structured_pk(
+            variant,
+            test_bank,
+            test_number,
+            crate::common::AccountTypeId::Mint,
+        );
+        let wallet = crate::common::structured_pk_with_optimal_bump(
+            variant,
+            test_bank,
+            test_number,
+            crate::common::AccountTypeId::Wallet,
             &ata_implementation.program_id,
             &config.token_program,
             &mint,
@@ -520,6 +562,13 @@ impl ConsolidatedTestCaseBuilder {
     ) -> Vec<(Pubkey, Account)> {
         let mut accounts = Vec::new();
 
+        let test_bank = if config.failure_mode.is_some() {
+            crate::common::TestBankId::Failures
+        } else {
+            crate::common::TestBankId::Benchmarks
+        };
+        let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
+
         // Find nested ATA configuration
         let (owner_mint, nested_mint) = if let Some(SpecialAccountMod::NestedAta {
             owner_mint,
@@ -531,15 +580,28 @@ impl ConsolidatedTestCaseBuilder {
         {
             (*owner_mint, *nested_mint)
         } else {
-            (const_pk(20), const_pk(40))
+            // Use default values for recover tests - these should be consistent across implementations
+            (
+                crate::common::structured_pk(
+                    &ata_implementation.variant,
+                    test_bank,
+                    test_number,
+                    crate::common::AccountTypeId::OwnerMint,
+                ),
+                crate::common::structured_pk(
+                    &ata_implementation.variant,
+                    test_bank,
+                    test_number,
+                    crate::common::AccountTypeId::NestedMint,
+                ),
+            )
         };
 
-        // Calculate ATA addresses
-        let base_offset = Self::calculate_offset_for_test(config, variant);
-        // Use optimal bump key for wallet to ensure fair comparison
-        // Each implementation gets its own optimal wallet for its own program ID
-        let actual_wallet = crate::const_pk_with_optimal_bump(
-            base_offset + 2,
+        let actual_wallet = crate::common::structured_pk_with_optimal_bump(
+            &ata_implementation.variant,
+            test_bank,
+            test_number,
+            crate::common::AccountTypeId::Wallet,
             &ata_implementation.program_id,
             &config.token_program,
             &owner_mint,
@@ -786,7 +848,7 @@ impl ConsolidatedTestCaseBuilder {
     pub(crate) fn create_ata_implementation_from_program_id(
         program_id: Pubkey,
     ) -> AtaImplementation {
-        AtaImplementation::p_ata(program_id)
+        AtaImplementation::p_ata_prefunded(program_id)
     }
 
     /// Apply failure mode to instruction and accounts
@@ -896,11 +958,28 @@ impl ConsolidatedTestCaseBuilder {
                 }
             }
             FailureMode::AtaWrongOwner(wrong_owner) => {
-                // Change ATA account owner
+                // Create a fresh account owned by wrong_owner with existing data
+                // This simulates an account "already in use" by another program
                 if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos].1.owner = *wrong_owner;
-                    accounts[pos].1.lamports = 2_000_000;
-                    accounts[pos].1.data = vec![0u8; 165];
+                    let new_account = Account {
+                        lamports: 2_000_000,
+                        data: vec![0u8; 165], // Non-empty data indicates "already in use"
+                        owner: *wrong_owner,  // Should be SYSTEM_PROGRAM_ID for this test
+                        executable: false,
+                        rent_epoch: 0,
+                    };
+
+                    println!("🔧 DEBUG AtaWrongOwner: Setting ATA account");
+                    println!("   ATA address: {}", ata);
+                    println!("   Original owner: {}", accounts[pos].1.owner);
+                    println!("   Original lamports: {}", accounts[pos].1.lamports);
+                    println!("   Original data len: {}", accounts[pos].1.data.len());
+                    println!("   New owner: {}", new_account.owner);
+                    println!("   New lamports: {}", new_account.lamports);
+                    println!("   New data len: {}", new_account.data.len());
+                    println!("   Expected wrong_owner: {}", wrong_owner);
+
+                    accounts[pos].1 = new_account;
                 }
             }
             FailureMode::AtaNotWritable => {
@@ -968,7 +1047,15 @@ impl ConsolidatedTestCaseBuilder {
             }
             FailureMode::RecoverWalletNotSigner => {
                 // Mark wallet as not signer in recover instruction
-                if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == wallet) {
+                // For recover instructions, wallet is at index 5
+                if matches!(
+                    config.base_test,
+                    BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
+                ) {
+                    if ix.accounts.len() > 5 {
+                        ix.accounts[5].is_signer = false;
+                    }
+                } else if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == wallet) {
                     meta.is_signer = false;
                 }
             }
@@ -1054,4 +1141,75 @@ impl ConsolidatedTestCaseBuilder {
             }
         }
     }
+}
+
+/// Calculate test number from base test type and variant
+pub fn calculate_test_number(
+    base_test: BaseTestType,
+    variant: TestVariant,
+    setup_topup: bool,
+) -> u8 {
+    let base = match base_test {
+        BaseTestType::Create => {
+            if setup_topup {
+                10
+            } else {
+                0
+            }
+        }
+        BaseTestType::CreateIdempotent => 20,
+        BaseTestType::CreateTopup => 30,
+        BaseTestType::CreateTopupNoCap => 40,
+        BaseTestType::CreateToken2022 => 50,
+        BaseTestType::RecoverNested => 60,
+        BaseTestType::RecoverMultisig => 70,
+        BaseTestType::WorstCase => 80,
+    };
+
+    let variant_offset = match (variant.rent_arg, variant.bump_arg, variant.len_arg) {
+        (false, false, false) => 0,
+        (true, false, false) => 1,
+        (false, true, false) => 2,
+        (false, false, true) => 3,
+        (true, true, false) => 4,
+        (true, false, true) => 5,
+        (true, true, true) => 6,
+        _ => 7,
+    };
+
+    base + variant_offset
+}
+
+/// Calculate test number for failure scenarios with collision avoidance
+pub fn calculate_failure_test_number(base_test: BaseTestType, variant: TestVariant) -> u8 {
+    use std::sync::atomic::{AtomicU8, Ordering};
+    static FAILURE_COUNTER: AtomicU8 = AtomicU8::new(0);
+
+    // Failure tests start at 100 to avoid collisions with normal tests
+    let base = 100
+        + match base_test {
+            BaseTestType::Create => 0,
+            BaseTestType::CreateIdempotent => 10,
+            BaseTestType::CreateTopup => 20,
+            BaseTestType::CreateTopupNoCap => 30,
+            BaseTestType::CreateToken2022 => 40,
+            BaseTestType::RecoverNested => 50,
+            BaseTestType::RecoverMultisig => 60,
+            BaseTestType::WorstCase => 70,
+        };
+
+    let variant_offset = match (variant.rent_arg, variant.bump_arg, variant.len_arg) {
+        (false, false, false) => 0,
+        (true, false, false) => 1,
+        (false, true, false) => 2,
+        (false, false, true) => 3,
+        (true, true, false) => 4,
+        (true, false, true) => 5,
+        (true, true, true) => 6,
+        _ => 7,
+    };
+
+    // Auto-increment failure counter to ensure uniqueness
+    let failure_id = FAILURE_COUNTER.fetch_add(1, Ordering::SeqCst);
+    base + variant_offset + (failure_id % 8)
 }

@@ -8,6 +8,8 @@ fn main() {
 
 #[cfg(feature = "build-programs")]
 mod builder {
+    use serde_json;
+    use solana_pubkey::Pubkey;
     use std::fs;
     use std::path::Path;
     use std::process::Command;
@@ -131,16 +133,81 @@ mod builder {
     fn build_p_ata_variants(manifest_dir: &str) {
         println!("cargo:warning=Building P-ATA variants...");
 
-        // Build standard P-ATA (without create-account-prefunded feature)
-        build_p_ata_standard(manifest_dir);
-
-        // Build prefunded P-ATA (with create-account-prefunded feature)
+        // Build prefunded variant first
         build_p_ata_prefunded(manifest_dir);
+
+        // Build standard variant second
+        build_p_ata_standard(manifest_dir);
+    }
+
+    fn build_p_ata_prefunded(manifest_dir: &str) {
+        println!("cargo:warning=Building P-ATA prefunded variant...");
+
+        // Build with create-account-prefunded feature
+        let output = Command::new("cargo")
+            .args(["build-sbf", "--features", "create-account-prefunded"])
+            .current_dir(manifest_dir)
+            .output()
+            .expect("Failed to execute cargo build-sbf for P-ATA prefunded");
+
+        if !output.status.success() {
+            panic!(
+                "P-ATA prefunded build failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        // Read and print the program ID for debugging
+        let deploy_dir = Path::new(manifest_dir).join("target/deploy");
+        let keypair_path = deploy_dir.join("pinocchio_ata_program-keypair.json");
+
+        if let Ok(keypair_data) = std::fs::read_to_string(&keypair_path) {
+            if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
+                if keypair_bytes.len() >= 32 {
+                    let pubkey_bytes: [u8; 32] = keypair_bytes[32..64].try_into().unwrap();
+                    let program_id = Pubkey::from(pubkey_bytes);
+                    println!(
+                        "cargo:warning=Built P-ATA prefunded with program ID: {}",
+                        program_id
+                    );
+                }
+            }
+        }
+
+        // Rename the results to prefunded names
+        let default_so = deploy_dir.join("pinocchio_ata_program.so");
+        let default_keypair = deploy_dir.join("pinocchio_ata_program-keypair.json");
+        let prefunded_so = deploy_dir.join("pinocchio_ata_program_prefunded.so");
+        let prefunded_keypair = deploy_dir.join("pinocchio_ata_program_prefunded-keypair.json");
+
+        if let Err(e) = fs::rename(&default_so, &prefunded_so) {
+            panic!("Failed to rename prefunded .so file: {}", e);
+        }
+        if let Err(e) = fs::rename(&default_keypair, &prefunded_keypair) {
+            panic!("Failed to rename prefunded keypair file: {}", e);
+        }
+
+        // Read and print the prefunded program ID for debugging
+        if let Ok(keypair_content) = fs::read_to_string(&prefunded_keypair) {
+            if let Ok(keypair_json) = serde_json::from_str::<Vec<u8>>(&keypair_content) {
+                if keypair_json.len() >= 64 {
+                    let pubkey_bytes = &keypair_json[32..64];
+                    let pubkey = Pubkey::new_from_array(pubkey_bytes.try_into().unwrap());
+                    println!(
+                        "cargo:warning=Built P-ATA prefunded with program ID: {}",
+                        pubkey
+                    );
+                }
+            }
+        }
+
+        println!("cargo:warning=P-ATA prefunded built and renamed successfully");
     }
 
     fn build_p_ata_standard(manifest_dir: &str) {
         println!("cargo:warning=Building P-ATA standard variant...");
 
+        // Build standard variant (without create-account-prefunded feature)
         let output = Command::new("cargo")
             .args(["build-sbf"])
             .current_dir(manifest_dir)
@@ -154,95 +221,25 @@ mod builder {
             );
         }
 
-        println!("cargo:warning=P-ATA standard built successfully to target/deploy/");
-    }
-
-    fn build_p_ata_prefunded(manifest_dir: &str) {
-        println!("cargo:warning=Building P-ATA prefunded variant...");
-
+        // Read and print the program ID for debugging
         let deploy_dir = Path::new(manifest_dir).join("target/deploy");
-        let standard_so = deploy_dir.join("pinocchio_ata_program.so");
-        let standard_keypair = deploy_dir.join("pinocchio_ata_program-keypair.json");
-        let backup_so = deploy_dir.join("pinocchio_ata_program_standard_backup.so");
-        let backup_keypair = deploy_dir.join("pinocchio_ata_program_standard_backup-keypair.json");
+        let keypair_path = deploy_dir.join("pinocchio_ata_program-keypair.json");
 
-        // Backup the standard variant files
-        if standard_so.exists() {
-            if let Err(e) = fs::copy(&standard_so, &backup_so) {
-                println!("cargo:warning=Failed to backup standard .so file: {}", e);
-                return;
+        if keypair_path.exists() {
+            if let Ok(keypair_content) = fs::read_to_string(&keypair_path) {
+                if let Ok(keypair_json) = serde_json::from_str::<Vec<u8>>(&keypair_content) {
+                    if keypair_json.len() >= 64 {
+                        let pubkey_bytes = &keypair_json[32..64];
+                        let pubkey = Pubkey::new_from_array(pubkey_bytes.try_into().unwrap());
+                        println!(
+                            "cargo:warning=Built P-ATA standard with program ID: {}",
+                            pubkey
+                        );
+                    }
+                }
             }
         }
 
-        if standard_keypair.exists() {
-            if let Err(e) = fs::copy(&standard_keypair, &backup_keypair) {
-                println!(
-                    "cargo:warning=Failed to backup standard keypair file: {}",
-                    e
-                );
-                return;
-            }
-        }
-
-        // Build prefunded variant
-        let output = Command::new("cargo")
-            .args(["build-sbf", "--features", "create-account-prefunded"])
-            .current_dir(manifest_dir)
-            .output()
-            .expect("Failed to execute cargo build-sbf for P-ATA prefunded");
-
-        if !output.status.success() {
-            // Restore standard files first
-            if backup_so.exists() {
-                let _ = fs::copy(&backup_so, &standard_so);
-                let _ = fs::remove_file(&backup_so);
-            }
-            if backup_keypair.exists() {
-                let _ = fs::copy(&backup_keypair, &standard_keypair);
-                let _ = fs::remove_file(&backup_keypair);
-            }
-
-            panic!(
-                "P-ATA prefunded build failed. This is required for benchmarking. Error: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-
-        // Copy the prefunded build to prefunded names
-        let prefunded_so = deploy_dir.join("pinocchio_ata_program_prefunded.so");
-        let prefunded_keypair = deploy_dir.join("pinocchio_ata_program_prefunded-keypair.json");
-
-        if standard_so.exists() {
-            if let Err(e) = fs::copy(&standard_so, &prefunded_so) {
-                println!("cargo:warning=Failed to copy prefunded .so file: {}", e);
-            }
-        }
-
-        if standard_keypair.exists() {
-            if let Err(e) = fs::copy(&standard_keypair, &prefunded_keypair) {
-                println!("cargo:warning=Failed to copy prefunded keypair file: {}", e);
-            }
-        }
-
-        // Restore the standard variant files
-        if backup_so.exists() {
-            if let Err(e) = fs::copy(&backup_so, &standard_so) {
-                println!("cargo:warning=Failed to restore standard .so file: {}", e);
-            }
-            let _ = fs::remove_file(&backup_so);
-        }
-
-        if backup_keypair.exists() {
-            if let Err(e) = fs::copy(&backup_keypair, &standard_keypair) {
-                println!(
-                    "cargo:warning=Failed to restore standard keypair file: {}",
-                    e
-                );
-            }
-            let _ = fs::remove_file(&backup_keypair);
-        }
-
-        println!("cargo:warning=P-ATA prefunded built successfully to target/deploy/");
-        println!("cargo:warning=Standard P-ATA files restored");
+        println!("cargo:warning=P-ATA standard built successfully to target/deploy/");
     }
 }

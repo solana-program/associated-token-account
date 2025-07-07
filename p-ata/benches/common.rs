@@ -143,68 +143,6 @@ impl AccountBuilder {
     }
 }
 
-// =========================== OPTIMAL KEY FINDERS ==========================
-
-pub struct OptimalKeyFinder;
-
-impl OptimalKeyFinder {
-    pub fn find_optimal_wallet(
-        start_byte: u8,
-        token_program_id: &Pubkey,
-        mint: &Pubkey,
-        program_id: &Pubkey,
-    ) -> Pubkey {
-        let mut wallet = const_pk(start_byte);
-        let mut best_bump = 0u8;
-
-        for b in start_byte..=255 {
-            let candidate = const_pk(b);
-            let (_, bump) = Pubkey::find_program_address(
-                &[candidate.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-                program_id,
-            );
-            if bump > best_bump {
-                wallet = candidate;
-                best_bump = bump;
-                if bump == 255 {
-                    break;
-                }
-            }
-        }
-        wallet
-    }
-
-    pub fn find_optimal_nested_mint(
-        start_byte: u8,
-        owner_ata: &Pubkey,
-        token_program_id: &Pubkey,
-        program_id: &Pubkey,
-    ) -> Pubkey {
-        let mut nested_mint = const_pk(start_byte);
-        let mut best_bump = 0u8;
-
-        for b in start_byte..=255 {
-            let candidate = const_pk(b);
-            let (_, bump) = Pubkey::find_program_address(
-                &[
-                    owner_ata.as_ref(),
-                    token_program_id.as_ref(),
-                    candidate.as_ref(),
-                ],
-                program_id,
-            );
-            if bump > best_bump {
-                nested_mint = candidate;
-                best_bump = bump;
-                if bump == 255 {
-                    break;
-                }
-            }
-        }
-        nested_mint
-    }
-}
-
 // =============================== UTILITIES =================================
 
 pub fn const_pk(byte: u8) -> Pubkey {
@@ -234,7 +172,7 @@ pub fn fresh_mollusk(program_id: &Pubkey, token_program_id: &Pubkey) -> Mollusk 
     mollusk
 }
 
-pub fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> {
+pub(crate) fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> {
     let mut data = vec![discriminator];
     data.extend_from_slice(additional_data);
     data
@@ -284,69 +222,6 @@ fn build_token_account_data_core(mint: &[u8; 32], owner: &[u8; 32], amount: u64)
     data[64..72].copy_from_slice(&amount.to_le_bytes());
     data[108] = 1;
     data
-}
-
-#[inline(always)]
-fn build_tlv_extension(extension_type: u16, data_len: u16) -> [u8; 4] {
-    let mut header = [0u8; 4];
-    header[0..2].copy_from_slice(&extension_type.to_le_bytes());
-    header[2..4].copy_from_slice(&data_len.to_le_bytes());
-    header
-}
-
-pub fn build_create_token2022_simulation(
-    program_id: &Pubkey,
-) -> (solana_instruction::Instruction, Vec<(Pubkey, Account)>) {
-    let token_2022_program_id: Pubkey =
-        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb").into();
-
-    let base_offset = 80;
-    let payer = const_pk(base_offset);
-    let mint = const_pk(base_offset + 1);
-    let wallet = const_pk(base_offset + 2);
-
-    let (ata, _bump) = Pubkey::find_program_address(
-        &[
-            wallet.as_ref(),
-            token_2022_program_id.as_ref(),
-            mint.as_ref(),
-        ],
-        program_id,
-    );
-
-    let mint_account = AccountBuilder::token_2022_mint_account(0, &token_2022_program_id);
-
-    let accounts = vec![
-        (payer, AccountBuilder::system_account(1_000_000_000)),
-        (ata, AccountBuilder::system_account(0)),
-        (wallet, AccountBuilder::system_account(0)),
-        (mint, mint_account),
-        (
-            SYSTEM_PROGRAM_ID,
-            AccountBuilder::executable_program(NATIVE_LOADER_ID),
-        ),
-        (
-            token_2022_program_id,
-            AccountBuilder::executable_program(LOADER_V3),
-        ),
-    ];
-
-    let metas = vec![
-        solana_instruction::AccountMeta::new(payer, true),
-        solana_instruction::AccountMeta::new(ata, false),
-        solana_instruction::AccountMeta::new_readonly(wallet, false),
-        solana_instruction::AccountMeta::new_readonly(mint, false),
-        solana_instruction::AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-        solana_instruction::AccountMeta::new_readonly(token_2022_program_id, false),
-    ];
-
-    let ix = solana_instruction::Instruction {
-        program_id: *program_id,
-        accounts: metas,
-        data: build_instruction_data(0, &[]),
-    };
-
-    (ix, accounts)
 }
 
 // ========================== SHARED BENCHMARK SETUP ============================
@@ -432,8 +307,33 @@ impl BenchmarkSetup {
         (ata_program_id, token_program_id)
     }
 
+    /// Try to load P-ATA prefunded program ID, return None if not available
+    pub(crate) fn try_load_prefunded_ata_program_id(manifest_dir: &str) -> Option<Pubkey> {
+        use solana_keypair::Keypair;
+        use solana_signer::Signer;
+        use std::fs;
+
+        let prefunded_keypair_path = format!(
+            "{}/target/deploy/pinocchio_ata_program_prefunded-keypair.json",
+            manifest_dir
+        );
+
+        if let Ok(keypair_data) = fs::read_to_string(&prefunded_keypair_path) {
+            if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
+                if let Ok(keypair) = Keypair::try_from(&keypair_bytes[..]) {
+                    println!("Loaded P-ATA prefunded program ID: {}", keypair.pubkey());
+                    return Some(keypair.pubkey());
+                }
+            }
+        }
+
+        println!("P-ATA prefunded program not found");
+        println!("   Build with --features create-account-prefunded to enable prefunded tests");
+        None
+    }
+
     /// Load both p-ata and original ATA program IDs
-    pub fn load_both_program_ids(manifest_dir: &str) -> (Pubkey, Option<Pubkey>, Pubkey) {
+    pub(crate) fn load_both_program_ids(manifest_dir: &str) -> (Pubkey, Option<Pubkey>, Pubkey) {
         let (p_ata_program_id, token_program_id) = Self::load_program_ids(manifest_dir);
 
         // Try to load original ATA program keypair
@@ -442,8 +342,24 @@ impl BenchmarkSetup {
         (p_ata_program_id, original_ata_program_id, token_program_id)
     }
 
+    /// Load all available program IDs (P-ATA variants + original)
+    pub(crate) fn load_all_program_ids(
+        manifest_dir: &str,
+    ) -> (Pubkey, Option<Pubkey>, Option<Pubkey>, Pubkey) {
+        let (standard_program_id, token_program_id) = Self::load_program_ids(manifest_dir);
+        let prefunded_program_id = Self::try_load_prefunded_ata_program_id(manifest_dir);
+        let original_program_id = Self::try_load_original_ata_program_id(manifest_dir);
+
+        (
+            standard_program_id,
+            prefunded_program_id,
+            original_program_id,
+            token_program_id,
+        )
+    }
+
     /// Try to load original ATA program ID, return None if not available
-    pub fn try_load_original_ata_program_id(manifest_dir: &str) -> Option<Pubkey> {
+    pub(crate) fn try_load_original_ata_program_id(manifest_dir: &str) -> Option<Pubkey> {
         use solana_keypair::Keypair;
         use solana_signer::Signer;
         use std::fs;
@@ -469,7 +385,7 @@ impl BenchmarkSetup {
     }
 
     /// Validate that the benchmark setup works with a simple test
-    pub fn validate_setup(
+    pub(crate) fn validate_setup(
         mollusk: &Mollusk,
         program_id: &Pubkey,
         token_program_id: &Pubkey,
@@ -538,15 +454,38 @@ pub struct AtaImplementation {
     pub name: &'static str,
     pub program_id: Pubkey,
     pub binary_name: &'static str,
+    pub variant: AtaVariant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AtaVariant {
+    PAtaStandard,  // P-ATA without create-account-prefunded
+    PAtaPrefunded, // P-ATA with create-account-prefunded
+    Original,      // Original SPL ATA
 }
 
 impl AtaImplementation {
-    pub fn p_ata(program_id: Pubkey) -> Self {
+    pub fn p_ata_standard(program_id: Pubkey) -> Self {
         Self {
-            name: "p-ata",
+            name: "p-ata-standard",
             program_id,
             binary_name: "pinocchio_ata_program",
+            variant: AtaVariant::PAtaStandard,
         }
+    }
+
+    pub(crate) fn p_ata_prefunded(program_id: Pubkey) -> Self {
+        Self {
+            name: "p-ata-prefunded",
+            program_id,
+            binary_name: "pinocchio_ata_program_prefunded",
+            variant: AtaVariant::PAtaPrefunded,
+        }
+    }
+
+    pub fn p_ata(program_id: Pubkey) -> Self {
+        // For backward compatibility, default to standard variant
+        Self::p_ata_standard(program_id)
     }
 
     pub fn original(program_id: Pubkey) -> Self {
@@ -554,14 +493,15 @@ impl AtaImplementation {
             name: "original",
             program_id,
             binary_name: "spl_associated_token_account",
+            variant: AtaVariant::Original,
         }
     }
 
     /// Adapt instruction data for this implementation
     pub fn adapt_instruction_data(&self, data: Vec<u8>) -> Vec<u8> {
-        match self.name {
-            "p-ata" => data, // P-ATA supports bump optimizations
-            "original" => {
+        match self.variant {
+            AtaVariant::PAtaStandard | AtaVariant::PAtaPrefunded => data, // P-ATA supports bump optimizations
+            AtaVariant::Original => {
                 // Original ATA doesn't support bump optimizations, strip them
                 match data.as_slice() {
                     [0, _bump] => vec![0], // Create with bump -> Create without bump
@@ -569,12 +509,11 @@ impl AtaImplementation {
                     _ => data,             // Pass through other formats
                 }
             }
-            _ => data,
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CompatibilityStatus {
     Identical,           // Both succeeded with identical account states
     BothRejected,        // Both failed with same error types
@@ -585,7 +524,7 @@ pub enum CompatibilityStatus {
     IncompatibleSuccess, // One succeeded, one failed unexpectedly
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BenchmarkResult {
     pub implementation: String,
     pub test_name: String,
@@ -594,7 +533,7 @@ pub struct BenchmarkResult {
     pub error_message: Option<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ComparisonResult {
     pub test_name: String,
     pub p_ata: BenchmarkResult,
@@ -1285,7 +1224,7 @@ impl ComparisonRunner {
         implementation: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (BenchmarkResult, VerboseResults) {
-        let mut cloned_accounts = clone_accounts(accounts);
+        let cloned_accounts = clone_accounts(accounts);
         let mollusk = Self::create_mollusk_for_implementation(implementation, token_program_id);
 
         // Store the original accounts before execution
@@ -1368,5 +1307,155 @@ impl ComparisonRunner {
         }
 
         comparison_result
+    }
+}
+
+// ========================== BASE TEST TYPES ============================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BaseTestType {
+    Create,
+    CreateIdempotent,
+    CreateTopup,
+    CreateTopupNoCap,
+    CreateToken2022,
+    RecoverNested,
+    RecoverMultisig,
+    WorstCase,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TestVariant {
+    pub rent_arg: bool,
+    pub bump_arg: bool,
+    pub len_arg: bool,
+}
+
+impl TestVariant {
+    pub const BASE: Self = Self {
+        rent_arg: false,
+        bump_arg: false,
+        len_arg: false,
+    };
+    pub const RENT: Self = Self {
+        rent_arg: true,
+        bump_arg: false,
+        len_arg: false,
+    };
+    pub const BUMP: Self = Self {
+        rent_arg: false,
+        bump_arg: true,
+        len_arg: false,
+    };
+    pub const LEN: Self = Self {
+        rent_arg: false,
+        bump_arg: false,
+        len_arg: true,
+    };
+    pub const RENT_BUMP: Self = Self {
+        rent_arg: true,
+        bump_arg: true,
+        len_arg: false,
+    };
+    pub const RENT_LEN: Self = Self {
+        rent_arg: true,
+        bump_arg: false,
+        len_arg: true,
+    };
+    pub const RENT_BUMP_LEN: Self = Self {
+        rent_arg: true,
+        bump_arg: true,
+        len_arg: true,
+    };
+
+    pub fn column_name(&self) -> &'static str {
+        match (self.rent_arg, self.bump_arg, self.len_arg) {
+            (false, false, false) => "p-ata",
+            (true, false, false) => "rent arg",
+            (false, true, false) => "bump arg",
+            (false, false, true) => "bump+len arg", // LEN variant now includes bump
+            (true, true, false) => "rent+bump arg",
+            (true, false, true) => "rent+bump+len arg", // RENT+LEN variant now includes bump
+            (true, true, true) => "all optimizations",  // Special marker for best combination
+            _ => "unknown",
+        }
+    }
+
+    pub fn test_suffix(&self) -> String {
+        let mut parts = Vec::new();
+        if self.rent_arg {
+            parts.push("rent");
+        }
+        if self.bump_arg || self.len_arg {
+            parts.push("bump");
+        }
+        if self.len_arg {
+            parts.push("len");
+        }
+        if parts.is_empty() {
+            String::new()
+        } else {
+            format!("_{}", parts.join("_"))
+        }
+    }
+}
+
+impl BaseTestType {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::CreateIdempotent => "create_idempotent",
+            Self::CreateTopup => "create_topup",
+            Self::CreateTopupNoCap => "create_topup_no_cap",
+            Self::CreateToken2022 => "create_token2022",
+            Self::RecoverNested => "recover_nested",
+            Self::RecoverMultisig => "recover_multisig",
+            Self::WorstCase => "worst_case",
+        }
+    }
+
+    /// Returns which P-ATA variant this test should use
+    pub fn required_pata_variant(&self) -> AtaVariant {
+        match self {
+            Self::CreateTopup => AtaVariant::PAtaPrefunded, // Uses create-account-prefunded feature
+            Self::CreateTopupNoCap => AtaVariant::PAtaStandard, // Uses standard P-ATA without the feature
+            _ => AtaVariant::PAtaStandard, // All other tests use standard P-ATA
+        }
+    }
+
+    pub fn supported_variants(&self) -> Vec<TestVariant> {
+        match self {
+            Self::Create => vec![
+                TestVariant::BASE,
+                TestVariant::RENT,
+                TestVariant::BUMP,
+                TestVariant::RENT_BUMP,
+            ],
+            Self::CreateIdempotent => vec![TestVariant::BASE, TestVariant::RENT],
+            Self::CreateTopup => vec![
+                TestVariant::BASE,
+                TestVariant::RENT,
+                TestVariant::BUMP,
+                TestVariant::RENT_BUMP,
+            ],
+            Self::CreateTopupNoCap => vec![
+                TestVariant::BASE,
+                TestVariant::RENT,
+                TestVariant::BUMP,
+                TestVariant::RENT_BUMP,
+            ],
+            Self::CreateToken2022 => vec![
+                TestVariant::BASE,
+                TestVariant::RENT,
+                TestVariant::BUMP,
+                TestVariant::LEN,
+                TestVariant::RENT_BUMP,
+                TestVariant::RENT_LEN,
+                TestVariant::RENT_BUMP_LEN,
+            ],
+            Self::RecoverNested => vec![TestVariant::BASE, TestVariant::BUMP],
+            Self::RecoverMultisig => vec![TestVariant::BASE, TestVariant::BUMP],
+            Self::WorstCase => vec![TestVariant::BASE, TestVariant::BUMP],
+        }
     }
 }

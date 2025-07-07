@@ -478,22 +478,6 @@ impl ComparisonRunner {
         }
     }
 
-    fn create_empty_result(test_name: &str, variant_name: &str) -> ComparisonResult {
-        let empty_benchmark = common::BenchmarkResult {
-            implementation: "empty".to_string(),
-            test_name: format!("{}_{}", test_name, variant_name),
-            success: false,
-            compute_units: 0,
-            error_message: Some("Unsupported combination".to_string()),
-        };
-
-        common::ComparisonRunner::create_comparison_result(
-            &format!("{}_{}", test_name, variant_name),
-            empty_benchmark.clone(),
-            empty_benchmark,
-        )
-    }
-
     fn print_matrix_results(
         matrix_results: &std::collections::HashMap<
             BaseTestType,
@@ -666,153 +650,6 @@ impl ComparisonRunner {
             eprintln!("Failed to write performance results: {}", e);
         } else {
             println!("\n📊 Matrix results written to benchmark_results/performance_results.json");
-        }
-    }
-
-    fn output_structured_data(results: &[ComparisonResult]) {
-        let mut json_entries = Vec::new();
-
-        for result in results {
-            // Only include successful comparisons or known optimization cases
-            let (p_ata_cu, original_cu, compatibility) =
-                match (&result.p_ata.success, &result.original.success) {
-                    (true, true) => {
-                        let compat = match result.compatibility_status {
-                            common::CompatibilityStatus::Identical => "identical",
-                            common::CompatibilityStatus::OptimizedBehavior => "optimized",
-                            common::CompatibilityStatus::ExpectedDifferences => {
-                                "expected_difference"
-                            }
-                            _ => "unknown",
-                        };
-
-                        (
-                            result.p_ata.compute_units,
-                            result.original.compute_units,
-                            compat,
-                        )
-                    }
-                    (true, false) => {
-                        // P-ATA works, Original fails - optimization case
-                        (result.p_ata.compute_units, 0, "new p-ata case")
-                    }
-                    _ => continue, // Skip cases where P-ATA fails
-                };
-
-            let entry = format!(
-                r#"    "{}": {{
-      "p_ata_cu": {},
-      "original_cu": {},
-      "compatibility": "{}",
-      "type": "performance_test"
-    }}"#,
-                result.test_name, p_ata_cu, original_cu, compatibility
-            );
-            json_entries.push(entry);
-        }
-
-        let output = format!(
-            r#"{{
-  "timestamp": "{}",
-  "performance_tests": {{
-{}
-  }}
-}}"#,
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            json_entries.join(",\n")
-        );
-
-        // Create benchmark_results directory if it doesn't exist
-        std::fs::create_dir_all("benchmark_results").ok();
-
-        // Write performance results
-        if let Err(e) = std::fs::write("benchmark_results/performance_results.json", output) {
-            eprintln!("Failed to write performance results: {}", e);
-        } else {
-            println!(
-                "\n📊 Performance results written to benchmark_results/performance_results.json"
-            );
-        }
-    }
-
-    fn print_summary(results: &[ComparisonResult]) {
-        println!("\n=== BYTE-FOR-BYTE TEST SUMMARY ===");
-
-        // Print each test with color-coded status
-        for result in results {
-            let status_indicator = match result.compatibility_status {
-                CompatibilityStatus::Identical => {
-                    // Special handling for create_with_bump - it's a P-ATA optimization
-                    if result.test_name == "create_with_bump" {
-                        "P-ATA OPTIMIZATION"
-                    } else {
-                        "\x1b[32m🟢 IDENTICAL\x1b[0m"
-                    }
-                }
-                CompatibilityStatus::OptimizedBehavior => "P-ATA OPTIMIZATION",
-                CompatibilityStatus::ExpectedDifferences => {
-                    "\x1b[33m🟡 EXPECTED DIFFERENCES\x1b[0m"
-                }
-                CompatibilityStatus::BothRejected => "\x1b[31m🔴 BOTH REJECTED\x1b[0m",
-                CompatibilityStatus::AccountMismatch => "\x1b[31m🔴 ACCOUNT MISMATCH\x1b[0m",
-                CompatibilityStatus::IncompatibleFailure => {
-                    "\x1b[31m🔴 INCOMPATIBLE FAILURE\x1b[0m"
-                }
-                CompatibilityStatus::IncompatibleSuccess => {
-                    "\x1b[31m🔴 INCOMPATIBLE SUCCESS\x1b[0m"
-                }
-            };
-
-            let differences = Self::get_test_differences(result);
-            let differences_str = if differences.is_empty() {
-                String::new()
-            } else {
-                format!(" ({})", differences.join(", "))
-            };
-
-            println!(
-                "  {} {:<18}{}",
-                status_indicator, result.test_name, differences_str
-            );
-        }
-    }
-
-    fn get_test_differences(result: &ComparisonResult) -> Vec<String> {
-        let mut differences = Vec::new();
-
-        match result.test_name.as_str() {
-            "create_with_bump" => {
-                differences.push("P-ATA uses CreateWithBump".to_string());
-            }
-            "recover_with_bump" => {
-                if !result.original.success {
-                    differences.push("Original fails".to_string());
-                }
-            }
-            _ => {}
-        }
-
-        differences
-    }
-
-    fn format_compute_savings(result: &ComparisonResult) -> String {
-        if result.p_ata.success && result.original.success {
-            let savings = result.original.compute_units as i64 - result.p_ata.compute_units as i64;
-            let percentage = if result.original.compute_units > 0 {
-                (savings as f64 / result.original.compute_units as f64) * 100.0
-            } else {
-                0.0
-            };
-            format!("[-{:.1}% CUs]", percentage)
-        } else if result.p_ata.success && !result.original.success {
-            "[P-ATA works]".to_string()
-        } else if !result.p_ata.success && result.original.success {
-            "[P-ATA fails]".to_string()
-        } else {
-            "[Both fail]".to_string()
         }
     }
 }
@@ -1068,32 +905,6 @@ fn main() {
 
 // ================================= HELPERS =====================================
 
-fn build_account_meta(pubkey: &Pubkey, writable: bool, signer: bool) -> AccountMeta {
-    AccountMeta {
-        pubkey: *pubkey,
-        is_writable: writable,
-        is_signer: signer,
-    }
-}
-
-fn build_ata_instruction_metas(
-    payer: &Pubkey,
-    ata: &Pubkey,
-    wallet: &Pubkey,
-    mint: &Pubkey,
-    system_prog: &Pubkey,
-    token_prog: &Pubkey,
-) -> Vec<AccountMeta> {
-    vec![
-        build_account_meta(payer, true, true), // payer (writable, signer)
-        build_account_meta(ata, true, false),  // ata (writable, not signer)
-        build_account_meta(wallet, false, false), // wallet (readonly, not signer)
-        build_account_meta(mint, false, false), // mint (readonly, not signer)
-        build_account_meta(system_prog, false, false), // system program (readonly, not signer)
-        build_account_meta(token_prog, false, false), // token program (readonly, not signer)
-    ]
-}
-
 fn build_base_test_accounts(
     base_offset: u8,
     token_program_id: &Pubkey,
@@ -1167,7 +978,6 @@ fn run_benchmark_with_validation(
     must_pass: bool,
 ) {
     let cloned_accounts = common::clone_accounts(accounts);
-    let ata_impl = common::AtaImplementation::p_ata_standard(*program_id);
     let mollusk =
         common::ComparisonRunner::create_mollusk_for_all_ata_implementations(token_program_id);
     let bencher = configure_bencher(mollusk, name, must_pass, "../target/benches");

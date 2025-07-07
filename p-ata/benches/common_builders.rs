@@ -54,6 +54,7 @@ pub enum SpecialAccountMod {
 }
 
 /// Failure modes for deliberate test failures
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum FailureMode {
     /// Payer owned by wrong program (not system program)
@@ -116,7 +117,8 @@ pub enum FailureMode {
 pub struct CommonTestCaseBuilder;
 
 impl CommonTestCaseBuilder {
-    /// Main entry point that replaces all build_*_variant methods
+    /// Main entry point
+    #[allow(dead_code)]
     pub fn build_test_case(
         base_test: BaseTestType,
         variant: TestVariant,
@@ -128,6 +130,7 @@ impl CommonTestCaseBuilder {
     }
 
     /// Build a failure test case with the specified failure mode
+    #[allow(dead_code)]
     pub fn build_failure_test_case(
         base_test: BaseTestType,
         variant: TestVariant,
@@ -314,8 +317,8 @@ impl CommonTestCaseBuilder {
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
-            // For recover operations, we need to calculate the bump using the owner_mint
-            // not the standard mint, because the processor expects owner_mint in the PDA derivation
+            // For recover operations, we need to use the SAME wallet that will be used in the accounts
+            // Get the actual wallet that will be used (with optimal bump for owner_mint)
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
                 nested_mint,
@@ -342,10 +345,21 @@ impl CommonTestCaseBuilder {
                 )
             };
 
-            // Calculate owner_ata address (this is what the processor uses for PDA signing)
+            // Use the SAME wallet calculation as in build_recover_accounts
+            let actual_wallet = crate::common::structured_pk_with_optimal_bump(
+                &ata_implementation.variant,
+                test_bank,
+                test_number,
+                crate::common::AccountTypeId::Wallet,
+                &ata_implementation.program_id,
+                &config.token_program,
+                &owner_mint,
+            );
+
+            // Calculate owner_ata address using the actual wallet that will be used
             Pubkey::find_program_address(
                 &[
-                    wallet.as_ref(),
+                    actual_wallet.as_ref(),
                     config.token_program.as_ref(),
                     owner_mint.as_ref(),
                 ],
@@ -362,22 +376,7 @@ impl CommonTestCaseBuilder {
                 &derivation_program_id,
             );
 
-            if config.setup_topup {
-                println!("🔧 DEBUG: ATA derivation for {}", config.base_test.name());
-                println!("   Wallet: {}", wallet);
-                println!("   Token program: {}", config.token_program);
-                println!("   Mint: {}", mint);
-                println!(
-                    "   Program ID (always executing): {}",
-                    derivation_program_id
-                );
-                println!("   Derived ATA: {}", result.0);
-                println!("   Calculated bump: {}", result.1);
-                println!(
-                    "   Variant: bump_arg={}, len_arg={}",
-                    variant.bump_arg, variant.len_arg
-                );
-            }
+            // Debug output suppressed for cleaner test runs
 
             result
         };
@@ -503,14 +502,7 @@ impl CommonTestCaseBuilder {
             let mut acc = AccountBuilder::system_account(0);
             if config.setup_topup {
                 modify_account_for_topup(&mut acc);
-                println!(
-                    "🔧 DEBUG: Topup account setup for {}",
-                    config.base_test.name()
-                );
-                println!("   ATA address: {}", ata);
-                println!("   Lamports: {}", acc.lamports);
-                println!("   Owner: {}", acc.owner);
-                println!("   Data length: {}", acc.data.len());
+                // Debug output suppressed for cleaner test runs
             }
             acc
         };
@@ -799,17 +791,7 @@ impl CommonTestCaseBuilder {
         // If len_arg is specified, we MUST also include bump (P-ATA requirement)
         if variant.bump_arg || variant.len_arg {
             raw_data.push(bump);
-            if config.setup_topup {
-                println!(
-                    "🔧 DEBUG: Instruction data for {} with bump optimization",
-                    config.base_test.name()
-                );
-                println!("   Bump included in instruction: {}", bump);
-                println!(
-                    "   Variant: bump_arg={}, len_arg={}",
-                    variant.bump_arg, variant.len_arg
-                );
-            }
+            // Debug output suppressed for cleaner test runs
         }
 
         if variant.len_arg {
@@ -832,23 +814,9 @@ impl CommonTestCaseBuilder {
 
         let final_data = ata_implementation.adapt_instruction_data(raw_data);
 
-        if config.setup_topup {
-            println!(
-                "🔧 DEBUG: Final instruction data for {}: {:?}",
-                config.base_test.name(),
-                final_data
-            );
-        }
+        // Debug output suppressed for cleaner test runs
 
         final_data
-    }
-
-    /// Helper method to create AtaImplementation from program ID
-    /// This assumes the program is a P-ATA standard implementation
-    pub(crate) fn create_ata_implementation_from_program_id(
-        program_id: Pubkey,
-    ) -> AtaImplementation {
-        AtaImplementation::p_ata_prefunded(program_id)
     }
 
     /// Apply failure mode to instruction and accounts
@@ -969,15 +937,7 @@ impl CommonTestCaseBuilder {
                         rent_epoch: 0,
                     };
 
-                    println!("🔧 DEBUG AtaWrongOwner: Setting ATA account");
-                    println!("   ATA address: {}", ata);
-                    println!("   Original owner: {}", accounts[pos].1.owner);
-                    println!("   Original lamports: {}", accounts[pos].1.lamports);
-                    println!("   Original data len: {}", accounts[pos].1.data.len());
-                    println!("   New owner: {}", new_account.owner);
-                    println!("   New lamports: {}", new_account.lamports);
-                    println!("   New data len: {}", new_account.data.len());
-                    println!("   Expected wrong_owner: {}", wrong_owner);
+                    // Debug output suppressed for cleaner test runs
 
                     accounts[pos].1 = new_account;
                 }
@@ -1181,6 +1141,7 @@ pub fn calculate_test_number(
 }
 
 /// Calculate test number for failure scenarios with collision avoidance
+#[allow(dead_code)]
 pub fn calculate_failure_test_number(base_test: BaseTestType, variant: TestVariant) -> u8 {
     use std::sync::atomic::{AtomicU8, Ordering};
     static FAILURE_COUNTER: AtomicU8 = AtomicU8::new(0);

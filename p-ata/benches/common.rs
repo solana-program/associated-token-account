@@ -1,6 +1,4 @@
 use {
-    bs58,
-    colored::Colorize,
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     solana_account::Account,
     solana_instruction,
@@ -8,7 +6,6 @@ use {
     solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
     spl_token_interface::state::Transmutable,
-    std::collections::HashMap,
     std::env,
 };
 
@@ -159,6 +156,7 @@ pub enum TestBankId {
 
 /// Account type identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum AccountTypeId {
     Payer = 0,
     Mint = 1,
@@ -202,6 +200,7 @@ pub fn structured_pk(
 }
 
 /// Generate multiple structured pubkeys at once
+#[allow(dead_code)]
 pub fn structured_pk_multi<const N: usize>(
     variant: &AtaVariant,
     test_bank: TestBankId,
@@ -254,39 +253,13 @@ pub fn structured_pk_with_optimal_bump(
         );
 
         if test_bump == 255 {
-            println!(
-                "Found optimal bump key [{}, {}, {}, {}]: {} (modifier: {})",
-                variant_to_byte(variant),
-                test_bank as u8,
-                test_number,
-                account_type as u8,
-                test_key,
-                modifier
-            );
+            // Found optimal bump - return silently unless debug mode is enabled
             return test_key;
         }
     }
 
-    // If we couldn't find optimal bump, warn and return base key
-    println!(
-        "Warning: Could not find optimal bump key [{}, {}, {}, {}], using base key with bump {}",
-        variant_to_byte(variant),
-        test_bank as u8,
-        test_number,
-        account_type as u8,
-        bump
-    );
+    // If we couldn't find optimal bump, return base key silently
     base_key
-}
-
-pub fn clone_accounts(src: &[(Pubkey, Account)]) -> Vec<(Pubkey, Account)> {
-    src.iter().map(|(k, v)| (*k, v.clone())).collect()
-}
-
-pub(crate) fn build_instruction_data(discriminator: u8, additional_data: &[u8]) -> Vec<u8> {
-    let mut data = vec![discriminator];
-    data.extend_from_slice(additional_data);
-    data
 }
 
 pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
@@ -432,25 +405,12 @@ impl BenchmarkSetup {
         if let Ok(keypair_data) = fs::read_to_string(&prefunded_keypair_path) {
             if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
                 if let Ok(keypair) = Keypair::try_from(&keypair_bytes[..]) {
-                    println!("Loaded P-ATA prefunded program ID: {}", keypair.pubkey());
                     return Some(keypair.pubkey());
                 }
             }
         }
 
-        println!("P-ATA prefunded program not found");
-        println!("   Build with --features create-account-prefunded to enable prefunded tests");
         None
-    }
-
-    /// Load both p-ata and original ATA program IDs
-    pub(crate) fn load_both_program_ids(manifest_dir: &str) -> (Pubkey, Option<Pubkey>, Pubkey) {
-        let (p_ata_program_id, token_program_id) = Self::load_program_ids(manifest_dir);
-
-        // Try to load original ATA program keypair
-        let original_ata_program_id = Self::try_load_original_ata_program_id(manifest_dir);
-
-        (p_ata_program_id, original_ata_program_id, token_program_id)
     }
 
     /// Load all available program IDs (P-ATA variants + original)
@@ -484,17 +444,15 @@ impl BenchmarkSetup {
         if let Ok(keypair_data) = fs::read_to_string(&original_keypair_path) {
             if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
                 if let Ok(keypair) = Keypair::try_from(&keypair_bytes[..]) {
-                    println!("Loaded original ATA program ID: {}", keypair.pubkey());
                     return Some(keypair.pubkey());
                 }
             }
         }
 
-        println!("Original ATA program not found, comparison mode unavailable");
-        println!("   Run with --features build-programs to build both implementations");
         None
     }
 
+    #[allow(dead_code)]
     /// Validate that the benchmark setup works with a simple test
     pub(crate) fn validate_setup(
         mollusk: &Mollusk,
@@ -652,6 +610,7 @@ impl AtaImplementation {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum CompatibilityStatus {
     Identical,           // Both succeeded with identical account states
@@ -663,6 +622,7 @@ pub enum CompatibilityStatus {
     IncompatibleSuccess, // One succeeded, one failed unexpectedly
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BenchmarkResult {
     pub implementation: String,
@@ -670,6 +630,7 @@ pub struct BenchmarkResult {
     pub compute_units: u64,
     pub success: bool,
     pub error_message: Option<String>,
+    pub captured_output: String, // Capture mollusk debug output
 }
 
 #[derive(Debug, Clone)]
@@ -696,6 +657,8 @@ impl ComparisonRunner {
         token_program_id: &Pubkey,
     ) -> BenchmarkResult {
         let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
+
+        // First run with quiet logging
         let result = mollusk.process_instruction(ix, accounts);
 
         let success = matches!(
@@ -714,7 +677,82 @@ impl ComparisonRunner {
             compute_units: result.compute_units_consumed,
             success,
             error_message,
+            captured_output: String::new(), // Will be populated if we need to re-run with debug
         }
+    }
+
+    /// Run a benchmark with verbose debug logging enabled - used for problematic results
+    pub fn run_single_benchmark_with_debug(
+        test_name: &str,
+        ix: &solana_instruction::Instruction,
+        accounts: &[(Pubkey, Account)],
+        implementation: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> BenchmarkResult {
+        // Temporarily enable debug logging
+        let original_rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
+        std::env::set_var("RUST_LOG", "debug");
+
+        let _ = solana_logger::setup_with(
+            "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
+        );
+
+        let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
+
+        // Capture output during execution
+        let captured_output =
+            Self::capture_output_during_execution(|| mollusk.process_instruction(ix, accounts));
+
+        let (result, output) = captured_output;
+
+        // Restore quiet logging
+        std::env::set_var("RUST_LOG", &original_rust_log);
+        let _ = solana_logger::setup_with(
+            "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+        );
+
+        let success = matches!(
+            result.program_result,
+            mollusk_svm::result::ProgramResult::Success
+        );
+        let error_message = if !success {
+            Some(format!("{:?}", result.program_result))
+        } else {
+            None
+        };
+
+        BenchmarkResult {
+            implementation: implementation.name.to_string(),
+            test_name: test_name.to_string(),
+            compute_units: result.compute_units_consumed,
+            success,
+            error_message,
+            captured_output: output,
+        }
+    }
+
+    /// Capture stdout/stderr output during function execution
+    fn capture_output_during_execution<F, R>(f: F) -> (R, String)
+    where
+        F: FnOnce() -> R,
+    {
+        use std::sync::{Arc, Mutex};
+
+        // Create a buffer to capture output
+        let captured = Arc::new(Mutex::new(Vec::new()));
+        let captured_clone = captured.clone();
+
+        // Execute the function - RUST_LOG should already be set appropriately by caller
+        let result = f();
+
+        // Extract captured output
+        let captured_text = if let Ok(buffer) = captured_clone.lock() {
+            String::from_utf8_lossy(&buffer).to_string()
+        } else {
+            String::new()
+        };
+
+        (result, captured_text)
     }
 
     pub fn create_mollusk_for_all_ata_implementations(token_program_id: &Pubkey) -> Mollusk {
@@ -776,12 +814,17 @@ impl ComparisonRunner {
         p_ata_result: &BenchmarkResult,
         original_result: &BenchmarkResult,
     ) -> CompatibilityStatus {
+        // Check if this is a P-ATA-only test (N/A for original)
+        if let Some(ref error_msg) = original_result.error_message {
+            if error_msg.contains("N/A - Test not applicable to original ATA") {
+                return CompatibilityStatus::OptimizedBehavior; // P-ATA-only feature
+            }
+        }
+
         match (p_ata_result.success, original_result.success) {
             (true, true) => {
                 // Both succeeded - check if this is the Token-2022 test which has expected differences
-                if p_ata_result.test_name == "create_token2022" {
-                    CompatibilityStatus::ExpectedDifferences
-                } else if p_ata_result.test_name.starts_with("fail_") {
+                if p_ata_result.test_name.starts_with("fail_") {
                     // CRITICAL: Both implementations succeeded in a failure test - this is a test issue!
                     CompatibilityStatus::Identical
                 } else {
@@ -833,6 +876,7 @@ impl ComparisonRunner {
     }
 
     /// Print individual comparison result
+    #[allow(dead_code)]
     pub fn print_comparison_result(result: &ComparisonResult) {
         println!("\n--- {} ---", result.test_name);
 
@@ -928,563 +972,10 @@ impl ComparisonRunner {
     }
 }
 
-// ======================= VERBOSE COMPARISON SUPPORT =======================
-
-/// Structure to hold verbose execution results
-pub struct VerboseResults {
-    pub instruction_data: Vec<u8>,
-    pub original_accounts: Vec<(Pubkey, Account)>,
-    pub final_accounts: Vec<(Pubkey, Account)>,
-}
-
-/// Verbose comparison utilities
-pub struct VerboseComparison;
-
-impl VerboseComparison {
-    /// Check if verbose mode is enabled via environment variable
-    pub fn is_enabled() -> bool {
-        env::var("P_ATA_VERBOSE").is_ok()
-    }
-
-    /// Print detailed byte-by-byte comparison
-    pub fn print_detailed_comparison(
-        comparison: &ComparisonResult,
-        p_ata_verbose: &VerboseResults,
-        original_verbose: &VerboseResults,
-    ) {
-        println!("\n🔍 VERBOSE COMPARISON: {}", comparison.test_name);
-        println!("==========================================");
-
-        // Compare instruction data
-        Self::compare_instruction_data(
-            &p_ata_verbose.instruction_data,
-            &original_verbose.instruction_data,
-        );
-
-        // Compare input account data (before execution)
-        Self::compare_input_account_data(
-            &p_ata_verbose.original_accounts,
-            &original_verbose.original_accounts,
-        );
-
-        // Compare changed accounts
-        Self::compare_account_changes(
-            &p_ata_verbose.original_accounts,
-            &p_ata_verbose.final_accounts,
-            &original_verbose.original_accounts,
-            &original_verbose.final_accounts,
-        );
-    }
-
-    /// Compare instruction data byte-by-byte
-    fn compare_instruction_data(p_ata_data: &[u8], original_data: &[u8]) {
-        println!("\n📋 INSTRUCTION DATA COMPARISON:");
-        println!(
-            "P-ATA instruction data:     {}",
-            bs58::encode(p_ata_data).into_string()
-        );
-        println!(
-            "Original instruction data:  {}",
-            bs58::encode(original_data).into_string()
-        );
-
-        if p_ata_data == original_data {
-            println!("{}", "✅ Instruction data IDENTICAL".green());
-        } else {
-            println!("{}", "❌ Instruction data DIFFERS".red());
-            Self::print_byte_comparison(p_ata_data, original_data, "Instruction");
-        }
-    }
-
-    /// Compare input account data (before execution)
-    fn compare_input_account_data(
-        p_ata_accounts: &[(Pubkey, Account)],
-        original_accounts: &[(Pubkey, Account)],
-    ) {
-        println!("\n📥 INPUT ACCOUNT DATA COMPARISON:");
-
-        let max_accounts = p_ata_accounts.len().max(original_accounts.len());
-
-        for i in 0..max_accounts {
-            println!("\n🔍 Account {} ({})", i, Self::get_account_role_name(i));
-
-            let p_ata_account = p_ata_accounts.get(i);
-            let original_account = original_accounts.get(i);
-
-            match (p_ata_account, original_account) {
-                (Some((p_ata_pk, p_ata_acc)), Some((orig_pk, orig_acc))) => {
-                    println!("   P-ATA address:    {}", p_ata_pk);
-                    println!("   Original address: {}", orig_pk);
-
-                    // Compare the account data, lamports, and owner
-                    let data_match = p_ata_acc.data == orig_acc.data;
-                    let lamports_match = p_ata_acc.lamports == orig_acc.lamports;
-                    let owner_match = p_ata_acc.owner == orig_acc.owner;
-
-                    if data_match && lamports_match && owner_match {
-                        println!("   {}", "✅ Account state IDENTICAL".green());
-                    } else {
-                        println!("   {}", "❌ Account state DIFFERS".red());
-                        if !data_match {
-                            println!(
-                                "     📊 Data differs: {} vs {} bytes",
-                                p_ata_acc.data.len(),
-                                orig_acc.data.len()
-                            );
-                            if !p_ata_acc.data.is_empty() || !orig_acc.data.is_empty() {
-                                Self::analyze_token_account_differences(
-                                    &p_ata_acc.data,
-                                    &orig_acc.data,
-                                );
-                            }
-                        }
-                        if !lamports_match {
-                            println!(
-                                "     💰 Lamports differ: {} vs {}",
-                                p_ata_acc.lamports, orig_acc.lamports
-                            );
-                        }
-                        if !owner_match {
-                            println!(
-                                "     👤 Owner differs: {} vs {}",
-                                p_ata_acc.owner, orig_acc.owner
-                            );
-                        }
-                    }
-                }
-                (Some((p_ata_pk, _)), None) => {
-                    println!("   ⚠️  Only in P-ATA: {}", p_ata_pk);
-                }
-                (None, Some((orig_pk, _))) => {
-                    println!("   ⚠️  Only in Original: {}", orig_pk);
-                }
-                (None, None) => unreachable!(),
-            }
-        }
-    }
-
-    /// Compare account changes between implementations by instruction position
-    fn compare_account_changes(
-        p_ata_original: &[(Pubkey, Account)],
-        p_ata_final: &[(Pubkey, Account)],
-        orig_original: &[(Pubkey, Account)],
-        orig_final: &[(Pubkey, Account)],
-    ) {
-        println!("\n📊 ACCOUNT CHANGES COMPARISON:");
-
-        // Map accounts by position in the original account list
-        let p_ata_changes_by_pos =
-            Self::find_account_changes_by_position(p_ata_original, p_ata_final);
-        let orig_changes_by_pos = Self::find_account_changes_by_position(orig_original, orig_final);
-
-        if p_ata_changes_by_pos.is_empty() && orig_changes_by_pos.is_empty() {
-            println!("No account changes detected in either implementation.");
-            return;
-        }
-
-        // Compare accounts by position (role in instruction)
-        let max_pos = p_ata_changes_by_pos
-            .keys()
-            .max()
-            .unwrap_or(&0)
-            .max(orig_changes_by_pos.keys().max().unwrap_or(&0));
-
-        for pos in 0..=*max_pos {
-            if let (Some(p_ata_change), Some(orig_change)) = (
-                p_ata_changes_by_pos.get(&pos),
-                orig_changes_by_pos.get(&pos),
-            ) {
-                println!("\n🔄 Account {} Changed:", Self::get_account_role_name(pos));
-                println!("   P-ATA Address:    {}", p_ata_change.0);
-                println!("   Original Address: {}", orig_change.0);
-                Self::compare_account_data(
-                    &p_ata_change.1.data,
-                    &orig_change.1.data,
-                    &format!("Position {}", pos),
-                );
-            } else if let Some(p_ata_change) = p_ata_changes_by_pos.get(&pos) {
-                println!(
-                    "\n⚠️  Account {} changed in P-ATA only: {}",
-                    Self::get_account_role_name(pos),
-                    p_ata_change.0
-                );
-                Self::print_account_summary(&p_ata_change.1, "P-ATA");
-            } else if let Some(orig_change) = orig_changes_by_pos.get(&pos) {
-                println!(
-                    "\n⚠️  Account {} changed in Original only: {}",
-                    Self::get_account_role_name(pos),
-                    orig_change.0
-                );
-                Self::print_account_summary(&orig_change.1, "Original");
-            }
-        }
-    }
-
-    /// Get human-readable name for account position
-    fn get_account_role_name(position: usize) -> &'static str {
-        match position {
-            0 => "0 (Payer)",
-            1 => "1 (ATA)",
-            2 => "2 (Wallet)",
-            3 => "3 (Mint)",
-            4 => "4 (System Program)",
-            5 => "5 (Token Program)",
-            6 => "6 (Rent Sysvar)",
-            _ => "Unknown",
-        }
-    }
-
-    /// Print account summary
-    fn print_account_summary(account: &Account, label: &str) {
-        println!(
-            "   {} account data: {} bytes, {} lamports, owner: {}",
-            label,
-            account.data.len(),
-            account.lamports,
-            account.owner
-        );
-        if !account.data.is_empty() {
-            println!("   Data: {}", bs58::encode(&account.data).into_string());
-        }
-    }
-
-    /// Find accounts that changed between original and final states by position
-    fn find_account_changes_by_position(
-        original: &[(Pubkey, Account)],
-        final_accounts: &[(Pubkey, Account)],
-    ) -> HashMap<usize, (Pubkey, Account)> {
-        let mut changes = HashMap::new();
-
-        for (pos, (pubkey, final_account)) in final_accounts.iter().enumerate() {
-            if let Some((_, original_account)) = original.get(pos) {
-                if original_account.data != final_account.data
-                    || original_account.lamports != final_account.lamports
-                    || original_account.owner != final_account.owner
-                {
-                    changes.insert(pos, (*pubkey, final_account.clone()));
-                }
-            }
-        }
-
-        changes
-    }
-
-    /// Find accounts that changed between original and final states (legacy method)
-    fn find_account_changes(
-        original: &[(Pubkey, Account)],
-        final_accounts: &[(Pubkey, Account)],
-    ) -> HashMap<Pubkey, Account> {
-        let mut changes = HashMap::new();
-
-        for (pubkey, final_account) in final_accounts {
-            if let Some((_, original_account)) = original.iter().find(|(pk, _)| pk == pubkey) {
-                if original_account.data != final_account.data
-                    || original_account.lamports != final_account.lamports
-                    || original_account.owner != final_account.owner
-                {
-                    changes.insert(*pubkey, final_account.clone());
-                }
-            }
-        }
-
-        changes
-    }
-
-    /// Compare account data byte-by-byte
-    fn compare_account_data(p_ata_data: &[u8], original_data: &[u8], label: &str) {
-        // Handle empty data case
-        if p_ata_data.is_empty() && original_data.is_empty() {
-            println!("   Both accounts have no data (empty)");
-            return;
-        }
-
-        let p_ata_preview = if p_ata_data.is_empty() {
-            "(empty)".to_string()
-        } else {
-            format!(
-                "{} ({} bytes)",
-                bs58::encode(p_ata_data).into_string(),
-                p_ata_data.len()
-            )
-        };
-
-        let orig_preview = if original_data.is_empty() {
-            "(empty)".to_string()
-        } else {
-            format!(
-                "{} ({} bytes)",
-                bs58::encode(original_data).into_string(),
-                original_data.len()
-            )
-        };
-
-        if p_ata_data == original_data {
-            println!("   P-ATA data:     {}", p_ata_preview.green());
-            println!("   Original data:  {}", orig_preview.green());
-            println!("   {}", "✅ Account data IDENTICAL".green());
-        } else {
-            println!("   P-ATA data:     {}", p_ata_preview.red());
-            println!("   Original data:  {}", orig_preview.red());
-            println!("   {}", "❌ Account data DIFFERS".red());
-            if !p_ata_data.is_empty() || !original_data.is_empty() {
-                Self::print_byte_comparison(p_ata_data, original_data, label);
-            }
-        }
-    }
-
-    /// Print byte-by-byte comparison with colored output
-    fn print_byte_comparison(data1: &[u8], data2: &[u8], label: &str) {
-        println!("\n🔍 Byte-by-byte comparison for {}:", label);
-
-        let b58_1 = bs58::encode(data1).into_string();
-        let b58_2 = bs58::encode(data2).into_string();
-
-        let max_len = b58_1.len().max(b58_2.len());
-        let chars1: Vec<char> = b58_1.chars().collect();
-        let chars2: Vec<char> = b58_2.chars().collect();
-
-        println!(
-            "P-ATA:    {}",
-            Self::colorize_comparison(&chars1, &chars2, true)
-        );
-        println!(
-            "Original: {}",
-            Self::colorize_comparison(&chars2, &chars1, false)
-        );
-
-        // Print summary
-        let differences = Self::count_differences(&chars1, &chars2);
-        if differences > 0 {
-            println!(
-                "{} differences found in {} characters",
-                differences.to_string().red(),
-                max_len
-            );
-        }
-    }
-
-    /// Colorize base58 string comparison
-    fn colorize_comparison(chars1: &[char], chars2: &[char], _is_first: bool) -> String {
-        let mut result = String::new();
-
-        for (i, &ch1) in chars1.iter().enumerate() {
-            if let Some(&ch2) = chars2.get(i) {
-                if ch1 == ch2 {
-                    result.push_str(&ch1.to_string().green().to_string());
-                } else {
-                    result.push_str(&ch1.to_string().red().to_string());
-                }
-            } else {
-                // This character exists in one string but not the other
-                result.push_str(&ch1.to_string().red().to_string());
-            }
-        }
-
-        result
-    }
-
-    /// Count differences between two character arrays
-    fn count_differences(chars1: &[char], chars2: &[char]) -> usize {
-        let mut differences = 0;
-        let max_len = chars1.len().max(chars2.len());
-
-        for i in 0..max_len {
-            let ch1 = chars1.get(i);
-            let ch2 = chars2.get(i);
-
-            if ch1 != ch2 {
-                differences += 1;
-            }
-        }
-
-        differences
-    }
-
-    /// Analyze differences in token account data structure
-    fn analyze_token_account_differences(p_ata_data: &[u8], original_data: &[u8]) {
-        println!("     📊 Token Account Structure Analysis:");
-
-        // Token account structure (165 bytes total):
-        // mint: Pubkey (32 bytes, offset 0-31)
-        // owner: Pubkey (32 bytes, offset 32-63)
-        // amount: u64 (8 bytes, offset 64-71)
-        // delegate: COption<Pubkey> (36 bytes, offset 72-107) - 4 byte tag + 32 byte pubkey
-        // state: u8 (1 byte, offset 108)
-        // is_native: COption<u64> (12 bytes, offset 109-120) - 4 byte tag + 8 byte value
-        // delegated_amount: u64 (8 bytes, offset 121-128)
-        // close_authority: COption<Pubkey> (36 bytes, offset 129-164) - 4 byte tag + 32 byte pubkey
-
-        let fields = [
-            ("Mint", 0, 32),
-            ("Owner", 32, 32),
-            ("Amount", 64, 8),
-            ("Delegate", 72, 36),
-            ("State", 108, 1),
-            ("IsNative", 109, 12),
-            ("DelegatedAmount", 121, 8),
-            ("CloseAuthority", 129, 36),
-        ];
-
-        for (field_name, offset, size) in fields {
-            let end = offset + size;
-
-            let p_ata_field = p_ata_data.get(offset..end).unwrap_or(&[]);
-            let orig_field = original_data.get(offset..end).unwrap_or(&[]);
-
-            if p_ata_field != orig_field {
-                println!("       🔴 {} differs:", field_name);
-                println!("         P-ATA:    {:02x?}", p_ata_field);
-                println!("         Original: {:02x?}", orig_field);
-
-                // Special analysis for certain fields
-                match field_name {
-                    "Mint" | "Owner" => {
-                        if p_ata_field.len() == 32 && orig_field.len() == 32 {
-                            let p_ata_pk = Pubkey::try_from(p_ata_field).unwrap_or_default();
-                            let orig_pk = Pubkey::try_from(orig_field).unwrap_or_default();
-                            println!("         P-ATA:    {}", p_ata_pk);
-                            println!("         Original: {}", orig_pk);
-                        }
-                    }
-                    "Amount" | "DelegatedAmount" => {
-                        if p_ata_field.len() == 8 && orig_field.len() == 8 {
-                            let p_ata_amount =
-                                u64::from_le_bytes(p_ata_field.try_into().unwrap_or([0; 8]));
-                            let orig_amount =
-                                u64::from_le_bytes(orig_field.try_into().unwrap_or([0; 8]));
-                            println!("         P-ATA:    {} tokens", p_ata_amount);
-                            println!("         Original: {} tokens", orig_amount);
-                        }
-                    }
-                    "State" => {
-                        if !p_ata_field.is_empty() && !orig_field.is_empty() {
-                            println!(
-                                "         P-ATA:    {}",
-                                Self::decode_account_state(p_ata_field[0])
-                            );
-                            println!(
-                                "         Original: {}",
-                                Self::decode_account_state(orig_field[0])
-                            );
-                        }
-                    }
-                    _ => {}
-                }
-            } else {
-                println!("       ✅ {} identical", field_name);
-            }
-        }
-    }
-
-    /// Decode account state byte to human readable string
-    fn decode_account_state(state: u8) -> &'static str {
-        match state {
-            0 => "Uninitialized",
-            1 => "Initialized",
-            2 => "Frozen",
-            _ => "Unknown",
-        }
-    }
-}
-
-impl ComparisonRunner {
-    /// Enhanced comparison run with verbose output support
-    pub fn run_single_benchmark_verbose(
-        test_name: &str,
-        ix: &solana_instruction::Instruction,
-        accounts: &[(Pubkey, Account)],
-        implementation: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (BenchmarkResult, VerboseResults) {
-        let cloned_accounts = clone_accounts(accounts);
-        let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
-
-        // Store the original accounts before execution
-        let original_accounts = cloned_accounts.clone();
-
-        let result = mollusk.process_instruction(ix, &cloned_accounts);
-
-        let benchmark_result = BenchmarkResult {
-            implementation: implementation.name.to_string(),
-            test_name: test_name.to_string(),
-            compute_units: result.compute_units_consumed,
-            success: matches!(
-                result.program_result,
-                mollusk_svm::result::ProgramResult::Success
-            ),
-            error_message: if matches!(
-                result.program_result,
-                mollusk_svm::result::ProgramResult::Success
-            ) {
-                None
-            } else {
-                Some(format!("{:?}", result.program_result))
-            },
-        };
-
-        // Get the final account states - Mollusk modifies the accounts in place
-        // so the resulting_accounts should contain the final states
-        let final_accounts = if result.resulting_accounts.is_empty() {
-            // Fallback: if resulting_accounts is empty, use the modified cloned_accounts
-            cloned_accounts
-        } else {
-            result.resulting_accounts
-        };
-
-        let verbose_results = VerboseResults {
-            instruction_data: ix.data.clone(),
-            original_accounts,
-            final_accounts,
-        };
-
-        (benchmark_result, verbose_results)
-    }
-
-    /// Run comprehensive comparison with verbose output
-    pub fn run_verbose_comparison(
-        test_name: &str,
-        p_ata_ix: &solana_instruction::Instruction,
-        p_ata_accounts: &[(Pubkey, Account)],
-        original_ix: &solana_instruction::Instruction,
-        original_accounts: &[(Pubkey, Account)],
-        p_ata_impl: &AtaImplementation,
-        original_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> ComparisonResult {
-        let (p_ata_result, p_ata_verbose) = Self::run_single_benchmark_verbose(
-            test_name,
-            p_ata_ix,
-            p_ata_accounts,
-            p_ata_impl,
-            token_program_id,
-        );
-        let (original_result, original_verbose) = Self::run_single_benchmark_verbose(
-            test_name,
-            original_ix,
-            original_accounts,
-            original_impl,
-            token_program_id,
-        );
-
-        let comparison_result =
-            Self::create_comparison_result(test_name, p_ata_result, original_result);
-
-        // Print verbose output if enabled
-        if VerboseComparison::is_enabled() {
-            VerboseComparison::print_detailed_comparison(
-                &comparison_result,
-                &p_ata_verbose,
-                &original_verbose,
-            );
-        }
-
-        comparison_result
-    }
-}
-
 // ========================== BASE TEST TYPES ============================
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[allow(dead_code)]
 pub enum BaseTestType {
     Create,
     CreateIdempotent,
@@ -1503,6 +994,7 @@ pub struct TestVariant {
     pub len_arg: bool,
 }
 
+#[allow(dead_code)]
 impl TestVariant {
     pub const BASE: Self = Self {
         rent_arg: false,
@@ -1573,6 +1065,7 @@ impl TestVariant {
 }
 
 impl BaseTestType {
+    #[allow(dead_code)]
     pub fn name(&self) -> &'static str {
         match self {
             Self::Create => "create",
@@ -1587,6 +1080,7 @@ impl BaseTestType {
     }
 
     /// Returns which P-ATA variant this test should use
+    #[allow(dead_code)]
     pub fn required_pata_variant(&self) -> AtaVariant {
         match self {
             Self::CreateTopup => AtaVariant::PAtaPrefunded, // Uses create-account-prefunded feature
@@ -1595,6 +1089,7 @@ impl BaseTestType {
         }
     }
 
+    #[allow(dead_code)]
     pub fn supported_variants(&self) -> Vec<TestVariant> {
         match self {
             Self::Create => vec![

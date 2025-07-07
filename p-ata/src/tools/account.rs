@@ -43,8 +43,9 @@ pub fn create_pda_account(
     ];
     let signer = Signer::from(&seed_array);
 
+    let required_lamports = rent.minimum_balance(space).max(1);
+
     if current_lamports > 0 {
-        let required_lamports = rent.minimum_balance(space).max(1);
         #[cfg(feature = "create-account-prefunded")]
         {
             CreateAccountPrefunded {
@@ -90,11 +91,10 @@ pub fn create_pda_account(
             }
         }
     } else {
-        // Create account directly with target owner
         CreateAccount {
             from: payer,
             to: pda,
-            lamports: rent.minimum_balance(space).max(1),
+            lamports: required_lamports,
             space: space as u64,
             owner: target_program_owner,
         }

@@ -705,6 +705,9 @@ impl ComparisonRunner {
                 // Both succeeded - check if this is the Token-2022 test which has expected differences
                 if p_ata_result.test_name == "create_token2022" {
                     CompatibilityStatus::ExpectedDifferences
+                } else if p_ata_result.test_name.starts_with("fail_") {
+                    // CRITICAL: Both implementations succeeded in a failure test - this is a test issue!
+                    CompatibilityStatus::Identical
                 } else {
                     // For other tests, assume identical if both succeeded
                     CompatibilityStatus::Identical
@@ -724,7 +727,16 @@ impl ComparisonRunner {
                     _ => CompatibilityStatus::IncompatibleFailure,
                 }
             }
-            (true, false) => CompatibilityStatus::OptimizedBehavior,
+            (true, false) => {
+                // P-ATA succeeded, Original failed
+                if p_ata_result.test_name.starts_with("fail_") {
+                    // CRITICAL SECURITY ISSUE: P-ATA succeeded in a failure test where original correctly failed!
+                    CompatibilityStatus::IncompatibleSuccess
+                } else {
+                    // Performance test - P-ATA optimization (e.g., bump optimization)
+                    CompatibilityStatus::OptimizedBehavior
+                }
+            }
             (false, true) => CompatibilityStatus::IncompatibleSuccess,
         }
     }
@@ -774,7 +786,16 @@ impl ComparisonRunner {
 
         // Compatibility status
         match result.compatibility_status {
-            CompatibilityStatus::Identical => println!("  Status: Identical (both succeeded)"),
+            CompatibilityStatus::Identical => {
+                if result.test_name.starts_with("fail_")
+                    && result.p_ata.success
+                    && result.original.success
+                {
+                    println!("  Status: Both succeeded (TEST ISSUE - should fail!)")
+                } else {
+                    println!("  Status: Identical (both succeeded)")
+                }
+            }
             CompatibilityStatus::BothRejected => {
                 println!("  Status: Both rejected (same error type)")
             }
@@ -791,7 +812,11 @@ impl ComparisonRunner {
                 println!("  Status: Different failure modes (concerning)")
             }
             CompatibilityStatus::IncompatibleSuccess => {
-                println!("  Status: Incompatible success/failure (concerning)")
+                if result.test_name.starts_with("fail_") {
+                    println!("  Status: 🚨 CRITICAL SECURITY ISSUE - P-ATA bypassed validation!")
+                } else {
+                    println!("  Status: Incompatible success/failure (concerning)")
+                }
             }
         }
 

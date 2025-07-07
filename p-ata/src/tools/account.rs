@@ -44,12 +44,13 @@ pub fn create_pda_account(
     let signer = Signer::from(&seed_array);
 
     if current_lamports > 0 {
+        let required_lamports = rent.minimum_balance(space).max(1);
         #[cfg(feature = "create-account-prefunded")]
         {
             CreateAccountPrefunded {
                 from: payer,
                 to: pda,
-                lamports: rent.minimum_balance(space).max(1),
+                lamports: required_lamports.saturating_sub(current_lamports),
                 space: space as u64,
                 owner: target_program_owner,
             }
@@ -57,12 +58,11 @@ pub fn create_pda_account(
         }
         #[cfg(not(feature = "create-account-prefunded"))]
         {
-            let required_lamports = rent.minimum_balance(space).max(1);
             if required_lamports > current_lamports {
                 Transfer {
                     from: payer,
                     to: pda,
-                    lamports: required_lamports - current_lamports,
+                    lamports: required_lamports.saturating_sub(current_lamports),
                 }
                 .invoke()?;
             }
@@ -71,13 +71,13 @@ pub fn create_pda_account(
             let current_owner = unsafe { pda.owner() };
 
             if current_data_len != space {
-                // Allocate ensures account is empty
                 Allocate {
                     account: pda,
                     space: space as u64,
                 }
                 .invoke_signed(&[signer.clone()])?;
             } else if current_data_len > 0 {
+                // Allocate ensures account is empty
                 return Err(ProgramError::AccountAlreadyInitialized);
             }
 

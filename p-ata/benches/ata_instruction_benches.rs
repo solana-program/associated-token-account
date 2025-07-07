@@ -16,219 +16,6 @@ use common::*;
 mod common_builders;
 use common_builders::CommonTestCaseBuilder;
 
-struct TestCaseBuilder;
-
-impl TestCaseBuilder {
-    fn build_test_case(
-        base_test: BaseTestType,
-        variant: TestVariant,
-        ata_implementation: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_test_case(
-            base_test,
-            variant,
-            ata_implementation,
-            token_program_id,
-        )
-    }
-
-    fn build_recover(
-        ata_implementation: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        // Fixed mints and wallets - independent of ATA program
-        // Calculate proper test number for RecoverNested + BASE variant
-        let test_number =
-            calculate_test_number(BaseTestType::RecoverNested, TestVariant::BASE, false);
-        let owner_mint = structured_pk(
-            &AtaVariant::Original,
-            TestBankId::Benchmarks,
-            test_number,
-            AccountTypeId::OwnerMint,
-        );
-        let wallet = structured_pk(
-            &AtaVariant::Original,
-            TestBankId::Benchmarks,
-            test_number,
-            AccountTypeId::Wallet,
-        );
-        let nested_mint = structured_pk(
-            &AtaVariant::Original,
-            TestBankId::Benchmarks,
-            test_number,
-            AccountTypeId::NestedMint,
-        );
-
-        let (owner_ata, _) = Pubkey::find_program_address(
-            &[
-                wallet.as_ref(),
-                token_program_id.as_ref(),
-                owner_mint.as_ref(),
-            ],
-            &ata_implementation.program_id,
-        );
-
-        let (nested_ata, _) = Pubkey::find_program_address(
-            &[
-                owner_ata.as_ref(),
-                token_program_id.as_ref(),
-                nested_mint.as_ref(),
-            ],
-            &ata_implementation.program_id,
-        );
-
-        let (dest_ata, _) = Pubkey::find_program_address(
-            &[
-                wallet.as_ref(),
-                token_program_id.as_ref(),
-                nested_mint.as_ref(),
-            ],
-            &ata_implementation.program_id,
-        );
-
-        let accounts = vec![
-            (
-                nested_ata,
-                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
-            ),
-            (
-                nested_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                dest_ata,
-                AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_ata,
-                AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (wallet, AccountBuilder::system_account(1_000_000_000)),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-            (
-                Pubkey::from(spl_token_interface::program::ID),
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        let raw_data = vec![2u8]; // RecoverNested discriminator
-        let ix = Instruction {
-            program_id: ata_implementation.program_id,
-            accounts: vec![
-                AccountMeta::new(nested_ata, false),
-                AccountMeta::new_readonly(nested_mint, false),
-                AccountMeta::new(dest_ata, false),
-                AccountMeta::new(owner_ata, false),
-                AccountMeta::new_readonly(owner_mint, false),
-                AccountMeta::new(wallet, true),
-                AccountMeta::new_readonly(*token_program_id, false),
-                AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
-            ],
-            data: ata_implementation.adapt_instruction_data(raw_data),
-        };
-
-        (ix, accounts)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn build_create_with_bump(
-        ata_implementation: &AtaImplementation,
-        token_program_id: &Pubkey,
-        extended_mint: bool,
-        with_rent: bool,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let base_offset = calculate_bump_base_offset(extended_mint, with_rent);
-        let (payer, mint, wallet) = build_base_test_accounts(
-            base_offset,
-            token_program_id,
-            &ata_implementation.program_id,
-        );
-
-        let (ata, bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            &ata_implementation.program_id,
-        );
-
-        let mut accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, extended_mint),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
-
-        if with_rent {
-            accounts.push((rent::id(), AccountBuilder::rent_sysvar()));
-        }
-
-        let mut metas = vec![
-            AccountMeta::new(payer, true),
-            AccountMeta::new(ata, false),
-            AccountMeta::new_readonly(wallet, false),
-            AccountMeta::new_readonly(mint, false),
-            AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-            AccountMeta::new_readonly(*token_program_id, false),
-        ];
-
-        if with_rent {
-            metas.push(AccountMeta::new_readonly(rent::id(), false));
-        }
-
-        let raw_data = build_instruction_data(0, &[bump]); // Create instruction (discriminator 0) with bump
-        let ix = Instruction {
-            program_id: ata_implementation.program_id,
-            accounts: metas,
-            data: ata_implementation.adapt_instruction_data(raw_data),
-        };
-
-        (ix, accounts)
-    }
-
-    /// Build all test cases for the worst case scenario using the modular variant system
-    fn build_worst_case_test_cases(
-        ata_implementation: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> Vec<(String, Instruction, Vec<(Pubkey, Account)>)> {
-        let mut test_cases = Vec::new();
-
-        let applicable_variants = [
-            TestVariant::BASE, // No arguments (expensive find_program_address)
-            TestVariant::BUMP, // With bump argument (optimized)
-        ];
-
-        for variant in applicable_variants {
-            let test_name = format!("worst_case_{}", variant.test_suffix());
-            let (ix, accounts) = TestCaseBuilder::build_test_case(
-                BaseTestType::WorstCase,
-                variant,
-                ata_implementation,
-                token_program_id,
-            );
-            test_cases.push((test_name, ix, accounts));
-        }
-
-        test_cases
-    }
-}
-
 // ============================ SETUP AND CONFIGURATION =============================
 
 impl BenchmarkSetup {
@@ -242,7 +29,7 @@ impl BenchmarkSetup {
             bump_arg: false,
             len_arg: false,
         };
-        let (test_ix, test_accounts) = TestCaseBuilder::build_test_case(
+        let (test_ix, test_accounts) = CommonTestCaseBuilder::build_test_case(
             BaseTestType::Create,
             test_variant,
             ata_implementation,
@@ -414,12 +201,16 @@ impl ComparisonRunner {
         token_program_id: &Pubkey,
         _standard_program_id: &Pubkey,
     ) -> ComparisonResult {
-        let (p_ata_ix, p_ata_accounts) =
-            TestCaseBuilder::build_test_case(base_test, variant, p_ata_impl, token_program_id);
+        let (p_ata_ix, p_ata_accounts) = CommonTestCaseBuilder::build_test_case(
+            base_test,
+            variant,
+            p_ata_impl,
+            token_program_id,
+        );
 
         // For original ATA, use base variant (no optimizations) for comparison
         let original_variant = TestVariant::BASE;
-        let (original_ix, original_accounts) = TestCaseBuilder::build_test_case(
+        let (original_ix, original_accounts) = CommonTestCaseBuilder::build_test_case(
             base_test,
             original_variant,
             original_impl,
@@ -654,140 +445,6 @@ impl ComparisonRunner {
     }
 }
 
-// =============================== BENCHMARK RUNNER ===============================
-
-struct BenchmarkRunner;
-
-impl BenchmarkRunner {
-    fn run_isolated_benchmark(
-        name: &str,
-        ix: &Instruction,
-        accounts: &[(Pubkey, Account)],
-        program_id: &Pubkey,
-        token_program_id: &Pubkey,
-    ) {
-        println!("\n=== Running benchmark: {} ===", name);
-
-        let must_pass = name != "create_token2022_sim";
-        run_benchmark_with_validation(name, ix, accounts, program_id, token_program_id, must_pass);
-    }
-
-    fn run_all_benchmarks(ata_implementation: &AtaImplementation, token_program_id: &Pubkey) {
-        println!(
-            "\n=== Running all benchmarks for {} ===",
-            ata_implementation.name
-        );
-
-        let test_cases = vec![
-            (
-                "create_base",
-                TestCaseBuilder::build_test_case(
-                    BaseTestType::Create,
-                    TestVariant {
-                        rent_arg: false,
-                        bump_arg: false,
-                        len_arg: false,
-                    },
-                    ata_implementation,
-                    token_program_id,
-                ),
-            ),
-            (
-                "create_rent",
-                TestCaseBuilder::build_test_case(
-                    BaseTestType::Create,
-                    TestVariant {
-                        rent_arg: true,
-                        bump_arg: false,
-                        len_arg: false,
-                    },
-                    ata_implementation,
-                    token_program_id,
-                ),
-            ),
-            (
-                "create_topup",
-                TestCaseBuilder::build_test_case(
-                    BaseTestType::CreateTopup,
-                    TestVariant {
-                        rent_arg: false,
-                        bump_arg: false,
-                        len_arg: false,
-                    },
-                    ata_implementation,
-                    token_program_id,
-                ),
-            ),
-            (
-                "create_idemp",
-                TestCaseBuilder::build_test_case(
-                    BaseTestType::CreateIdempotent,
-                    TestVariant {
-                        rent_arg: false,
-                        bump_arg: false,
-                        len_arg: false,
-                    },
-                    ata_implementation,
-                    token_program_id,
-                ),
-            ),
-            (
-                "create_with_bump_base",
-                TestCaseBuilder::build_create_with_bump(
-                    ata_implementation,
-                    token_program_id,
-                    false,
-                    false,
-                ),
-            ),
-            (
-                "create_with_bump_rent",
-                TestCaseBuilder::build_create_with_bump(
-                    ata_implementation,
-                    token_program_id,
-                    false,
-                    true,
-                ),
-            ),
-            (
-                "recover",
-                TestCaseBuilder::build_recover(ata_implementation, token_program_id),
-            ),
-            // Note: Specialized helper functions removed to reduce code duplication
-            // These tests should be implemented using the consolidated builder approach
-        ];
-
-        for (name, (ix, accounts)) in test_cases {
-            Self::run_isolated_benchmark(
-                name,
-                &ix,
-                &accounts,
-                &ata_implementation.program_id,
-                token_program_id,
-            );
-        }
-
-        // Run worst-case scenarios
-        Self::run_worst_case_scenarios(ata_implementation, token_program_id);
-    }
-
-    fn run_worst_case_scenarios(ata_implementation: &AtaImplementation, token_program_id: &Pubkey) {
-        println!("\n=== Worst-Case Scenarios ===");
-        let test_cases =
-            TestCaseBuilder::build_worst_case_test_cases(ata_implementation, token_program_id);
-
-        for (test_name, ix, accounts) in test_cases {
-            Self::run_isolated_benchmark(
-                &test_name,
-                &ix,
-                &accounts,
-                &ata_implementation.program_id,
-                token_program_id,
-            );
-        }
-    }
-}
-
 // ================================= MAIN =====================================
 
 fn main() {
@@ -855,15 +512,6 @@ fn main() {
         );
         println!("Standard P-ATA program ID: {}", standard_impl.program_id);
 
-        // let standard_mollusk = common::ComparisonRunner::create_mollusk_for_implementation(
-        //     &token_program_id,
-        // );
-        // if let Err(e) =
-        //     BenchmarkSetup::validate_ata_setup(&standard_mollusk, &standard_impl, &token_program_id)
-        // {
-        //     panic!("P-ATA standard benchmark setup validation failed: {}", e);
-        // }
-
         // Run comparison using the appropriate P-ATA implementation for each test
         let _comparison_results = ComparisonRunner::run_full_comparison(
             &standard_impl,
@@ -876,111 +524,7 @@ fn main() {
         println!("Total test results: {}", _comparison_results.len());
     } else {
         // P-ATA ONLY MODE: Original ATA not available
-        println!("\n🔧 Running P-ATA only benchmarks (original ATA not built)");
-        println!("   💡 To enable comparison, run: cargo bench --features build-programs");
-
-        // Setup Mollusk with standard P-ATA
-        let mollusk =
-            common::ComparisonRunner::create_mollusk_for_all_ata_implementations(&token_program_id);
-
-        // Validate the setup works
-        if let Err(e) =
-            BenchmarkSetup::validate_ata_setup(&mollusk, &standard_impl, &token_program_id)
-        {
-            panic!("P-ATA standard benchmark setup validation failed: {}", e);
-        }
-
-        // Run P-ATA benchmarks
-        BenchmarkRunner::run_all_benchmarks(&standard_impl, &token_program_id);
-
-        // Also test prefunded variant if available
-        if let Some(ref prefunded_impl) = prefunded_impl {
-            println!("\n🔧 Running P-ATA prefunded benchmarks");
-            BenchmarkRunner::run_all_benchmarks(prefunded_impl, &token_program_id);
-        }
-
-        println!("\n✅ P-ATA benchmarks completed successfully");
+        println!("\n🔧 Original ATA program not built!");
+        println!("   💡 run: cargo bench --features build-programs");
     }
-}
-
-// ================================= HELPERS =====================================
-
-fn build_base_test_accounts(
-    base_offset: u8,
-    token_program_id: &Pubkey,
-    program_id: &Pubkey,
-) -> (Pubkey, Pubkey, Pubkey) {
-    let payer = structured_pk(
-        &AtaVariant::Original, // Use Original as default for these helper functions
-        TestBankId::Benchmarks,
-        base_offset,
-        AccountTypeId::Payer,
-    );
-    let mint = structured_pk(
-        &AtaVariant::Original,
-        TestBankId::Benchmarks,
-        base_offset,
-        AccountTypeId::Mint,
-    );
-    // Use optimal bump key for wallet to ensure fair comparison
-    // Each implementation gets its own optimal wallet for its own program ID
-    let wallet = common::structured_pk_with_optimal_bump(
-        &AtaVariant::Original,
-        TestBankId::Benchmarks,
-        base_offset + 2,
-        AccountTypeId::Wallet,
-        program_id,
-        token_program_id,
-        &mint,
-    );
-    (payer, mint, wallet)
-}
-
-fn calculate_bump_base_offset(extended_mint: bool, with_rent: bool) -> u8 {
-    match (extended_mint, with_rent) {
-        (false, false) => 90, // create_with_bump_base
-        (false, true) => 95,  // create_with_bump_rent
-        (true, false) => 100, // create_with_bump_ext
-        (true, true) => 105,  // create_with_bump_ext_rent
-    }
-}
-
-fn configure_bencher<'a>(
-    mollusk: Mollusk,
-    _name: &'a str,
-    must_pass: bool,
-    out_dir: &'a str,
-) -> MolluskComputeUnitBencher<'a> {
-    let mut bencher = MolluskComputeUnitBencher::new(mollusk).out_dir(out_dir);
-
-    if must_pass {
-        bencher = bencher.must_pass(true);
-    }
-
-    bencher
-}
-
-fn execute_benchmark_case<'a>(
-    bencher: MolluskComputeUnitBencher<'a>,
-    name: &'a str,
-    ix: &'a Instruction,
-    accounts: &'a [(Pubkey, Account)],
-) -> MolluskComputeUnitBencher<'a> {
-    bencher.bench((name, ix, accounts))
-}
-
-fn run_benchmark_with_validation(
-    name: &str,
-    ix: &Instruction,
-    accounts: &[(Pubkey, Account)],
-    program_id: &Pubkey,
-    token_program_id: &Pubkey,
-    must_pass: bool,
-) {
-    let cloned_accounts = common::clone_accounts(accounts);
-    let mollusk =
-        common::ComparisonRunner::create_mollusk_for_all_ata_implementations(token_program_id);
-    let bencher = configure_bencher(mollusk, name, must_pass, "../target/benches");
-    let mut bencher = execute_benchmark_case(bencher, name, ix, &cloned_accounts);
-    bencher.execute();
 }

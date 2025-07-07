@@ -314,8 +314,8 @@ impl CommonTestCaseBuilder {
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
-            // For recover operations, we need to calculate the bump using the owner_mint
-            // not the standard mint, because the processor expects owner_mint in the PDA derivation
+            // For recover operations, we need to use the SAME wallet that will be used in the accounts
+            // Get the actual wallet that will be used (with optimal bump for owner_mint)
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
                 nested_mint,
@@ -342,10 +342,21 @@ impl CommonTestCaseBuilder {
                 )
             };
 
-            // Calculate owner_ata address (this is what the processor uses for PDA signing)
+            // Use the SAME wallet calculation as in build_recover_accounts
+            let actual_wallet = crate::common::structured_pk_with_optimal_bump(
+                &ata_implementation.variant,
+                test_bank,
+                test_number,
+                crate::common::AccountTypeId::Wallet,
+                &ata_implementation.program_id,
+                &config.token_program,
+                &owner_mint,
+            );
+
+            // Calculate owner_ata address using the actual wallet that will be used
             Pubkey::find_program_address(
                 &[
-                    wallet.as_ref(),
+                    actual_wallet.as_ref(),
                     config.token_program.as_ref(),
                     owner_mint.as_ref(),
                 ],
@@ -843,14 +854,6 @@ impl CommonTestCaseBuilder {
         final_data
     }
 
-    /// Helper method to create AtaImplementation from program ID
-    /// This assumes the program is a P-ATA standard implementation
-    pub(crate) fn create_ata_implementation_from_program_id(
-        program_id: Pubkey,
-    ) -> AtaImplementation {
-        AtaImplementation::p_ata_prefunded(program_id)
-    }
-
     /// Apply failure mode to instruction and accounts
     fn apply_failure_mode(
         failure_mode: &FailureMode,
@@ -1181,6 +1184,7 @@ pub fn calculate_test_number(
 }
 
 /// Calculate test number for failure scenarios with collision avoidance
+#[allow(dead_code)]
 pub fn calculate_failure_test_number(base_test: BaseTestType, variant: TestVariant) -> u8 {
     use std::sync::atomic::{AtomicU8, Ordering};
     static FAILURE_COUNTER: AtomicU8 = AtomicU8::new(0);

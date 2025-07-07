@@ -831,6 +831,102 @@ impl ComparisonRunner {
         // Check for exact match - identical errors are always compatible
         p_ata_err == orig_err
     }
+
+    /// Print individual comparison result
+    #[allow(dead_code)]
+    pub fn print_comparison_result(result: &ComparisonResult) {
+        println!("\n--- {} ---", result.test_name);
+
+        // Compute unit comparison
+        println!(
+            "  P-ATA:    {:>8} CUs | {}",
+            result.p_ata.compute_units,
+            if result.p_ata.success {
+                "Success"
+            } else {
+                "Failed"
+            }
+        );
+        println!(
+            "  Original: {:>8} CUs | {}",
+            result.original.compute_units,
+            if result.original.success {
+                "Success"
+            } else {
+                "Failed"
+            }
+        );
+
+        // Savings analysis (mainly relevant for successful tests)
+        if let (Some(savings), Some(percentage)) =
+            (result.compute_savings, result.savings_percentage)
+        {
+            if savings > 0 {
+                println!("  Savings: {:>8} CUs ({:.1}%)", savings, percentage);
+            } else if savings < 0 {
+                println!("  Overhead: {:>7} CUs ({:.1}%)", -savings, -percentage);
+            } else {
+                println!("  Equal compute usage");
+            }
+        }
+
+        // Compatibility status
+        match result.compatibility_status {
+            CompatibilityStatus::Identical => {
+                if result.test_name.starts_with("fail_")
+                    && result.p_ata.success
+                    && result.original.success
+                {
+                    println!("  Status: Both succeeded (TEST ISSUE - should fail!)")
+                } else {
+                    println!("  Status: Identical (both succeeded)")
+                }
+            }
+            CompatibilityStatus::BothRejected => {
+                println!("  Status: Both rejected (same error type)")
+            }
+            CompatibilityStatus::OptimizedBehavior => {
+                println!("  Status: P-ATA optimization working")
+            }
+            CompatibilityStatus::ExpectedDifferences => {
+                println!("  Status: Both succeeded with expected differences")
+            }
+            CompatibilityStatus::AccountMismatch => {
+                println!("  Status: Account mismatch (concerning)")
+            }
+            CompatibilityStatus::IncompatibleFailure => {
+                println!("  Status: Different failure modes (concerning)")
+            }
+            CompatibilityStatus::IncompatibleSuccess => {
+                if result.test_name.starts_with("fail_") {
+                    // Check which implementation actually succeeded
+                    if result.p_ata.success && !result.original.success {
+                        println!(
+                            "  Status: 🚨 CRITICAL SECURITY ISSUE - P-ATA bypassed validation!"
+                        )
+                    } else if !result.p_ata.success && result.original.success {
+                        println!("  Status: 🚨 CRITICAL SECURITY ISSUE - Original ATA bypassed validation!")
+                    } else {
+                        println!("  Status: 🚨 CRITICAL SECURITY ISSUE - Validation mismatch!")
+                    }
+                } else {
+                    println!("  Status: Incompatible success/failure (concerning)")
+                }
+            }
+        }
+
+        // Show error details if needed
+        if !result.p_ata.success {
+            if let Some(ref error) = result.p_ata.error_message {
+                println!("  P-ATA Error: {}", error);
+            }
+        }
+        if !result.original.success {
+            if let Some(ref error) = result.original.error_message {
+                println!("  Original Error: {}", error);
+            }
+        }
+    }
 }
 
 // ========================== BASE TEST TYPES ============================

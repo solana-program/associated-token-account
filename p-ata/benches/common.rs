@@ -787,7 +787,10 @@ impl ComparisonRunner {
         // Compatibility status
         match result.compatibility_status {
             CompatibilityStatus::Identical => {
-                if result.test_name.starts_with("fail_") && result.p_ata.success && result.original.success {
+                if result.test_name.starts_with("fail_")
+                    && result.p_ata.success
+                    && result.original.success
+                {
                     println!("  Status: Both succeeded (TEST ISSUE - should fail!)")
                 } else {
                     println!("  Status: Identical (both succeeded)")

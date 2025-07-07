@@ -1891,8 +1891,9 @@ fn main() {
         let both_succeeded = comparison_results
             .iter()
             .filter(|r| {
-                matches!(r.compatibility_status, CompatibilityStatus::Identical) 
-                && r.p_ata.success && r.original.success
+                matches!(r.compatibility_status, CompatibilityStatus::Identical)
+                    && r.p_ata.success
+                    && r.original.success
             })
             .count();
 

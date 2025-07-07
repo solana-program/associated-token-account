@@ -1899,14 +1899,13 @@ fn main() {
         if unexpected_success == 0 && both_succeeded == 0 {
             println!("\n✅ Failure comparison completed successfully - No critical security issues detected");
         } else {
-            println!("\n🚨 FAILURE COMPARISON FAILED - CRITICAL ISSUES DETECTED");
+            println!("\n🚨 FAILURE COMPARISON - ISSUES DETECTED");
             if unexpected_success > 0 {
-                println!("    {} SECURITY VULNERABILITIES: P-ATA succeeded where original correctly failed!", unexpected_success);
+                println!("    {} SECURITY VULNERABILITIES: P-ATA succeeded where original correctly failed", unexpected_success);
             }
             if both_succeeded > 0 {
-                println!("    {} TEST ISSUES: Both implementations succeeded when they should have failed!", both_succeeded);
+                println!("    {} TEST ISSUES: Both implementations succeeded when they should have failed", both_succeeded);
             }
-            println!("    These issues must be resolved before P-ATA can be considered secure!");
         }
     } else {
         // P-ATA ONLY MODE: Original ATA not available

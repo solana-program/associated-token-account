@@ -27,4 +27,4 @@ Minor requested features for ATA have also been included:
 
 ## Testing
 
-cargo build --features build-programs && cargo bench
+`cargo build --features build-programs && cargo bench`

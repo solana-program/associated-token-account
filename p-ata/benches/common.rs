@@ -269,39 +269,25 @@ pub fn structured_pk_with_optimal_common_bump(
     let base_key = structured_pk(variant, test_bank, test_number, account_type);
     let mut key_bytes = base_key.to_bytes();
 
-    // Try different variations until we find one with common optimal bump
-    // Start with bump 255 and work down if needed
-    for target_bump in (0..=255u8).rev() {
-        // For each target bump, try to find a key that produces it across all program IDs
-        for modifier in 0u32..10000 {
-            // Modify the last 4 bytes with the modifier
-            let modifier_bytes = modifier.to_le_bytes();
-            key_bytes[28..32].copy_from_slice(&modifier_bytes);
+    // Try different variations until we find one with optimal bump (255) for all program IDs
+    for modifier in 0u32..10000 {
+        // Modify the last 4 bytes with the modifier
+        let modifier_bytes = modifier.to_le_bytes();
+        key_bytes[28..32].copy_from_slice(&modifier_bytes);
 
-            let test_key = Pubkey::new_from_array(key_bytes);
+        let test_key = Pubkey::new_from_array(key_bytes);
 
-            // Check if this key produces the target bump for all program IDs
-            let bumps: Vec<u8> = ata_program_ids
-                .iter()
-                .map(|program_id| {
-                    let (_, bump) = Pubkey::find_program_address(
-                        &[test_key.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-                        program_id,
-                    );
-                    bump
-                })
-                .collect();
+        // Check if this key produces bump 255 for all program IDs
+        let all_optimal = ata_program_ids.iter().all(|program_id| {
+            let (_, bump) = Pubkey::find_program_address(
+                &[test_key.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+                program_id,
+            );
+            bump == 255
+        });
 
-            // Check if all bumps are the same and match our target
-            if bumps.iter().all(|&bump| bump == target_bump) {
-                return test_key;
-            }
-        }
-
-        // If we found a common bump less than 255, we're done
-        // (since we're searching from highest to lowest bump)
-        if target_bump < 255 {
-            break;
+        if all_optimal {
+            return test_key;
         }
     }
 

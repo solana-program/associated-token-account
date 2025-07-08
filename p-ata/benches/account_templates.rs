@@ -334,4 +334,206 @@ impl FailureAccountBuilder {
             accounts[pos].1.data = vec![0u8; size];
         }
     }
+
+    /// Replace account with a token account having wrong mint (for failure tests)
+    pub fn set_token_account_wrong_mint(
+        accounts: &mut Vec<(Pubkey, Account)>,
+        target_address: Pubkey,
+        wrong_mint: Pubkey,
+        wallet: &Pubkey,
+        token_program: &Pubkey,
+    ) {
+        if let Some(pos) = accounts
+            .iter()
+            .position(|(addr, _)| *addr == target_address)
+        {
+            accounts[pos].1 = AccountBuilder::token_account(&wrong_mint, wallet, 0, token_program);
+        }
+        // Add the wrong mint account if it doesn't exist
+        if !accounts.iter().any(|(addr, _)| *addr == wrong_mint) {
+            accounts.push((
+                wrong_mint,
+                AccountBuilder::mint_account(0, token_program, false),
+            ));
+        }
+    }
+
+    /// Replace account with a token account having wrong owner (for failure tests)
+    pub fn set_token_account_wrong_owner(
+        accounts: &mut Vec<(Pubkey, Account)>,
+        target_address: Pubkey,
+        mint: &Pubkey,
+        wrong_owner: &Pubkey,
+        token_program: &Pubkey,
+    ) {
+        if let Some(pos) = accounts
+            .iter()
+            .position(|(addr, _)| *addr == target_address)
+        {
+            accounts[pos].1 = AccountBuilder::token_account(mint, wrong_owner, 0, token_program);
+        }
+    }
+
+    /// Set account with invalid token account structure (for failure tests)
+    pub fn set_invalid_token_account_structure(
+        accounts: &mut Vec<(Pubkey, Account)>,
+        target_address: Pubkey,
+        token_program: &Pubkey,
+    ) {
+        if let Some(pos) = accounts
+            .iter()
+            .position(|(addr, _)| *addr == target_address)
+        {
+            accounts[pos].1.data =
+                vec![0xFF; crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE];
+            accounts[pos].1.owner = *token_program;
+            accounts[pos].1.lamports = 2_000_000;
+        }
+    }
+
+    /// Set account with custom data, owner, and lamports (for failure tests)
+    pub fn set_custom_account_state(
+        accounts: &mut Vec<(Pubkey, Account)>,
+        target_address: Pubkey,
+        data: Vec<u8>,
+        owner: Pubkey,
+        lamports: u64,
+    ) {
+        if let Some(pos) = accounts
+            .iter()
+            .position(|(addr, _)| *addr == target_address)
+        {
+            accounts[pos].1.data = data;
+            accounts[pos].1.owner = owner;
+            accounts[pos].1.lamports = lamports;
+        }
+    }
+
+    /// Set account with invalid multisig data (for failure tests)
+    pub fn set_invalid_multisig_data(
+        accounts: &mut Vec<(Pubkey, Account)>,
+        target_address: Pubkey,
+        token_program: &Pubkey,
+    ) {
+        if let Some(pos) = accounts
+            .iter()
+            .position(|(addr, _)| *addr == target_address)
+        {
+            accounts[pos].1.data =
+                vec![0xFF; crate::common::constants::account_sizes::MULTISIG_ACCOUNT_SIZE];
+            accounts[pos].1.owner = *token_program;
+        }
+    }
+
+    /// Add new account to accounts vector (for failure tests)
+    pub fn add_account(accounts: &mut Vec<(Pubkey, Account)>, address: Pubkey, account: Account) {
+        accounts.push((address, account));
+    }
+}
+
+/// Helper for instruction modifications in failure tests
+pub struct FailureInstructionBuilder;
+
+impl FailureInstructionBuilder {
+    /// Set account meta signer status (for failure tests)
+    pub fn set_account_signer_status(
+        ix: &mut solana_instruction::Instruction,
+        target_address: Pubkey,
+        is_signer: bool,
+    ) {
+        if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == target_address) {
+            meta.is_signer = is_signer;
+        }
+    }
+
+    /// Set account meta writable status (for failure tests)
+    pub fn set_account_writable_status(
+        ix: &mut solana_instruction::Instruction,
+        target_address: Pubkey,
+        is_writable: bool,
+    ) {
+        if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == target_address) {
+            meta.is_writable = is_writable;
+        }
+    }
+
+    /// Replace account meta address (for failure tests)
+    pub fn replace_account_meta_address(
+        ix: &mut solana_instruction::Instruction,
+        old_address: Pubkey,
+        new_address: Pubkey,
+    ) {
+        if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == old_address) {
+            meta.pubkey = new_address;
+        }
+    }
+
+    /// Replace account meta by index (for failure tests)
+    pub fn replace_account_meta_by_index(
+        ix: &mut solana_instruction::Instruction,
+        index: usize,
+        new_address: Pubkey,
+    ) {
+        if let Some(meta) = ix.accounts.get_mut(index) {
+            meta.pubkey = new_address;
+        }
+    }
+
+    /// Set account meta signer status by index (for failure tests)
+    pub fn set_account_signer_status_by_index(
+        ix: &mut solana_instruction::Instruction,
+        index: usize,
+        is_signer: bool,
+    ) {
+        if let Some(meta) = ix.accounts.get_mut(index) {
+            meta.is_signer = is_signer;
+        }
+    }
+
+    /// Modify instruction data discriminator (for failure tests)
+    pub fn set_discriminator(ix: &mut solana_instruction::Instruction, discriminator: u8) {
+        if !ix.data.is_empty() {
+            ix.data[0] = discriminator;
+        }
+    }
+
+    /// Modify instruction data bump value (for failure tests)
+    pub fn set_bump_value(ix: &mut solana_instruction::Instruction, bump: u8) {
+        if ix.data.len() >= 2 {
+            ix.data[1] = bump;
+        }
+    }
+
+    /// Update both instruction meta and account address (for failure tests)
+    pub fn replace_account_everywhere(
+        ix: &mut solana_instruction::Instruction,
+        accounts: &mut Vec<(Pubkey, Account)>,
+        old_address: Pubkey,
+        new_address: Pubkey,
+    ) {
+        // Update instruction meta
+        Self::replace_account_meta_address(ix, old_address, new_address);
+
+        // Update accounts vector
+        FailureAccountBuilder::replace_account_address(accounts, old_address, new_address);
+    }
+
+    /// Update both instruction meta and account address by index (for failure tests)
+    pub fn replace_account_everywhere_by_index(
+        ix: &mut solana_instruction::Instruction,
+        accounts: &mut Vec<(Pubkey, Account)>,
+        meta_index: usize,
+        new_address: Pubkey,
+    ) {
+        // Get the old address first
+        if let Some(meta) = ix.accounts.get(meta_index) {
+            let old_address = meta.pubkey;
+
+            // Update instruction meta
+            Self::replace_account_meta_by_index(ix, meta_index, new_address);
+
+            // Update accounts vector
+            FailureAccountBuilder::replace_account_address(accounts, old_address, new_address);
+        }
+    }
 }

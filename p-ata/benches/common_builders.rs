@@ -8,6 +8,7 @@ use {
 
 use crate::common::AllAtaImplementations;
 // Import types from parent crate's common module
+use crate::account_templates::{FailureAccountBuilder, FailureInstructionBuilder};
 use crate::{
     account_templates::*, AccountBuilder, AtaImplementation, BaseTestType, TestVariant,
     SYSTEM_PROGRAM_ID,
@@ -174,7 +175,7 @@ impl CommonTestCaseBuilder {
                 instruction_discriminator: 1,
                 use_extended_mint: false,
                 setup_topup: false,
-                setup_existing_ata: true, // ATA already exists
+                setup_existing_ata: true, // Idempotent
                 use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![],
                 failure_mode: None,
@@ -329,7 +330,7 @@ impl CommonTestCaseBuilder {
         config: TestCaseConfig,
         variant: TestVariant,
         ata_implementation: &AtaImplementation,
-        test_name: Option<&str>,
+        _test_name: Option<&str>,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         // Use structured addressing to prevent cross-contamination
         let test_bank = if config.failure_mode.is_some() {
@@ -352,7 +353,7 @@ impl CommonTestCaseBuilder {
 
         #[cfg(feature = "full-debug-logs")]
         {
-            let display_test_name = test_name.unwrap_or(config.base_test.name());
+            let display_test_name = _test_name.unwrap_or(config.base_test.name());
             println!(
                 "🔍 Test: {} | Implementation: {} | Mint: {} | Owner: {} | Payer: {}",
                 display_test_name,
@@ -868,7 +869,7 @@ impl CommonTestCaseBuilder {
         final_data
     }
 
-    /// Apply failure mode to instruction and accounts
+    /// Apply failure mode to instruction and accounts using focused helper functions
     fn apply_failure_mode(
         failure_mode: &FailureMode,
         ix: &mut Instruction,
@@ -881,230 +882,207 @@ impl CommonTestCaseBuilder {
         _bump: u8,
     ) {
         match failure_mode {
+            // Account owner modifications
             FailureMode::WrongPayerOwner(owner) => {
-                // Change payer account owner
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == payer) {
-                    accounts[pos].1.owner = *owner;
-                }
-            }
-            FailureMode::PayerNotSigned => {
-                // Change payer from signer to non-signer in instruction
-                if let Some(meta) = ix.accounts.get_mut(0) {
-                    if meta.pubkey == payer {
-                        meta.is_signer = false;
-                    }
-                }
-            }
-            FailureMode::WrongSystemProgram(wrong_id) => {
-                // Replace system program with wrong program ID
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == SYSTEM_PROGRAM_ID) {
-                    accounts[pos] = (*wrong_id, accounts[pos].1.clone());
-                }
-                // Update instruction account meta
-                if let Some(meta) = ix
-                    .accounts
-                    .iter_mut()
-                    .find(|m| m.pubkey == SYSTEM_PROGRAM_ID)
-                {
-                    meta.pubkey = *wrong_id;
-                }
-            }
-            FailureMode::WrongTokenProgram(wrong_id) => {
-                // Replace token program with wrong program ID
-                if let Some(pos) = accounts
-                    .iter()
-                    .position(|(pk, _)| *pk == config.token_program)
-                {
-                    accounts[pos] = (*wrong_id, accounts[pos].1.clone());
-                }
-                // Update instruction account meta
-                if let Some(meta) = ix
-                    .accounts
-                    .iter_mut()
-                    .find(|m| m.pubkey == config.token_program)
-                {
-                    meta.pubkey = *wrong_id;
-                }
-            }
-            FailureMode::InsufficientFunds(amount) => {
-                // Set payer lamports to insufficient amount
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == payer) {
-                    accounts[pos].1.lamports = *amount;
-                }
-            }
-            FailureMode::WrongAtaAddress(wrong_ata) => {
-                // Replace ATA with wrong address
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos] = (*wrong_ata, accounts[pos].1.clone());
-                }
-                // Update instruction account meta
-                if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == ata) {
-                    meta.pubkey = *wrong_ata;
-                }
+                FailureAccountBuilder::set_wrong_owner(accounts, payer, *owner);
             }
             FailureMode::MintWrongOwner(wrong_owner) => {
-                // Change mint account owner
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == mint) {
-                    accounts[pos].1.owner = *wrong_owner;
-                }
-            }
-            FailureMode::InvalidMintStructure(wrong_size) => {
-                // Change mint data size
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == mint) {
-                    accounts[pos].1.data = vec![0u8; *wrong_size];
-                }
-            }
-            FailureMode::InvalidTokenAccountStructure => {
-                // Set ATA with invalid token account data
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos].1.data = vec![0xFF; TOKEN_ACCOUNT_SIZE]; // Invalid data
-                    accounts[pos].1.owner = config.token_program;
-                    accounts[pos].1.lamports = 2_000_000;
-                }
-            }
-            FailureMode::InvalidDiscriminator(disc) => {
-                // Change instruction discriminator
-                if !ix.data.is_empty() {
-                    ix.data[0] = *disc;
-                }
-            }
-            FailureMode::InvalidBumpValue(invalid_bump) => {
-                // Change bump value in instruction data
-                if ix.data.len() >= 2 {
-                    ix.data[1] = *invalid_bump;
-                }
+                FailureAccountBuilder::set_wrong_owner(accounts, mint, *wrong_owner);
             }
             FailureMode::AtaWrongOwner(wrong_owner) => {
-                // Create a fresh account owned by wrong_owner with existing data
-                // This simulates an account "already in use" by another program
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    let new_account = Account {
-                        lamports: 2_000_000,
-                        data: vec![0u8; TOKEN_ACCOUNT_SIZE], // Non-empty data indicates "already in use"
-                        owner: *wrong_owner, // Should be SYSTEM_PROGRAM_ID for this test
-                        executable: false,
-                        rent_epoch: 0,
-                    };
-
-                    // Debug output suppressed for cleaner test runs
-
-                    accounts[pos].1 = new_account;
-                }
+                FailureAccountBuilder::set_custom_account_state(
+                    accounts,
+                    ata,
+                    vec![0u8; TOKEN_ACCOUNT_SIZE],
+                    *wrong_owner,
+                    2_000_000,
+                );
             }
-            FailureMode::AtaNotWritable => {
-                // Mark ATA as non-writable in instruction
-                if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == ata) {
-                    meta.is_writable = false;
-                }
+
+            // Account balance modifications
+            FailureMode::InsufficientFunds(amount) => {
+                FailureAccountBuilder::set_insufficient_balance(accounts, payer, *amount);
+            }
+
+            // Account data size modifications
+            FailureMode::InvalidMintStructure(wrong_size) => {
+                FailureAccountBuilder::set_wrong_data_size(accounts, mint, *wrong_size);
             }
             FailureMode::TokenAccountWrongSize(wrong_size) => {
-                // Set ATA with wrong size
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos].1.data = vec![0u8; *wrong_size];
-                    accounts[pos].1.owner = config.token_program;
-                    accounts[pos].1.lamports = 2_000_000;
-                }
-            }
-            FailureMode::TokenAccountWrongMint(wrong_mint) => {
-                // Set ATA with wrong mint
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos].1 = AccountBuilder::token_account(
-                        wrong_mint,
-                        &wallet,
-                        0,
-                        &config.token_program,
-                    );
-                }
-                // Add the wrong mint account
-                accounts.push((
-                    *wrong_mint,
-                    AccountBuilder::mint_account(0, &config.token_program, false),
-                ));
-            }
-            FailureMode::TokenAccountWrongOwner(wrong_owner) => {
-                // Set ATA with wrong owner
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos].1 =
-                        AccountBuilder::token_account(&mint, wrong_owner, 0, &config.token_program);
-                }
+                FailureAccountBuilder::set_custom_account_state(
+                    accounts,
+                    ata,
+                    vec![0u8; *wrong_size],
+                    config.token_program,
+                    2_000_000,
+                );
             }
             FailureMode::WrongAccountSizeForExtensions(wrong_size) => {
-                // Set ATA with wrong size for extensions
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos].1.data = vec![0u8; *wrong_size];
-                    accounts[pos].1.owner = config.token_program;
-                    accounts[pos].1.lamports = 2_000_000;
-                }
+                FailureAccountBuilder::set_custom_account_state(
+                    accounts,
+                    ata,
+                    vec![0u8; *wrong_size],
+                    config.token_program,
+                    2_000_000,
+                );
+            }
+
+            // Account structure modifications
+            FailureMode::InvalidTokenAccountStructure => {
+                FailureAccountBuilder::set_invalid_token_account_structure(
+                    accounts,
+                    ata,
+                    &config.token_program,
+                );
             }
             FailureMode::MissingExtensions => {
-                // Set ATA with missing extensions
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos].1.data = vec![0u8; 200]; // Large but missing extension data
-                    accounts[pos].1.owner = config.token_program;
-                    accounts[pos].1.lamports = 2_000_000;
-                }
+                FailureAccountBuilder::set_custom_account_state(
+                    accounts,
+                    ata,
+                    vec![0u8; 200], // Large but missing extension data
+                    config.token_program,
+                    2_000_000,
+                );
             }
             FailureMode::InvalidExtensionData => {
-                // Set ATA with invalid extension data
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    let mut data = vec![0u8; 200];
-                    data[TOKEN_ACCOUNT_SIZE..169].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes()); // Invalid extension type
-                    accounts[pos].1.data = data;
-                    accounts[pos].1.owner = config.token_program;
-                    accounts[pos].1.lamports = 2_000_000;
-                }
+                let mut data = vec![0u8; 200];
+                data[TOKEN_ACCOUNT_SIZE..169].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes()); // Invalid extension type
+                FailureAccountBuilder::set_custom_account_state(
+                    accounts,
+                    ata,
+                    data,
+                    config.token_program,
+                    2_000_000,
+                );
+            }
+
+            // Token account specific modifications
+            FailureMode::TokenAccountWrongMint(wrong_mint) => {
+                FailureAccountBuilder::set_token_account_wrong_mint(
+                    accounts,
+                    ata,
+                    *wrong_mint,
+                    &wallet,
+                    &config.token_program,
+                );
+            }
+            FailureMode::TokenAccountWrongOwner(wrong_owner) => {
+                FailureAccountBuilder::set_token_account_wrong_owner(
+                    accounts,
+                    ata,
+                    &mint,
+                    wrong_owner,
+                    &config.token_program,
+                );
+            }
+
+            // Multisig account modifications
+            FailureMode::InvalidMultisigData => {
+                FailureAccountBuilder::set_invalid_multisig_data(
+                    accounts,
+                    wallet,
+                    &config.token_program,
+                );
+            }
+            FailureMode::UninitializedMultisig => {
+                let signer1 = Pubkey::new_unique();
+                let mut data = vec![0u8; MULTISIG_ACCOUNT_SIZE];
+                data[0] = 1; // m = 1
+                data[1] = 1; // n = 1
+                data[2] = 0; // is_initialized = false
+                data[3..35].copy_from_slice(signer1.as_ref());
+                FailureAccountBuilder::set_custom_account_state(
+                    accounts,
+                    wallet,
+                    data,
+                    config.token_program,
+                    0,
+                );
+                FailureAccountBuilder::add_account(
+                    accounts,
+                    signer1,
+                    AccountBuilder::system_account(1_000_000_000),
+                );
+            }
+
+            // Instruction meta modifications
+            FailureMode::PayerNotSigned => {
+                FailureInstructionBuilder::set_account_signer_status(ix, payer, false);
+            }
+            FailureMode::AtaNotWritable => {
+                FailureInstructionBuilder::set_account_writable_status(ix, ata, false);
             }
             FailureMode::RecoverWalletNotSigner => {
-                // Mark wallet as not signer in recover instruction
-                // For recover instructions, wallet is at index 5
                 if matches!(
                     config.base_test,
                     BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
                 ) {
-                    if ix.accounts.len() > 5 {
-                        ix.accounts[5].is_signer = false;
-                    }
-                } else if let Some(meta) = ix.accounts.iter_mut().find(|m| m.pubkey == wallet) {
-                    meta.is_signer = false;
+                    FailureInstructionBuilder::set_account_signer_status_by_index(ix, 5, false);
+                } else {
+                    FailureInstructionBuilder::set_account_signer_status(ix, wallet, false);
                 }
             }
             FailureMode::RecoverMultisigInsufficientSigners => {
                 if ix.accounts.len() > 9 {
-                    ix.accounts[8].is_signer = true;
-                    ix.accounts[9].is_signer = false;
+                    FailureInstructionBuilder::set_account_signer_status_by_index(ix, 8, true);
+                    FailureInstructionBuilder::set_account_signer_status_by_index(ix, 9, false);
                     if ix.accounts.len() > 10 {
-                        ix.accounts[10].is_signer = false;
+                        FailureInstructionBuilder::set_account_signer_status_by_index(
+                            ix, 10, false,
+                        );
                     }
                 }
             }
+
+            // Address replacement (both instruction and accounts)
+            FailureMode::WrongSystemProgram(wrong_id) => {
+                FailureInstructionBuilder::replace_account_everywhere(
+                    ix,
+                    accounts,
+                    SYSTEM_PROGRAM_ID,
+                    *wrong_id,
+                );
+            }
+            FailureMode::WrongTokenProgram(wrong_id) => {
+                FailureInstructionBuilder::replace_account_everywhere(
+                    ix,
+                    accounts,
+                    config.token_program,
+                    *wrong_id,
+                );
+            }
+            FailureMode::WrongAtaAddress(wrong_ata) => {
+                FailureInstructionBuilder::replace_account_everywhere(
+                    ix, accounts, ata, *wrong_ata,
+                );
+            }
             FailureMode::RecoverWrongNestedAta(wrong_nested) => {
-                // Replace nested ATA with wrong address
-                if let Some(meta) = ix.accounts.get_mut(0) {
-                    meta.pubkey = *wrong_nested;
-                }
-                // Update accounts
-                if let Some(pos) = accounts
-                    .iter()
-                    .position(|(pk, _)| pk == &ix.accounts[0].pubkey)
-                {
-                    accounts[pos] = (*wrong_nested, accounts[pos].1.clone());
-                }
+                FailureInstructionBuilder::replace_account_everywhere_by_index(
+                    ix,
+                    accounts,
+                    0,
+                    *wrong_nested,
+                );
             }
             FailureMode::RecoverWrongDestination(wrong_dest) => {
-                // Replace destination ATA with wrong address
-                if let Some(meta) = ix.accounts.get_mut(2) {
-                    meta.pubkey = *wrong_dest;
-                }
-                // Update accounts
-                if let Some(pos) = accounts
-                    .iter()
-                    .position(|(pk, _)| pk == &ix.accounts[2].pubkey)
-                {
-                    accounts[pos] = (*wrong_dest, accounts[pos].1.clone());
-                }
+                FailureInstructionBuilder::replace_account_everywhere_by_index(
+                    ix,
+                    accounts,
+                    2,
+                    *wrong_dest,
+                );
             }
+
+            // Instruction data modifications
+            FailureMode::InvalidDiscriminator(disc) => {
+                FailureInstructionBuilder::set_discriminator(ix, *disc);
+            }
+            FailureMode::InvalidBumpValue(invalid_bump) => {
+                FailureInstructionBuilder::set_bump_value(ix, *invalid_bump);
+            }
+
+            // Complex recovery modifications
             FailureMode::RecoverNestedWrongOwner(wrong_owner) => {
-                // Set nested ATA with wrong owner
                 if let Some(pos) = accounts
                     .iter()
                     .position(|(pk, _)| pk == &ix.accounts[0].pubkey)
@@ -1118,34 +1096,18 @@ impl CommonTestCaseBuilder {
                     );
                 }
             }
-            FailureMode::InvalidMultisigData => {
-                // Set multisig with invalid data
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == wallet) {
-                    accounts[pos].1.data = vec![0xFF; MULTISIG_ACCOUNT_SIZE]; // Invalid multisig data
-                    accounts[pos].1.owner = config.token_program;
-                }
-            }
             FailureMode::InvalidSignerAccounts(wrong_signers) => {
-                // Add wrong signer accounts
                 for (i, wrong_signer) in wrong_signers.iter().enumerate() {
-                    if let Some(meta) = ix.accounts.get_mut(8 + i) {
-                        meta.pubkey = *wrong_signer;
-                    }
-                    accounts.push((*wrong_signer, AccountBuilder::system_account(1_000_000_000)));
-                }
-            }
-            FailureMode::UninitializedMultisig => {
-                // Set multisig as uninitialized
-                if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == wallet) {
-                    let signer1 = Pubkey::new_unique();
-                    let mut data = vec![0u8; MULTISIG_ACCOUNT_SIZE];
-                    data[0] = 1; // m = 1
-                    data[1] = 1; // n = 1
-                    data[2] = 0; // is_initialized = false
-                    data[3..35].copy_from_slice(signer1.as_ref());
-                    accounts[pos].1.data = data;
-                    accounts[pos].1.owner = config.token_program;
-                    accounts.push((signer1, AccountBuilder::system_account(1_000_000_000)));
+                    FailureInstructionBuilder::replace_account_meta_by_index(
+                        ix,
+                        8 + i,
+                        *wrong_signer,
+                    );
+                    FailureAccountBuilder::add_account(
+                        accounts,
+                        *wrong_signer,
+                        AccountBuilder::system_account(1_000_000_000),
+                    );
                 }
             }
         }

@@ -1005,7 +1005,7 @@ impl BenchmarkRunner {
                 }
             }
             CompatibilityStatus::BothRejected => {
-                println!("  Status: Both rejected (same error type)")
+                println!("  Status: Both failed (same error type)")
             }
             CompatibilityStatus::OptimizedBehavior => {
                 println!("  Status: P-ATA optimization working")

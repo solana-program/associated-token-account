@@ -715,7 +715,7 @@ impl FailureTestRunner {
         match result.compatibility_status {
             CompatibilityStatus::BothRejected => {
                 // Expected: both failed - brief output
-                println!("    ❌ Both rejected (expected)");
+                println!("    ❌ Both failed (expected)");
             }
             CompatibilityStatus::OptimizedBehavior => {
                 // P-ATA-only feature - brief output
@@ -1214,30 +1214,16 @@ impl FailureTestRunner {
 
         println!("Total Failure Tests: {}", total_tests);
         println!(
-            "Both Implementations Rejected (Compatible): {} ({:.1}%)",
+            "Both Implementations Failed as Expected (Same Errors): {}",
             both_rejected,
-            (both_rejected as f64 / total_tests as f64) * 100.0
         );
+        println!("Failed with Different Errors: {}", incompatible_failures,);
         println!(
-            "Failed with Different Errors: {} ({:.1}%)",
-            incompatible_failures,
-            (incompatible_failures as f64 / total_tests as f64) * 100.0
-        );
-        println!(
-            "Optimized Behavior: {} ({:.1}%)",
+            "Fails in p-ATA as Expected (SPL ATA not relevant): {}",
             optimized_behavior,
-            (optimized_behavior as f64 / total_tests as f64) * 100.0
         );
-        println!(
-            "Unexpected Success/Failure: {} ({:.1}%)",
-            unexpected_success,
-            (unexpected_success as f64 / total_tests as f64) * 100.0
-        );
-        println!(
-            "Both Succeeded (Test Issue): {} ({:.1}%)",
-            both_succeeded,
-            (both_succeeded as f64 / total_tests as f64) * 100.0
-        );
+        println!("**Unexpected Success/Failure**: {}", unexpected_success,);
+        println!("**Both Succeeded Unexpectedly**: {}", both_succeeded,);
 
         if incompatible_failures > 0 || unexpected_success > 0 || optimized_behavior > 0 {
             println!("\n⚠️  TESTS WITH DIFFERENT BEHAVIORS:");

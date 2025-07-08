@@ -499,7 +499,6 @@ impl PerformanceTestOrchestrator {
 
         let mut identical_count = 0;
         let mut optimized_count = 0;
-        let mut expected_diff_count = 0;
         let mut account_mismatch_count = 0;
         let mut incompatible_failure_count = 0;
         let mut incompatible_success_count = 0;
@@ -528,10 +527,15 @@ impl PerformanceTestOrchestrator {
         }
 
         println!("Total Tests: {}", all_results.len());
-        println!("  ✅ Identical Results: {}", identical_count);
-        println!("  🚀 P-ATA Optimizations: {}", optimized_count);
-        println!("  📊 Expected Differences: {}", expected_diff_count);
-        println!("  ❌ Both Rejected (Compatible): {}", both_rejected_count);
+        println!(
+            "  ✅ P-ATA Passed Byte-for-Byte Identical with SPL ATA: {}",
+            identical_count
+        );
+        println!(
+            "  🚀 P-ATA Optimizations Passed (not relevant for SPL ATA): {}",
+            optimized_count
+        );
+        println!("  ❌ Both Rejected Unexpectedly: {}", both_rejected_count);
 
         if !concerning_results.is_empty() {
             println!("\n⚠️  CONCERNING COMPATIBILITY ISSUES:");

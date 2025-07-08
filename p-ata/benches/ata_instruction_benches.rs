@@ -1365,17 +1365,17 @@ fn main() {
 
     // Validate legacy P-ATA (without prefunded) setup
     // TODO: fix
-    // println!(
-    //     "Validating legacy P-ATA setup with token program {}",
-    //     program_ids.token_program_id
-    // );
-    // if let Err(e) = BenchmarkSetup::validate_ata_setup(
-    //     &mollusk,
-    //     &impls.pata_legacy_impl,
-    //     &program_ids.token_program_id,
-    // ) {
-    //     panic!("Legacy P-ATA benchmark setup validation failed: {}", e);
-    // }
+    println!(
+        "Validating legacy P-ATA setup with token program {}",
+        program_ids.token_program_id
+    );
+    if let Err(e) = BenchmarkSetup::validate_ata_setup(
+        &mollusk,
+        &impls.pata_legacy_impl,
+        &program_ids.token_program_id,
+    ) {
+        panic!("Legacy P-ATA benchmark setup validation failed: {}", e);
+    }
 
     // Run comparison using the appropriate P-ATA implementation for each test
     let _comparison_results = ComparisonRunner::run_full_comparison(

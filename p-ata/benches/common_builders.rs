@@ -212,14 +212,16 @@ impl CommonTestCaseBuilder {
                 setup_existing_ata: false,
                 use_fixed_accounts: true,
                 special_account_mods: vec![SpecialAccountMod::NestedAta {
+                    // No need to explicitly use AtaVariant::Original anymore
+                    // structured_pk now automatically uses consistent addresses for mint types
                     owner_mint: crate::common::structured_pk(
-                        &crate::common::AtaVariant::Original,
+                        &crate::common::AtaVariant::PAtaLegacy, // Can use any variant now
                         crate::common::TestBankId::Benchmarks,
                         base_test as u8,
                         crate::common::AccountTypeId::OwnerMint,
                     ),
                     nested_mint: crate::common::structured_pk(
-                        &crate::common::AtaVariant::Original,
+                        &crate::common::AtaVariant::PAtaLegacy, // Can use any variant now
                         crate::common::TestBankId::Benchmarks,
                         base_test as u8,
                         crate::common::AccountTypeId::NestedMint,
@@ -237,14 +239,16 @@ impl CommonTestCaseBuilder {
                 use_fixed_accounts: true,
                 special_account_mods: vec![
                     SpecialAccountMod::NestedAta {
+                        // No need to explicitly use AtaVariant::Original anymore
+                        // structured_pk now automatically uses consistent addresses for mint types
                         owner_mint: crate::common::structured_pk(
-                            &crate::common::AtaVariant::Original,
+                            &crate::common::AtaVariant::PAtaLegacy, // Can use any variant now
                             crate::common::TestBankId::Benchmarks,
                             base_test as u8,
                             crate::common::AccountTypeId::OwnerMint,
                         ),
                         nested_mint: crate::common::structured_pk(
-                            &crate::common::AtaVariant::Original,
+                            &crate::common::AtaVariant::PAtaLegacy, // Can use any variant now
                             crate::common::TestBankId::Benchmarks,
                             base_test as u8,
                             crate::common::AccountTypeId::NestedMint,
@@ -271,13 +275,13 @@ impl CommonTestCaseBuilder {
                 use_fixed_accounts: true,
                 special_account_mods: vec![SpecialAccountMod::FixedAddresses {
                     wallet: crate::common::structured_pk(
-                        &crate::common::AtaVariant::Original,
+                        &crate::common::AtaVariant::SplAta,
                         crate::common::TestBankId::Benchmarks,
                         base_test as u8,
                         crate::common::AccountTypeId::Wallet,
                     ),
                     mint: crate::common::structured_pk(
-                        &crate::common::AtaVariant::Original,
+                        &crate::common::AtaVariant::SplAta,
                         crate::common::TestBankId::Benchmarks,
                         base_test as u8,
                         crate::common::AccountTypeId::Mint,
@@ -300,7 +304,15 @@ impl CommonTestCaseBuilder {
         } else {
             crate::common::TestBankId::Benchmarks
         };
-        let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
+        let test_number = if matches!(
+            config.base_test,
+            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
+        ) {
+            // For recovery tests, use base test number (no variant offset) to ensure same addresses
+            calculate_test_number(config.base_test, TestVariant::BASE, config.setup_topup)
+        } else {
+            calculate_test_number(config.base_test, variant, config.setup_topup)
+        };
 
         let (payer, mint, wallet) = Self::get_structured_addresses(
             &config,
@@ -346,14 +358,12 @@ impl CommonTestCaseBuilder {
             };
 
             // Use the SAME wallet calculation as in build_recover_accounts
-            let actual_wallet = crate::common::structured_pk_with_optimal_bump(
+            // For recovery tests, use a simple consistent wallet address (no optimal bump needed)
+            let actual_wallet = crate::common::structured_pk(
                 &ata_implementation.variant,
                 test_bank,
                 test_number,
                 crate::common::AccountTypeId::Wallet,
-                &ata_implementation.program_id,
-                &config.token_program,
-                &owner_mint,
             );
 
             // Calculate owner_ata address using the actual wallet that will be used
@@ -451,15 +461,30 @@ impl CommonTestCaseBuilder {
             test_number,
             crate::common::AccountTypeId::Mint,
         );
-        let wallet = crate::common::structured_pk_with_optimal_bump(
-            variant,
-            test_bank,
-            test_number,
-            crate::common::AccountTypeId::Wallet,
-            &ata_implementation.program_id,
-            &config.token_program,
-            &mint,
-        );
+        let wallet = if matches!(
+            config.base_test,
+            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
+        ) {
+            // For recovery tests, use a simple consistent wallet address (no optimal bump needed)
+            // This ensures both P-ATA and Original ATA use the exact same wallet address
+            crate::common::structured_pk(
+                variant,
+                test_bank,
+                test_number,
+                crate::common::AccountTypeId::Wallet,
+            )
+        } else {
+            // For non-recovery tests, use optimal bump as usual
+            crate::common::structured_pk_with_optimal_bump(
+                variant,
+                test_bank,
+                test_number,
+                crate::common::AccountTypeId::Wallet,
+                &ata_implementation.program_id,
+                &config.token_program,
+                &mint,
+            )
+        };
         (payer, mint, wallet)
     }
 
@@ -559,7 +584,15 @@ impl CommonTestCaseBuilder {
         } else {
             crate::common::TestBankId::Benchmarks
         };
-        let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
+        let test_number = if matches!(
+            config.base_test,
+            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
+        ) {
+            // For recovery tests, use base test number (no variant offset) to ensure same addresses
+            calculate_test_number(config.base_test, TestVariant::BASE, config.setup_topup)
+        } else {
+            calculate_test_number(config.base_test, variant, config.setup_topup)
+        };
 
         // Find nested ATA configuration
         let (owner_mint, nested_mint) = if let Some(SpecialAccountMod::NestedAta {
@@ -573,6 +606,8 @@ impl CommonTestCaseBuilder {
             (*owner_mint, *nested_mint)
         } else {
             // Use default values for recover tests - these should be consistent across implementations
+            // No need to worry about which variant we pass - structured_pk automatically uses
+            // consistent addresses for mint types
             (
                 crate::common::structured_pk(
                     &ata_implementation.variant,
@@ -589,14 +624,13 @@ impl CommonTestCaseBuilder {
             )
         };
 
-        let actual_wallet = crate::common::structured_pk_with_optimal_bump(
+        // For recovery tests, use a simple consistent wallet address (no optimal bump needed)
+        // This ensures both P-ATA and Original ATA use the exact same wallet address
+        let actual_wallet = crate::common::structured_pk(
             &ata_implementation.variant,
             test_bank,
             test_number,
             crate::common::AccountTypeId::Wallet,
-            &ata_implementation.program_id,
-            &config.token_program,
-            &owner_mint,
         );
 
         let (owner_ata, _) = Pubkey::find_program_address(

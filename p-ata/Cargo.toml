@@ -2,7 +2,7 @@
 
 [package]
 name = "pinocchio-ata-program"
-version = "0.0.0"
+version = "0.1.0"
 description = "A pinocchio-based Associated Token Account (aka 'p-ata') program"
 readme = "./README.md"
 autobenches = false
@@ -19,6 +19,8 @@ logging = []
 create-account-prefunded = []
 build-programs = []
 comparison-bench = ["build-programs"]
+default = []
+full-debug-logs = []
 
 [build-dependencies]
 serde_json = "1.0"

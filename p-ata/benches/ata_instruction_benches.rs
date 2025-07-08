@@ -29,7 +29,7 @@ impl BenchmarkSetup {
             ata_implementation,
             token_program_id,
         );
-
+        println!("Running test case: {:?}", test_ix);
         let result = mollusk.process_instruction(&test_ix, &test_accounts);
 
         match result.program_result {
@@ -56,51 +56,45 @@ impl ComparisonRunner {
     /// Select the appropriate P-ATA implementation for a given test
     fn select_pata_implementation<'a>(
         base_test: BaseTestType,
-        standard_impl: &'a AtaImplementation,
-        prefunded_impl: Option<&'a AtaImplementation>,
+        legacy_impl: &'a AtaImplementation,
+        prefunded_impl: &'a AtaImplementation,
     ) -> &'a AtaImplementation {
         match base_test.required_pata_variant() {
             AtaVariant::PAtaPrefunded => {
-                if let Some(prefunded) = prefunded_impl {
-                    println!("Using P-ATA prefunded binary for {}", base_test.name());
-                    prefunded
-                } else {
-                    panic!(
-                        "FATAL: {} requires prefunded variant but it's not available!",
-                        base_test.name()
-                    );
-                }
+                println!("Using P-ATA prefunded binary for {}", base_test.name());
+                prefunded_impl
             }
-            _ => standard_impl,
+            _ => legacy_impl,
         }
     }
 
     fn run_full_comparison(
-        standard_impl: &AtaImplementation,
-        prefunded_impl: Option<&AtaImplementation>,
-        original_impl: &AtaImplementation,
+        pata_legacy_impl: &AtaImplementation,
+        pata_prefunded_impl: &AtaImplementation,
+        spl_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> Vec<ComparisonResult> {
-        println!("\n=== P-ATA VS ORIGINAL ATA MATRIX COMPARISON ===");
-        println!("P-ATA Standard Program ID: {}", standard_impl.program_id);
-        if let Some(prefunded) = prefunded_impl {
-            println!("P-ATA Prefunded Program ID: {}", prefunded.program_id);
-        }
-        println!("Original Program ID: {}", original_impl.program_id);
+        println!("\n=== P-ATA VS SPL ATA MATRIX COMPARISON ===");
+        println!("P-ATA Legacy Program ID: {}", pata_legacy_impl.program_id);
+        println!(
+            "P-ATA Prefunded Program ID: {}",
+            pata_prefunded_impl.program_id
+        );
+        println!("SPL ATA Program ID: {}", spl_impl.program_id);
         println!("Token Program ID: {}", token_program_id);
 
         Self::run_matrix_comparison_with_variants(
-            standard_impl,
-            prefunded_impl,
-            original_impl,
+            pata_legacy_impl,
+            pata_prefunded_impl,
+            spl_impl,
             token_program_id,
         )
     }
 
     fn run_matrix_comparison_with_variants(
-        standard_impl: &AtaImplementation,
-        prefunded_impl: Option<&AtaImplementation>,
-        original_impl: &AtaImplementation,
+        pata_legacy_impl: &AtaImplementation,
+        pata_prefunded_impl: &AtaImplementation,
+        spl_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> Vec<ComparisonResult> {
         let base_tests = [
@@ -129,7 +123,7 @@ impl ComparisonRunner {
 
             // Select appropriate P-ATA implementation for this test
             let pata_impl =
-                Self::select_pata_implementation(base_test, standard_impl, prefunded_impl);
+                Self::select_pata_implementation(base_test, pata_legacy_impl, pata_prefunded_impl);
 
             let supported_variants = base_test.supported_variants();
             let mut test_row = std::collections::HashMap::new();
@@ -143,9 +137,9 @@ impl ComparisonRunner {
                         base_test,
                         *variant,
                         pata_impl,
-                        original_impl,
+                        spl_impl,
                         token_program_id,
-                        &standard_impl.program_id,
+                        &pata_legacy_impl.program_id,
                     );
 
                     // Print immediate detailed results for debugging
@@ -166,9 +160,9 @@ impl ComparisonRunner {
                     base_test,
                     all_opt_variant,
                     pata_impl,
-                    original_impl,
+                    spl_impl,
                     token_program_id,
-                    &standard_impl.program_id,
+                    &pata_legacy_impl.program_id,
                 );
 
                 // Print immediate detailed results for debugging
@@ -199,7 +193,7 @@ impl ComparisonRunner {
         base_test: BaseTestType,
         variant: TestVariant,
         p_ata_impl: &AtaImplementation,
-        original_impl: &AtaImplementation,
+        spl_impl: &AtaImplementation,
         token_program_id: &Pubkey,
         _standard_program_id: &Pubkey,
     ) -> ComparisonResult {
@@ -215,7 +209,7 @@ impl ComparisonRunner {
         let (original_ix, original_accounts) = CommonTestCaseBuilder::build_test_case(
             base_test,
             original_variant,
-            original_impl,
+            spl_impl,
             token_program_id,
         );
 
@@ -225,12 +219,12 @@ impl ComparisonRunner {
                 test_name,
                 &original_ix,
                 &original_accounts,
-                original_impl,
+                spl_impl,
                 token_program_id,
             )
         } else {
             common::BenchmarkResult {
-                implementation: "original".to_string(),
+                implementation: "spl-ata".to_string(),
                 test_name: test_name.to_string(),
                 success: false,
                 compute_units: 0,
@@ -278,7 +272,7 @@ impl ComparisonRunner {
                     test_name,
                     &original_ix,
                     &original_accounts,
-                    original_impl,
+                    spl_impl,
                     token_program_id,
                 );
             }
@@ -315,7 +309,7 @@ impl ComparisonRunner {
 
     fn original_supports_test(base_test: BaseTestType) -> bool {
         match base_test {
-            BaseTestType::RecoverMultisig => false, // Original ATA doesn't support multisig recovery
+            BaseTestType::RecoverMultisig => false, // SPL ATA doesn't support multisig recovery
             _ => true,
         }
     }
@@ -358,7 +352,7 @@ impl ComparisonRunner {
         print!("{:<20}", "Test");
         for (i, variant) in columns.iter().enumerate() {
             let column_name = if i == 0 {
-                "SPL ATA" // First column shows original ATA numbers
+                "SPL ATA" // First column shows SPL ATA numbers
             } else {
                 variant.column_name()
             };
@@ -379,9 +373,9 @@ impl ComparisonRunner {
             for (i, variant) in columns.iter().enumerate() {
                 if let Some(result) = test_row.get(variant) {
                     let compute_units = if i == 0 {
-                        // First column: show original ATA numbers (SPL ATA)
-                        if result.original.success && result.original.compute_units > 0 {
-                            result.original.compute_units
+                        // First column: show SPL ATA numbers (SPL ATA)
+                        if result.spl_ata.success && result.spl_ata.compute_units > 0 {
+                            result.spl_ata.compute_units
                         } else {
                             0
                         }
@@ -438,10 +432,10 @@ impl ComparisonRunner {
             }
             common::CompatibilityStatus::IncompatibleSuccess => {
                 println!("🚨 INCOMPATIBLE SUCCESS/FAILURE!");
-                if result.p_ata.success && !result.original.success {
-                    println!("      P-ATA succeeded where Original failed");
-                } else if !result.p_ata.success && result.original.success {
-                    println!("      Original succeeded where P-ATA failed");
+                if result.p_ata.success && !result.spl_ata.success {
+                    println!("      P-ATA succeeded where SPL ATA failed");
+                } else if !result.p_ata.success && result.spl_ata.success {
+                    println!("      SPL ATA succeeded where P-ATA failed");
                 }
             }
             common::CompatibilityStatus::OptimizedBehavior => {
@@ -461,9 +455,9 @@ impl ComparisonRunner {
                 }
             );
             println!(
-                "      Original: {} CUs | {}",
-                result.original.compute_units,
-                if result.original.success {
+                "      SPL ATA: {} CUs | {}",
+                result.spl_ata.compute_units,
+                if result.spl_ata.success {
                     "Success"
                 } else {
                     "Failed"
@@ -476,9 +470,9 @@ impl ComparisonRunner {
                     println!("      P-ATA Error: {}", error);
                 }
             }
-            if !result.original.success {
-                if let Some(ref error) = result.original.error_message {
-                    println!("      Original Error: {}", error);
+            if !result.spl_ata.success {
+                if let Some(ref error) = result.spl_ata.error_message {
+                    println!("      SPL ATA Error: {}", error);
                 }
             }
 
@@ -489,9 +483,9 @@ impl ComparisonRunner {
                     println!("        {}", line);
                 }
             }
-            if !result.original.captured_output.is_empty() {
-                println!("      Original Debug Output:");
-                for line in result.original.captured_output.lines() {
+            if !result.spl_ata.captured_output.is_empty() {
+                println!("      SPL ATA Debug Output:");
+                for line in result.spl_ata.captured_output.lines() {
                     println!("        {}", line);
                 }
             }
@@ -567,9 +561,9 @@ impl ComparisonRunner {
                         println!("      P-ATA Error: {}", error);
                     }
                 }
-                if !result.original.success {
-                    if let Some(ref error) = result.original.error_message {
-                        println!("      Original Error: {}", error);
+                if !result.spl_ata.success {
+                    if let Some(ref error) = result.spl_ata.error_message {
+                        println!("      SPL ATA Error: {}", error);
                     }
                 }
             }
@@ -581,47 +575,47 @@ impl ComparisonRunner {
     fn create_enhanced_comparison_result(
         test_name: &str,
         p_ata_result: common::BenchmarkResult,
-        original_result: common::BenchmarkResult,
+        spl_ata_result: common::BenchmarkResult,
         p_ata_ix: &Instruction,
         p_ata_accounts: &[(Pubkey, Account)],
-        original_ix: &Instruction,
-        original_accounts: &[(Pubkey, Account)],
+        spl_ata_ix: &Instruction,
+        spl_ata_accounts: &[(Pubkey, Account)],
         token_program_id: &Pubkey,
     ) -> ComparisonResult {
         // Start with basic comparison
         let mut comparison = common::ComparisonRunner::create_comparison_result(
             test_name,
             p_ata_result.clone(),
-            original_result.clone(),
+            spl_ata_result.clone(),
         );
 
         // If both succeeded, perform byte-for-byte account state comparison
-        if p_ata_result.success && original_result.success {
+        if p_ata_result.success && spl_ata_result.success {
             let mollusk = common::ComparisonRunner::create_mollusk_for_all_ata_implementations(
                 token_program_id,
             );
 
             // Execute P-ATA instruction and capture final account states
             let p_ata_execution = mollusk.process_instruction(p_ata_ix, p_ata_accounts);
-            let original_execution = mollusk.process_instruction(original_ix, original_accounts);
+            let spl_ata_execution = mollusk.process_instruction(spl_ata_ix, spl_ata_accounts);
 
             if let (
                 mollusk_svm::result::ProgramResult::Success,
                 mollusk_svm::result::ProgramResult::Success,
             ) = (
                 &p_ata_execution.program_result,
-                &original_execution.program_result,
+                &spl_ata_execution.program_result,
             ) {
                 // Check if this is just a SysvarRent difference (expected P-ATA optimization)
                 let has_sysvar_rent_difference =
-                    Self::has_sysvar_rent_difference(p_ata_ix, original_ix);
+                    Self::has_sysvar_rent_difference(p_ata_ix, spl_ata_ix);
 
                 // Compare account states byte-for-byte
                 let accounts_match = Self::compare_account_states(
                     &p_ata_execution.resulting_accounts,
-                    &original_execution.resulting_accounts,
+                    &spl_ata_execution.resulting_accounts,
                     p_ata_ix,
-                    original_ix,
+                    spl_ata_ix,
                 );
 
                 if !accounts_match {
@@ -629,9 +623,9 @@ impl ComparisonRunner {
                     if has_sysvar_rent_difference
                         && Self::accounts_match_except_sysvar_rent(
                             &p_ata_execution.resulting_accounts,
-                            &original_execution.resulting_accounts,
+                            &spl_ata_execution.resulting_accounts,
                             p_ata_ix,
-                            original_ix,
+                            spl_ata_ix,
                         )
                     {
                         comparison.compatibility_status =
@@ -667,9 +661,9 @@ impl ComparisonRunner {
 
     fn accounts_match_except_sysvar_rent(
         p_ata_accounts: &[(Pubkey, Account)],
-        original_accounts: &[(Pubkey, Account)],
+        spl_ata_accounts: &[(Pubkey, Account)],
         p_ata_ix: &Instruction,
-        original_ix: &Instruction,
+        spl_ata_ix: &Instruction,
     ) -> bool {
         let sysvar_rent = "SysvarRent111111111111111111111111111111111"
             .parse::<Pubkey>()
@@ -680,7 +674,7 @@ impl ComparisonRunner {
             .iter()
             .filter(|(pubkey, _)| *pubkey != sysvar_rent)
             .collect();
-        let original_filtered: Vec<_> = original_accounts
+        let spl_ata_filtered: Vec<_> = spl_ata_accounts
             .iter()
             .filter(|(pubkey, _)| *pubkey != sysvar_rent)
             .collect();
@@ -697,56 +691,56 @@ impl ComparisonRunner {
             data: p_ata_ix.data.clone(),
         };
 
-        let original_ix_filtered = Instruction {
-            program_id: original_ix.program_id,
-            accounts: original_ix
+        let spl_ata_ix_filtered = Instruction {
+            program_id: spl_ata_ix.program_id,
+            accounts: spl_ata_ix
                 .accounts
                 .iter()
                 .filter(|meta| meta.pubkey != sysvar_rent)
                 .cloned()
                 .collect(),
-            data: original_ix.data.clone(),
+            data: spl_ata_ix.data.clone(),
         };
 
         // Now compare using the existing logic but with filtered data
         let p_ata_map: std::collections::HashMap<&Pubkey, &Account> =
             p_ata_filtered.iter().map(|(k, v)| (k, v)).collect();
-        let original_map: std::collections::HashMap<&Pubkey, &Account> =
-            original_filtered.iter().map(|(k, v)| (k, v)).collect();
+        let spl_ata_map: std::collections::HashMap<&Pubkey, &Account> =
+            spl_ata_filtered.iter().map(|(k, v)| (k, v)).collect();
 
         let max_accounts = p_ata_ix_filtered
             .accounts
             .len()
-            .max(original_ix_filtered.accounts.len());
+            .max(spl_ata_ix_filtered.accounts.len());
 
         for i in 0..max_accounts {
             let p_ata_meta = p_ata_ix_filtered.accounts.get(i);
-            let original_meta = original_ix_filtered.accounts.get(i);
+            let spl_ata_meta = spl_ata_ix_filtered.accounts.get(i);
 
-            match (p_ata_meta, original_meta) {
-                (Some(p_ata_meta), Some(original_meta)) => {
-                    if p_ata_meta.is_writable || original_meta.is_writable {
+            match (p_ata_meta, spl_ata_meta) {
+                (Some(p_ata_meta), Some(spl_ata_meta)) => {
+                    if p_ata_meta.is_writable || spl_ata_meta.is_writable {
                         let p_ata_account = p_ata_map.get(&p_ata_meta.pubkey);
-                        let original_account = original_map.get(&original_meta.pubkey);
+                        let spl_ata_account = spl_ata_map.get(&spl_ata_meta.pubkey);
 
-                        match (p_ata_account, original_account) {
-                            (Some(&p_ata_acc), Some(&original_acc)) => {
+                        match (p_ata_account, spl_ata_account) {
+                            (Some(&p_ata_acc), Some(&spl_ata_acc)) => {
                                 // For token accounts, use behavioral equivalence check
                                 let account_type = Self::get_account_type_by_position(i);
                                 if account_type == "ATA Account"
                                     && p_ata_acc.data.len() >= 165
-                                    && original_acc.data.len() >= 165
+                                    && spl_ata_acc.data.len() >= 165
                                 {
                                     if !Self::validate_token_account_behavioral_equivalence_quiet(
                                         &p_ata_acc.data,
-                                        &original_acc.data,
+                                        &spl_ata_acc.data,
                                         &mut Vec::new(),
                                     ) {
                                         return false;
                                     }
-                                } else if p_ata_acc.data != original_acc.data
-                                    || p_ata_acc.lamports != original_acc.lamports
-                                    || p_ata_acc.owner != original_acc.owner
+                                } else if p_ata_acc.data != spl_ata_acc.data
+                                    || p_ata_acc.lamports != spl_ata_acc.lamports
+                                    || p_ata_acc.owner != spl_ata_acc.owner
                                 {
                                     return false;
                                 }
@@ -766,57 +760,57 @@ impl ComparisonRunner {
 
     fn compare_account_states(
         p_ata_accounts: &[(Pubkey, Account)],
-        original_accounts: &[(Pubkey, Account)],
+        spl_ata_accounts: &[(Pubkey, Account)],
         p_ata_ix: &Instruction,
-        original_ix: &Instruction,
+        spl_ata_ix: &Instruction,
     ) -> bool {
         // Convert to maps for easier comparison
         let p_ata_map: std::collections::HashMap<&Pubkey, &Account> =
             p_ata_accounts.iter().map(|(k, v)| (k, v)).collect();
-        let original_map: std::collections::HashMap<&Pubkey, &Account> =
-            original_accounts.iter().map(|(k, v)| (k, v)).collect();
+        let spl_ata_map: std::collections::HashMap<&Pubkey, &Account> =
+            spl_ata_accounts.iter().map(|(k, v)| (k, v)).collect();
 
         let mut all_match = true;
         let mut debug_output = Vec::new();
         let mut has_expected_differences = false;
 
         // Compare accounts by their ROLE/POSITION in the instruction, not by address
-        let max_accounts = p_ata_ix.accounts.len().max(original_ix.accounts.len());
+        let max_accounts = p_ata_ix.accounts.len().max(spl_ata_ix.accounts.len());
 
         for i in 0..max_accounts {
             let p_ata_meta = p_ata_ix.accounts.get(i);
-            let original_meta = original_ix.accounts.get(i);
+            let spl_ata_meta = spl_ata_ix.accounts.get(i);
 
-            match (p_ata_meta, original_meta) {
-                (Some(p_ata_meta), Some(original_meta)) => {
+            match (p_ata_meta, spl_ata_meta) {
+                (Some(p_ata_meta), Some(spl_ata_meta)) => {
                     // Only compare writable accounts (the ones that change)
-                    if p_ata_meta.is_writable || original_meta.is_writable {
+                    if p_ata_meta.is_writable || spl_ata_meta.is_writable {
                         let account_type = Self::get_account_type_by_position(i);
 
                         let p_ata_account = p_ata_map.get(&p_ata_meta.pubkey);
-                        let original_account = original_map.get(&original_meta.pubkey);
+                        let spl_ata_account = spl_ata_map.get(&spl_ata_meta.pubkey);
 
-                        match (p_ata_account, original_account) {
-                            (Some(&p_ata_acc), Some(&original_acc)) => {
+                        match (p_ata_account, spl_ata_account) {
+                            (Some(&p_ata_acc), Some(&spl_ata_acc)) => {
                                 // Compare account data - capture output for later
                                 let (data_match, data_output) = Self::compare_account_data_quiet(
                                     &p_ata_acc.data,
-                                    &original_acc.data,
+                                    &spl_ata_acc.data,
                                     &account_type,
                                     &p_ata_meta.pubkey,
-                                    &original_meta.pubkey,
+                                    &spl_ata_meta.pubkey,
                                 );
 
                                 let (lamports_match, lamports_output) =
                                     Self::compare_lamports_quiet(
                                         p_ata_acc.lamports,
-                                        original_acc.lamports,
+                                        spl_ata_acc.lamports,
                                         &account_type,
                                     );
 
                                 let (owner_match, owner_output) = Self::compare_owner_quiet(
                                     &p_ata_acc.owner,
-                                    &original_acc.owner,
+                                    &spl_ata_acc.owner,
                                     &account_type,
                                 );
 
@@ -827,8 +821,8 @@ impl ComparisonRunner {
                                     debug_output
                                         .push(format!("  P-ATA Address:  {}", p_ata_meta.pubkey));
                                     debug_output.push(format!(
-                                        "  Original Address: {}",
-                                        original_meta.pubkey
+                                        "  SPL ATA Address: {}",
+                                        spl_ata_meta.pubkey
                                     ));
                                     debug_output.extend(data_output);
                                     debug_output.extend(lamports_output);
@@ -840,7 +834,7 @@ impl ComparisonRunner {
                                 debug_output
                                     .push(format!("\n📋 {} (Position {})", account_type, i));
                                 debug_output.push(
-                                    "  ❌ P-ATA account exists but Original account missing!"
+                                    "  ❌ P-ATA account exists but SPL ATA account missing!"
                                         .to_string(),
                                 );
                                 all_match = false;
@@ -849,7 +843,7 @@ impl ComparisonRunner {
                                 debug_output
                                     .push(format!("\n📋 {} (Position {})", account_type, i));
                                 debug_output.push(
-                                    "  ❌ Original account exists but P-ATA account missing!"
+                                    "  ❌ SPL ATA account exists but P-ATA account missing!"
                                         .to_string(),
                                 );
                                 all_match = false;
@@ -878,20 +872,20 @@ impl ComparisonRunner {
                         all_match = false;
                     }
                 }
-                (None, Some(original_meta)) => {
+                (None, Some(spl_ata_meta)) => {
                     // Check if this is SysvarRent (expected Original ATA requirement)
-                    if original_meta.pubkey.to_string()
+                    if spl_ata_meta.pubkey.to_string()
                         == "SysvarRent111111111111111111111111111111111"
                     {
                         debug_output.push(format!(
-                            "\n📋 Position {} - Original ATA requires SysvarRent (P-ATA optimized it away)",
+                            "\n📋 Position {} - SPL ATA requires SysvarRent (P-ATA optimized it away)",
                             i
                         ));
                         has_expected_differences = true;
                     } else {
                         debug_output.push(format!(
-                            "\n📋 Position {} - Original has unexpected extra account: {}",
-                            i, original_meta.pubkey
+                            "\n📋 Position {} - SPL ATA has unexpected extra account: {}",
+                            i, spl_ata_meta.pubkey
                         ));
                         all_match = false;
                     }
@@ -932,39 +926,39 @@ impl ComparisonRunner {
 
     fn compare_account_data_quiet(
         p_ata_data: &[u8],
-        original_data: &[u8],
+        spl_ata_data: &[u8],
         account_type: &str,
         _p_ata_addr: &Pubkey,
         _original_addr: &Pubkey,
     ) -> (bool, Vec<String>) {
         let mut output = Vec::new();
 
-        if p_ata_data == original_data {
+        if p_ata_data == spl_ata_data {
             return (true, output); // No output for matches
         }
 
         output.push(format!(
             "  📊 Data: Different ({} vs {} bytes)",
             p_ata_data.len(),
-            original_data.len()
+            spl_ata_data.len()
         ));
 
-        if account_type == "ATA Account" && p_ata_data.len() >= 165 && original_data.len() >= 165 {
+        if account_type == "ATA Account" && p_ata_data.len() >= 165 && spl_ata_data.len() >= 165 {
             // For ATA accounts, do structural analysis
             let structural_output =
-                Self::compare_token_account_structure_quiet(p_ata_data, original_data);
+                Self::compare_token_account_structure_quiet(p_ata_data, spl_ata_data);
             output.extend(structural_output);
 
             // Check behavioral equivalence
             let equivalent = Self::validate_token_account_behavioral_equivalence_quiet(
                 p_ata_data,
-                original_data,
+                spl_ata_data,
                 &mut output,
             );
             (equivalent, output)
         } else {
             // For non-ATA accounts, show raw differences
-            let raw_output = Self::compare_raw_bytes_quiet(p_ata_data, original_data);
+            let raw_output = Self::compare_raw_bytes_quiet(p_ata_data, spl_ata_data);
             output.extend(raw_output);
             (false, output) // Non-ATA accounts should generally be identical
         }
@@ -972,12 +966,12 @@ impl ComparisonRunner {
 
     fn compare_lamports_quiet(
         p_ata_lamports: u64,
-        original_lamports: u64,
+        spl_ata_lamports: u64,
         _account_type: &str,
     ) -> (bool, Vec<String>) {
         let mut output = Vec::new();
 
-        if p_ata_lamports == original_lamports {
+        if p_ata_lamports == spl_ata_lamports {
             (true, output) // No output for matches
         } else {
             output.push("  ❌ Lamports: MISMATCH!".to_string());
@@ -986,12 +980,12 @@ impl ComparisonRunner {
                 p_ata_lamports as f64 / 1_000_000_000.0
             ));
             output.push(format!(
-                "     Original: {} SOL",
-                original_lamports as f64 / 1_000_000_000.0
+                "     SPL ATA: {} SOL",
+                spl_ata_lamports as f64 / 1_000_000_000.0
             ));
             output.push(format!(
                 "     Difference: {} lamports",
-                p_ata_lamports as i64 - original_lamports as i64
+                p_ata_lamports as i64 - spl_ata_lamports as i64
             ));
             (false, output)
         }
@@ -999,33 +993,33 @@ impl ComparisonRunner {
 
     fn compare_owner_quiet(
         p_ata_owner: &Pubkey,
-        original_owner: &Pubkey,
+        spl_ata_owner: &Pubkey,
         _account_type: &str,
     ) -> (bool, Vec<String>) {
         let mut output = Vec::new();
 
-        if p_ata_owner == original_owner {
+        if p_ata_owner == spl_ata_owner {
             (true, output) // No output for matches
         } else {
             output.push("  ❌ Owner: MISMATCH!".to_string());
             output.push(format!("     P-ATA: {}", p_ata_owner));
-            output.push(format!("     Original: {}", original_owner));
+            output.push(format!("     SPL ATA: {}", spl_ata_owner));
             (false, output)
         }
     }
 
     fn compare_token_account_structure_quiet(
         p_ata_data: &[u8],
-        original_data: &[u8],
+        spl_ata_data: &[u8],
     ) -> Vec<String> {
         let mut output = Vec::new();
         output.push("     🔍 Token Account Structure Analysis:".to_string());
 
         // Parse token account structure (based on spl-token layout)
-        if p_ata_data.len() >= 165 && original_data.len() >= 165 {
+        if p_ata_data.len() >= 165 && spl_ata_data.len() >= 165 {
             // Mint and Owner are expected to be different (different test inputs)
             let p_ata_mint = &p_ata_data[0..32];
-            let orig_mint = &original_data[0..32];
+            let spl_ata_mint = &spl_ata_data[0..32];
             output.push(
                 "       📍 Mint: P-ATA test uses different mint than Original test (expected)"
                     .to_string(),
@@ -1036,11 +1030,11 @@ impl ComparisonRunner {
             ));
             output.push(format!(
                 "         Original points to: {}...",
-                Self::bytes_to_hex(&orig_mint[0..8])
+                Self::bytes_to_hex(&spl_ata_mint[0..8])
             ));
 
             let p_ata_owner = &p_ata_data[32..64];
-            let orig_owner = &original_data[32..64];
+            let spl_ata_owner = &spl_ata_data[32..64];
             output.push(
                 "       📍 Owner: P-ATA test uses different owner than Original test (expected)"
                     .to_string(),
@@ -1051,18 +1045,18 @@ impl ComparisonRunner {
             ));
             output.push(format!(
                 "         Original points to: {}...",
-                Self::bytes_to_hex(&orig_owner[0..8])
+                Self::bytes_to_hex(&spl_ata_owner[0..8])
             ));
 
             // Amount should be the same for equivalent operations
             let p_ata_amount =
                 u64::from_le_bytes(p_ata_data[64..72].try_into().unwrap_or([0u8; 8]));
-            let orig_amount =
-                u64::from_le_bytes(original_data[64..72].try_into().unwrap_or([0u8; 8]));
-            if p_ata_amount != orig_amount {
+            let spl_ata_amount =
+                u64::from_le_bytes(spl_ata_data[64..72].try_into().unwrap_or([0u8; 8]));
+            if p_ata_amount != spl_ata_amount {
                 output.push(format!(
-                    "       ❌ Amount differs: P-ATA={}, Original={}",
-                    p_ata_amount, orig_amount
+                    "       ❌ Amount differs: P-ATA={}, SPL ATA={}",
+                    p_ata_amount, spl_ata_amount
                 ));
             } else {
                 output.push(format!(
@@ -1072,10 +1066,10 @@ impl ComparisonRunner {
             }
 
             // State should be the same
-            if p_ata_data[108] != original_data[108] {
+            if p_ata_data[108] != spl_ata_data[108] {
                 output.push(format!(
-                    "       ❌ State differs: P-ATA={}, Original={}",
-                    p_ata_data[108], original_data[108]
+                    "       ❌ State differs: P-ATA={}, SPL ATA={}",
+                    p_ata_data[108], spl_ata_data[108]
                 ));
             } else {
                 output.push(format!("       ✅ State: {} (correct)", p_ata_data[108]));
@@ -1083,8 +1077,8 @@ impl ComparisonRunner {
 
             // Check other structural fields
             let p_ata_delegate = &p_ata_data[72..104];
-            let orig_delegate = &original_data[72..104];
-            if p_ata_delegate != orig_delegate {
+            let spl_ata_delegate = &spl_ata_data[72..104];
+            if p_ata_delegate != spl_ata_delegate {
                 output.push("       ❌ Delegate differs - structural issue!".to_string());
             } else if p_ata_delegate == &[0u8; 32] {
                 output.push("       ✅ Delegate: None (correct for new ATA)".to_string());
@@ -1094,12 +1088,12 @@ impl ComparisonRunner {
 
             let p_ata_delegated =
                 u64::from_le_bytes(p_ata_data[104..112].try_into().unwrap_or([0u8; 8]));
-            let orig_delegated =
-                u64::from_le_bytes(original_data[104..112].try_into().unwrap_or([0u8; 8]));
-            if p_ata_delegated != orig_delegated {
+            let spl_ata_delegated =
+                u64::from_le_bytes(spl_ata_data[104..112].try_into().unwrap_or([0u8; 8]));
+            if p_ata_delegated != spl_ata_delegated {
                 output.push(format!(
-                    "       ❌ Delegated amount differs: P-ATA={}, Original={}",
-                    p_ata_delegated, orig_delegated
+                    "       ❌ Delegated amount differs: P-ATA={}, SPL ATA={}",
+                    p_ata_delegated, spl_ata_delegated
                 ));
             } else {
                 output.push(format!(
@@ -1114,10 +1108,10 @@ impl ComparisonRunner {
 
     fn validate_token_account_behavioral_equivalence_quiet(
         p_ata_data: &[u8],
-        original_data: &[u8],
+        spl_ata_data: &[u8],
         output: &mut Vec<String>,
     ) -> bool {
-        if p_ata_data.len() < 165 || original_data.len() < 165 {
+        if p_ata_data.len() < 165 || spl_ata_data.len() < 165 {
             return false;
         }
 
@@ -1125,26 +1119,27 @@ impl ComparisonRunner {
 
         // Check behavioral fields that should be identical for equivalent operations
         let p_ata_amount = u64::from_le_bytes(p_ata_data[64..72].try_into().unwrap_or([0u8; 8]));
-        let orig_amount = u64::from_le_bytes(original_data[64..72].try_into().unwrap_or([0u8; 8]));
-        if p_ata_amount != orig_amount {
+        let spl_ata_amount =
+            u64::from_le_bytes(spl_ata_data[64..72].try_into().unwrap_or([0u8; 8]));
+        if p_ata_amount != spl_ata_amount {
             equivalent = false;
         }
 
-        if p_ata_data[108] != original_data[108] {
+        if p_ata_data[108] != spl_ata_data[108] {
             equivalent = false;
         }
 
         let p_ata_delegate = &p_ata_data[72..104];
-        let orig_delegate = &original_data[72..104];
-        if p_ata_delegate != orig_delegate {
+        let spl_ata_delegate = &spl_ata_data[72..104];
+        if p_ata_delegate != spl_ata_delegate {
             equivalent = false;
         }
 
         let p_ata_delegated =
             u64::from_le_bytes(p_ata_data[104..112].try_into().unwrap_or([0u8; 8]));
-        let orig_delegated =
-            u64::from_le_bytes(original_data[104..112].try_into().unwrap_or([0u8; 8]));
-        if p_ata_delegated != orig_delegated {
+        let spl_ata_delegated =
+            u64::from_le_bytes(spl_ata_data[104..112].try_into().unwrap_or([0u8; 8]));
+        if p_ata_delegated != spl_ata_delegated {
             equivalent = false;
         }
 
@@ -1157,24 +1152,24 @@ impl ComparisonRunner {
         equivalent
     }
 
-    fn compare_raw_bytes_quiet(p_ata_data: &[u8], original_data: &[u8]) -> Vec<String> {
+    fn compare_raw_bytes_quiet(p_ata_data: &[u8], spl_ata_data: &[u8]) -> Vec<String> {
         let mut output = Vec::new();
-        let max_len = p_ata_data.len().max(original_data.len());
+        let max_len = p_ata_data.len().max(spl_ata_data.len());
         let mut diff_count = 0;
 
         output.push("     📊 Byte-by-byte differences:".to_string());
         for i in 0..max_len {
             let p_ata_byte = p_ata_data.get(i).copied();
-            let orig_byte = original_data.get(i).copied();
+            let spl_ata_byte = spl_ata_data.get(i).copied();
 
-            if p_ata_byte != orig_byte && diff_count < 20 {
+            if p_ata_byte != spl_ata_byte && diff_count < 20 {
                 // Show first 20 differences
                 output.push(format!(
-                    "       Offset {}: P-ATA={:02x?}, Original={:02x?}",
-                    i, p_ata_byte, orig_byte
+                    "       Offset {}: P-ATA={:02x?}, SPL ATA={:02x?}",
+                    i, p_ata_byte, spl_ata_byte
                 ));
                 diff_count += 1;
-            } else if p_ata_byte != orig_byte {
+            } else if p_ata_byte != spl_ata_byte {
                 diff_count += 1;
             }
         }
@@ -1222,8 +1217,8 @@ impl ComparisonRunner {
             for variant in &columns {
                 if let Some(result) = test_row.get(variant) {
                     if result.p_ata.success && result.p_ata.compute_units > 0 {
-                        let original_cu = if result.original.success {
-                            result.original.compute_units
+                        let spl_ata_cu = if result.spl_ata.success {
+                            result.spl_ata.compute_units
                         } else {
                             0
                         };
@@ -1237,16 +1232,16 @@ impl ComparisonRunner {
                             _ => "other",
                         };
 
-                        let original_cu_str = if original_cu > 0 {
-                            original_cu.to_string()
+                        let spl_ata_cu_str = if spl_ata_cu > 0 {
+                            spl_ata_cu.to_string()
                         } else {
                             "null".to_string()
                         };
 
                         test_variants.insert(variant.column_name().replace(" ", "_"), format!(
-                            r#"{{"p_ata_cu": {}, "original_cu": {}, "compatibility": "{}", "type": "performance_test"}}"#,
+                            r#"{{"p_ata_cu": {}, "spl_ata_cu": {}, "compatibility": "{}", "type": "performance_test"}}"#,
                             result.p_ata.compute_units,
-                            original_cu_str,
+                            spl_ata_cu_str,
                             compatibility
                         ));
                     }
@@ -1305,13 +1300,24 @@ impl ComparisonRunner {
 // ================================= MAIN =====================================
 
 fn main() {
-    // Completely suppress debug output from Mollusk and Solana runtime
-    std::env::set_var("RUST_LOG", "error");
+    // Completely suppress debug output from Mollusk and Solana runtime unless full-debug-logs is enabled
+    #[cfg(not(feature = "full-debug-logs"))]
+    {
+        std::env::set_var("RUST_LOG", "error");
+        // Setup quiet logging by default - only show warnings and errors
+        let _ = solana_logger::setup_with(
+            "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+        );
+    }
 
-    // Setup quiet logging by default - only show warnings and errors
-    let _ = solana_logger::setup_with(
-        "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
-    );
+    #[cfg(feature = "full-debug-logs")]
+    {
+        std::env::set_var("RUST_LOG", "debug");
+        // Setup debug logging for full-debug-logs feature
+        let _ = solana_logger::setup_with(
+            "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
+        );
+    }
 
     // Get manifest directory and setup environment
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -1320,71 +1326,65 @@ fn main() {
 
     BenchmarkSetup::setup_sbf_environment(manifest_dir);
 
-    // Load all available program IDs (P-ATA variants + original)
-    let (standard_program_id, prefunded_program_id, original_ata_program_id, token_program_id) =
-        BenchmarkSetup::load_all_program_ids(manifest_dir);
+    let impls = AtaImplementation::all();
+    let program_ids = BenchmarkSetup::load_program_ids(manifest_dir);
 
-    // Create implementation structures for available programs
-    let standard_impl = AtaImplementation::p_ata_standard(standard_program_id);
-    let prefunded_impl = prefunded_program_id.map(AtaImplementation::p_ata_prefunded);
+    println!(
+        "P-ATA Legacy Program ID: {}",
+        impls.pata_legacy_impl.program_id
+    );
+    println!(
+        "P-ATA Prefunded Program ID: {}",
+        impls.pata_prefunded_impl.program_id
+    );
+    println!("Token Program ID: {}", program_ids.token_program_id);
 
-    println!("P-ATA Standard Program ID: {}", standard_program_id);
-    if let Some(prefunded_id) = prefunded_program_id {
-        println!("P-ATA Prefunded Program ID: {}", prefunded_id);
+    println!("SPL ATA Program ID: {}", impls.spl_impl.program_id);
+
+    println!("\n🔍 Running comparison between implementations");
+
+    let mollusk = common::ComparisonRunner::create_mollusk_for_all_ata_implementations(
+        &program_ids.token_program_id,
+    );
+
+    // Validate prefunded P-ATA setup
+    if let Err(e) = BenchmarkSetup::validate_ata_setup(
+        &mollusk,
+        &impls.pata_prefunded_impl,
+        &program_ids.token_program_id,
+    ) {
+        panic!("P-ATA prefunded benchmark setup validation failed: {}", e);
     }
-    println!("Token Program ID: {}", token_program_id);
 
-    if let Some(original_program_id) = original_ata_program_id {
-        // COMPARISON MODE: Original ATA available
-        let original_impl = AtaImplementation::original(original_program_id);
-        println!("Original ATA Program ID: {}", original_program_id);
-
-        println!("\n🔍 Running comparison between implementations");
-
-        // Validate prefunded P-ATA setup if available
-        if let Some(ref prefunded_impl) = prefunded_impl {
-            let prefunded_mollusk =
-                common::ComparisonRunner::create_mollusk_for_all_ata_implementations(
-                    &token_program_id,
-                );
-            if let Err(e) = BenchmarkSetup::validate_ata_setup(
-                &prefunded_mollusk,
-                prefunded_impl,
-                &token_program_id,
-            ) {
-                panic!("P-ATA prefunded benchmark setup validation failed: {}", e);
-            }
-        }
-
-        // Validate original ATA setup
-        let original_mollusk =
-            common::ComparisonRunner::create_mollusk_for_all_ata_implementations(&token_program_id);
-        if let Err(e) =
-            BenchmarkSetup::validate_ata_setup(&original_mollusk, &original_impl, &token_program_id)
-        {
-            panic!("Original ATA benchmark setup validation failed: {}", e);
-        }
-
-        // Validate standard P-ATA setup
-        println!(
-            "Validating standard P-ATA setup with token program {}",
-            token_program_id
-        );
-        println!("Standard P-ATA program ID: {}", standard_impl.program_id);
-
-        // Run comparison using the appropriate P-ATA implementation for each test
-        let _comparison_results = ComparisonRunner::run_full_comparison(
-            &standard_impl,
-            prefunded_impl.as_ref(),
-            &original_impl,
-            &token_program_id,
-        );
-
-        println!("\n✅ Comprehensive comparison completed successfully");
-        println!("Total test results: {}", _comparison_results.len());
-    } else {
-        // P-ATA ONLY MODE: Original ATA not available
-        println!("\n🔧 Original ATA program not built!");
-        println!("   💡 run: cargo bench --features build-programs");
+    // Validate SPL ATA setup
+    if let Err(e) =
+        BenchmarkSetup::validate_ata_setup(&mollusk, &impls.spl_impl, &program_ids.token_program_id)
+    {
+        panic!("SPL ATA benchmark setup validation failed: {}", e);
     }
+
+    // Validate legacy P-ATA (without prefunded) setup
+    // TODO: fix
+    // println!(
+    //     "Validating legacy P-ATA setup with token program {}",
+    //     program_ids.token_program_id
+    // );
+    // if let Err(e) = BenchmarkSetup::validate_ata_setup(
+    //     &mollusk,
+    //     &impls.pata_legacy_impl,
+    //     &program_ids.token_program_id,
+    // ) {
+    //     panic!("Legacy P-ATA benchmark setup validation failed: {}", e);
+    // }
+
+    // Run comparison using the appropriate P-ATA implementation for each test
+    let _comparison_results = ComparisonRunner::run_full_comparison(
+        &impls.pata_legacy_impl,
+        &impls.pata_prefunded_impl,
+        &impls.spl_impl,
+        &program_ids.token_program_id,
+    );
+
+    println!("\n✅ Comprehensive comparison completed successfully");
+    println!("Total test results: {}", _comparison_results.len());
 }

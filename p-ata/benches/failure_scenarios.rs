@@ -684,7 +684,7 @@ impl FailureTestRunner {
         let needs_detailed_output = matches!(
             result.compatibility_status,
             CompatibilityStatus::IncompatibleSuccess | CompatibilityStatus::Identical
-        ) && (result.p_ata.success || result.original.success);
+        ) && (result.p_ata.success || result.spl_ata.success);
 
         match result.compatibility_status {
             CompatibilityStatus::BothRejected => {
@@ -694,7 +694,7 @@ impl FailureTestRunner {
             CompatibilityStatus::OptimizedBehavior => {
                 // P-ATA-only feature - brief output
                 if result
-                    .original
+                    .spl_ata
                     .error_message
                     .as_ref()
                     .map_or(false, |msg| msg.contains("N/A"))
@@ -718,14 +718,14 @@ impl FailureTestRunner {
                     "❌ Failed (expected)".to_string()
                 };
 
-                let original_status = if result.original.success {
+                let spl_ata_status = if result.spl_ata.success {
                     "✅ SUCCESS (UNEXPECTED!)".to_string()
                 } else {
                     "❌ Failed (expected)".to_string()
                 };
 
                 println!("      P-ATA: {}", p_ata_status);
-                println!("      Original: {}", original_status);
+                println!("      SPL ATA: {}", spl_ata_status);
 
                 // Show error details for failures
                 if !result.p_ata.success {
@@ -733,23 +733,23 @@ impl FailureTestRunner {
                         println!("      P-ATA Error: {}", error);
                     }
                 }
-                if !result.original.success {
-                    if let Some(ref error) = result.original.error_message {
-                        println!("      Original Error: {}", error);
+                if !result.spl_ata.success {
+                    if let Some(ref error) = result.spl_ata.error_message {
+                        println!("      SPL ATA Error: {}", error);
                     }
                 }
 
                 // Show compatibility assessment
                 match result.compatibility_status {
                     CompatibilityStatus::IncompatibleSuccess => {
-                        if result.p_ata.success && !result.original.success {
+                        if result.p_ata.success && !result.spl_ata.success {
                             println!("      🔴 SECURITY ISSUE: P-ATA bypassed validation!");
-                        } else if !result.p_ata.success && result.original.success {
-                            println!("      🔴 SECURITY ISSUE: Original ATA bypassed validation!");
+                        } else if !result.p_ata.success && result.spl_ata.success {
+                            println!("      🔴 SECURITY ISSUE: SPL ATA bypassed validation!");
                         }
                     }
                     CompatibilityStatus::Identical => {
-                        if result.p_ata.success && result.original.success {
+                        if result.p_ata.success && result.spl_ata.success {
                             println!("      🔴 TEST ISSUE: Both succeeded when they should fail!");
                         }
                     }
@@ -768,9 +768,9 @@ impl FailureTestRunner {
                     println!("        {}", line);
                 }
             }
-            if !result.original.captured_output.is_empty() {
-                println!("      Original Debug Output:");
-                for line in result.original.captured_output.lines() {
+            if !result.spl_ata.captured_output.is_empty() {
+                println!("      SPL ATA Debug Output:");
+                for line in result.spl_ata.captured_output.lines() {
                     println!("        {}", line);
                 }
             }
@@ -877,7 +877,7 @@ impl FailureTestRunner {
             // Security issues - definitely need debug logs
             CompatibilityStatus::IncompatibleSuccess => true,
             // Both succeeded when they should fail - test issue
-            CompatibilityStatus::Identical if result.p_ata.success && result.original.success => {
+            CompatibilityStatus::Identical if result.p_ata.success && result.spl_ata.success => {
                 true
             }
             // All other cases are expected or acceptable
@@ -1066,31 +1066,28 @@ impl FailureTestRunner {
         let mut json_entries = Vec::new();
 
         for result in results {
-            let status = match (&result.p_ata.success, &result.original.success) {
+            let status = match (&result.p_ata.success, &result.spl_ata.success) {
                 (true, true) => "pass", // Both succeeded (might be unexpected for failure tests)
                 (false, false) => {
                     // Both failed - check if errors are the same type
                     let p_ata_error = result.p_ata.error_message.as_deref().unwrap_or("Unknown");
-                    let original_error = result
-                        .original
-                        .error_message
-                        .as_deref()
-                        .unwrap_or("Unknown");
+                    let spl_ata_error =
+                        result.spl_ata.error_message.as_deref().unwrap_or("Unknown");
 
                     // Simple error type comparison - look for key differences
                     if p_ata_error.contains("InvalidInstructionData")
-                        != original_error.contains("InvalidInstructionData")
-                        || p_ata_error.contains("Custom(") != original_error.contains("Custom(")
+                        != spl_ata_error.contains("InvalidInstructionData")
+                        || p_ata_error.contains("Custom(") != spl_ata_error.contains("Custom(")
                         || p_ata_error.contains("PrivilegeEscalation")
-                            != original_error.contains("PrivilegeEscalation")
+                            != spl_ata_error.contains("PrivilegeEscalation")
                     {
                         "failed, but different error"
                     } else {
                         "failed with same error"
                     }
                 }
-                (true, false) => "pass", // P-ATA works, original fails (P-ATA optimization)
-                (false, true) => "fail", // P-ATA fails, original works (concerning)
+                (true, false) => "pass", // P-ATA works, spl_ata fails (P-ATA optimization)
+                (false, true) => "fail", // P-ATA fails, spl_ata works (concerning)
             };
 
             let p_ata_error_json = match &result.p_ata.error_message {
@@ -1098,7 +1095,7 @@ impl FailureTestRunner {
                 None => "null".to_string(),
             };
 
-            let original_error_json = match &result.original.error_message {
+            let spl_ata_error_json = match &result.spl_ata.error_message {
                 Some(msg) => format!(r#""{}""#, msg.replace('"', r#"\""#)),
                 None => "null".to_string(),
             };
@@ -1107,17 +1104,17 @@ impl FailureTestRunner {
                 r#"    "{}": {{
       "status": "{}",
       "p_ata_success": {},
-      "original_success": {},
+      "spl_ata_success": {},
       "p_ata_error": {},
-      "original_error": {},
+      "spl_ata_error": {},
       "type": "failure_test"
     }}"#,
                 result.test_name,
                 status,
                 result.p_ata.success,
-                result.original.success,
+                result.spl_ata.success,
                 p_ata_error_json,
-                original_error_json
+                spl_ata_error_json
             );
             json_entries.push(entry);
         }
@@ -1236,13 +1233,13 @@ impl FailureTestRunner {
                                     .unwrap_or("Unknown error")
                             );
                         }
-                        if result.original.success {
-                            println!("    Original:  Success");
+                        if result.spl_ata.success {
+                            println!("    SPL ATA:  Success");
                         } else {
                             println!(
-                                "    Original:  {}",
+                                "   SPL ATA:  {}",
                                 result
-                                    .original
+                                    .spl_ata
                                     .error_message
                                     .as_deref()
                                     .unwrap_or("Unknown error")
@@ -1263,13 +1260,13 @@ impl FailureTestRunner {
                                     .unwrap_or("Unknown error")
                             );
                         }
-                        if result.original.success {
-                            println!("    Original:  Success");
+                        if result.spl_ata.success {
+                            println!("    SPL ATA:  Success");
                         } else {
                             println!(
                                 "    Original:  {}",
                                 result
-                                    .original
+                                    .spl_ata
                                     .error_message
                                     .as_deref()
                                     .unwrap_or("Unknown error")
@@ -1290,13 +1287,13 @@ impl FailureTestRunner {
                                     .unwrap_or("Unknown error")
                             );
                         }
-                        if result.original.success {
-                            println!("    Original:  Success");
+                        if result.spl_ata.success {
+                            println!("    SPL ATA:  Success");
                         } else {
                             println!(
-                                "    Original:  {}",
+                                "    SPL ATA:  {}",
                                 result
-                                    .original
+                                    .spl_ata
                                     .error_message
                                     .as_deref()
                                     .unwrap_or("Unknown error")
@@ -1333,41 +1330,48 @@ fn main() {
     BenchmarkSetup::setup_sbf_environment(manifest_dir);
 
     // Load program IDs
-    let (standard_program_id, prefunded_program_id, original_ata_program_id, token_program_id) =
-        BenchmarkSetup::load_all_program_ids(manifest_dir);
-
-    let prefunded_program_id = prefunded_program_id.unwrap();
-    let original_ata_program_id = original_ata_program_id.unwrap();
+    let program_ids = BenchmarkSetup::load_program_ids(manifest_dir);
 
     // Create implementation structures
-    let p_ata_impl = AtaImplementation::p_ata_prefunded(prefunded_program_id);
+    let p_ata_impl = AtaImplementation::p_ata_prefunded(program_ids.pata_prefunded_program_id);
 
-    println!("P-ATA Program ID: {}", standard_program_id);
-    println!("Prefunded Program ID: {}", prefunded_program_id);
-    println!("Original ATA Program ID: {}", original_ata_program_id);
-    println!("Token Program ID: {}", token_program_id);
+    println!("P-ATA Program ID: {}", program_ids.pata_legacy_program_id);
+    println!(
+        "Prefunded Program ID: {}",
+        program_ids.pata_prefunded_program_id
+    );
+    println!(
+        "Original ATA Program ID: {}",
+        program_ids.spl_ata_program_id
+    );
+    println!("Token Program ID: {}", program_ids.token_program_id);
 
-    let original_impl = AtaImplementation::original(original_ata_program_id);
-    println!("Original ATA Program ID: {}", original_ata_program_id);
+    let spl_ata_impl = AtaImplementation::spl_ata(program_ids.spl_ata_program_id);
+    println!(
+        "Original ATA Program ID: {}",
+        program_ids.spl_ata_program_id
+    );
 
     println!("\n🔍 Running comprehensive failure comparison between implementations");
 
     // Validate both setups work
     let p_ata_mollusk =
-        ComparisonRunner::create_mollusk_for_all_ata_implementations(&token_program_id);
+        ComparisonRunner::create_mollusk_for_all_ata_implementations(&program_ids.token_program_id);
     let original_mollusk =
-        ComparisonRunner::create_mollusk_for_all_ata_implementations(&token_program_id);
+        ComparisonRunner::create_mollusk_for_all_ata_implementations(&program_ids.token_program_id);
 
-    if let Err(e) =
-        BenchmarkSetup::validate_setup(&p_ata_mollusk, &p_ata_impl.program_id, &token_program_id)
-    {
+    if let Err(e) = BenchmarkSetup::validate_setup(
+        &p_ata_mollusk,
+        &p_ata_impl.program_id,
+        &program_ids.token_program_id,
+    ) {
         panic!("P-ATA failure test setup validation failed: {}", e);
     }
 
     if let Err(e) = BenchmarkSetup::validate_setup(
         &original_mollusk,
-        &original_impl.program_id,
-        &token_program_id,
+        &spl_ata_impl.program_id,
+        &program_ids.token_program_id,
     ) {
         panic!("Original ATA failure test setup validation failed: {}", e);
     }
@@ -1375,8 +1379,8 @@ fn main() {
     // Run comprehensive failure comparison
     let comparison_results = FailureTestRunner::run_comprehensive_failure_comparison(
         &p_ata_impl,
-        &original_impl,
-        &token_program_id,
+        &spl_ata_impl,
+        &program_ids.token_program_id,
     );
 
     // Print summary
@@ -1397,7 +1401,7 @@ fn main() {
         .filter(|r| {
             matches!(r.compatibility_status, CompatibilityStatus::Identical)
                 && r.p_ata.success
-                && r.original.success
+                && r.spl_ata.success
         })
         .count();
 

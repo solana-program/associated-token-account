@@ -18,6 +18,230 @@ use common_builders::{CommonTestCaseBuilder, FailureMode};
 const FAKE_SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([1u8; 32]);
 const FAKE_TOKEN_PROGRAM_ID: Pubkey = Pubkey::new_from_array([2u8; 32]);
 
+// ================================ FAILURE TEST CONFIGURATION ================================
+
+/// Configuration for a failure test case
+#[derive(Clone)]
+struct FailureTestConfig {
+    name: &'static str,
+    category: TestCategory,
+    base_test: BaseTestType,
+    variant: TestVariant,
+    failure_mode: FailureMode,
+    builder_type: TestBuilderType,
+}
+
+#[derive(Clone)]
+enum TestCategory {
+    BasicAccountOwnership,
+    AddressDerivationStructure,
+    RecoveryOperations,
+    AdditionalValidation,
+}
+
+impl TestCategory {
+    fn display_name(&self) -> &'static str {
+        match self {
+            TestCategory::BasicAccountOwnership => "Basic Account Ownership Failure Tests",
+            TestCategory::AddressDerivationStructure => {
+                "Address Derivation and Structure Failure Tests"
+            }
+            TestCategory::RecoveryOperations => "Recovery Operation Failure Tests",
+            TestCategory::AdditionalValidation => "Additional Validation Coverage Tests",
+        }
+    }
+}
+
+#[derive(Clone)]
+enum TestBuilderType {
+    /// Use the CommonTestCaseBuilder with the specified failure mode
+    Simple,
+    /// Use custom logic - these need individual functions
+    Custom,
+}
+
+/// Static configuration for all failure tests
+static FAILURE_TESTS: &[FailureTestConfig] = &[
+    // Basic Account Ownership Failure Tests
+    FailureTestConfig {
+        name: "fail_wrong_payer_owner",
+        category: TestCategory::BasicAccountOwnership,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::WrongPayerOwner(FAKE_TOKEN_PROGRAM_ID),
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_payer_not_signed",
+        category: TestCategory::BasicAccountOwnership,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::PayerNotSigned,
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_wrong_system_program",
+        category: TestCategory::BasicAccountOwnership,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::WrongSystemProgram(FAKE_SYSTEM_PROGRAM_ID),
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_wrong_token_program",
+        category: TestCategory::BasicAccountOwnership,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::WrongTokenProgram(FAKE_TOKEN_PROGRAM_ID),
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_insufficient_funds",
+        category: TestCategory::BasicAccountOwnership,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::InsufficientFunds(1000),
+        builder_type: TestBuilderType::Simple,
+    },
+    // Address Derivation and Structure Failure Tests
+    FailureTestConfig {
+        name: "fail_wrong_ata_address",
+        category: TestCategory::AddressDerivationStructure,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::WrongAtaAddress(
+            // This will be dynamically generated in the builder
+            Pubkey::new_from_array([173u8; 32]), // Placeholder
+        ),
+        builder_type: TestBuilderType::Custom, // Needs dynamic address generation
+    },
+    FailureTestConfig {
+        name: "fail_mint_wrong_owner",
+        category: TestCategory::AddressDerivationStructure,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::MintWrongOwner(SYSTEM_PROGRAM_ID),
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_invalid_mint_structure",
+        category: TestCategory::AddressDerivationStructure,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::InvalidMintStructure(50),
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_invalid_token_account_structure",
+        category: TestCategory::AddressDerivationStructure,
+        base_test: BaseTestType::CreateIdempotent,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::InvalidTokenAccountStructure,
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_invalid_discriminator",
+        category: TestCategory::AddressDerivationStructure,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::InvalidDiscriminator(99),
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_invalid_bump_value",
+        category: TestCategory::AddressDerivationStructure,
+        base_test: BaseTestType::Create,
+        variant: TestVariant {
+            bump_arg: true,
+            ..TestVariant::BASE
+        },
+        failure_mode: FailureMode::InvalidBumpValue(99),
+        builder_type: TestBuilderType::Simple,
+    },
+    // Recovery Operation Failure Tests
+    FailureTestConfig {
+        name: "fail_recover_wallet_not_signer",
+        category: TestCategory::RecoveryOperations,
+        base_test: BaseTestType::RecoverNested,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::RecoverWalletNotSigner,
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_recover_multisig_insufficient_signers",
+        category: TestCategory::RecoveryOperations,
+        base_test: BaseTestType::RecoverMultisig,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::RecoverMultisigInsufficientSigners,
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_recover_wrong_nested_ata_address",
+        category: TestCategory::RecoveryOperations,
+        base_test: BaseTestType::RecoverNested,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::RecoverWrongNestedAta(Pubkey::new_from_array([0u8; 32])), // Placeholder
+        builder_type: TestBuilderType::Custom, // Has complex custom logic
+    },
+    FailureTestConfig {
+        name: "fail_recover_wrong_destination_address",
+        category: TestCategory::RecoveryOperations,
+        base_test: BaseTestType::RecoverNested,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::RecoverWrongDestination(Pubkey::new_from_array([0u8; 32])), // Placeholder
+        builder_type: TestBuilderType::Custom, // Has complex custom logic
+    },
+    FailureTestConfig {
+        name: "fail_recover_invalid_bump_value",
+        category: TestCategory::RecoveryOperations,
+        base_test: BaseTestType::RecoverNested,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::InvalidBumpValue(99),
+        builder_type: TestBuilderType::Custom, // Has custom instruction data
+    },
+    // Additional Validation Coverage Tests
+    FailureTestConfig {
+        name: "fail_ata_owned_by_system_program",
+        category: TestCategory::AdditionalValidation,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::AtaWrongOwner(SYSTEM_PROGRAM_ID),
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
+        name: "fail_wrong_token_account_size",
+        category: TestCategory::AdditionalValidation,
+        base_test: BaseTestType::CreateIdempotent,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::TokenAccountWrongSize(100),
+        builder_type: TestBuilderType::Custom, // Has custom account setup
+    },
+    FailureTestConfig {
+        name: "fail_token_account_wrong_mint",
+        category: TestCategory::AdditionalValidation,
+        base_test: BaseTestType::CreateIdempotent,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::TokenAccountWrongMint(Pubkey::new_from_array([0u8; 32])), // Placeholder
+        builder_type: TestBuilderType::Custom, // Has custom account setup
+    },
+    FailureTestConfig {
+        name: "fail_token_account_wrong_owner",
+        category: TestCategory::AdditionalValidation,
+        base_test: BaseTestType::CreateIdempotent,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::TokenAccountWrongOwner(Pubkey::new_from_array([0u8; 32])), // Placeholder
+        builder_type: TestBuilderType::Custom, // Has custom account setup
+    },
+    FailureTestConfig {
+        name: "fail_immutable_account",
+        category: TestCategory::AdditionalValidation,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::AtaNotWritable,
+        builder_type: TestBuilderType::Simple,
+    },
+];
+
 // ================================ FAILURE TEST HELPERS ================================
 
 /// Log test information for debugging - only shown with --full-debug-logs feature
@@ -45,10 +269,6 @@ fn log_test_info(test_name: &str, ata_impl: &AtaImplementation, addresses: &[(&s
         println!("    Full addresses: {}", full_addresses.join(" | "));
     }
 }
-
-// ================================ FAILURE TEST BUILDERS ================================
-
-/// Failure test builders using the consolidated builder pattern where possible.
 
 // Helper function for complex cases that need custom logic
 fn build_base_failure_accounts(
@@ -92,222 +312,85 @@ fn build_base_failure_accounts(
     (payer, mint, wallet)
 }
 
+// ================================ FAILURE TEST BUILDERS ================================
+
 struct FailureTestBuilder;
 
 impl FailureTestBuilder {
-    fn build_fail_wrong_payer_owner(
+    /// Build a failure test case from configuration
+    fn build_failure_test(
+        config: &FailureTestConfig,
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::WrongPayerOwner(*token_program_id),
-            "fail_wrong_payer_owner",
-        )
+        match config.builder_type {
+            TestBuilderType::Simple => CommonTestCaseBuilder::build_failure_test_case_with_name(
+                config.base_test,
+                config.variant,
+                ata_impl,
+                token_program_id,
+                config.failure_mode.clone(),
+                config.name,
+            ),
+            TestBuilderType::Custom => {
+                // Route to the appropriate custom builder
+                match config.name {
+                    "fail_wrong_ata_address" => {
+                        Self::build_fail_wrong_ata_address(ata_impl, token_program_id)
+                    }
+                    "fail_recover_wrong_nested_ata_address" => {
+                        Self::build_fail_recover_wrong_nested_ata_address(
+                            ata_impl,
+                            token_program_id,
+                        )
+                    }
+                    "fail_recover_wrong_destination_address" => {
+                        Self::build_fail_recover_wrong_destination_address(
+                            ata_impl,
+                            token_program_id,
+                        )
+                    }
+                    "fail_recover_invalid_bump_value" => {
+                        Self::build_fail_recover_invalid_bump_value(ata_impl, token_program_id)
+                    }
+                    "fail_wrong_token_account_size" => {
+                        Self::build_fail_wrong_token_account_size(ata_impl, token_program_id)
+                    }
+                    "fail_token_account_wrong_mint" => {
+                        Self::build_fail_token_account_wrong_mint(ata_impl, token_program_id)
+                    }
+                    "fail_token_account_wrong_owner" => {
+                        Self::build_fail_token_account_wrong_owner(ata_impl, token_program_id)
+                    }
+                    _ => panic!("Unknown custom test: {}", config.name),
+                }
+            }
+        }
     }
 
-    fn build_fail_payer_not_signed(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::PayerNotSigned,
-            "fail_payer_not_signed",
-        )
-    }
-
-    fn build_fail_wrong_system_program(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::WrongSystemProgram(FAKE_SYSTEM_PROGRAM_ID),
-            "fail_wrong_system_program",
-        )
-    }
-
-    fn build_fail_wrong_token_program(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::WrongTokenProgram(FAKE_TOKEN_PROGRAM_ID),
-            "fail_wrong_token_program",
-        )
-    }
-
-    fn build_fail_insufficient_funds(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::InsufficientFunds(1000),
-            "fail_insufficient_funds",
-        )
-    }
-
+    /// Custom builder for wrong ATA address test
     fn build_fail_wrong_ata_address(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        let wrong_ata_address = crate::common::structured_pk(
+            &ata_impl.variant,
+            crate::common::TestBankId::Failures,
+            173,
+            crate::common::AccountTypeId::Ata,
+        );
+
         CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
-            FailureMode::WrongAtaAddress(crate::common::structured_pk(
-                &ata_impl.variant,
-                crate::common::TestBankId::Failures,
-                173,
-                crate::common::AccountTypeId::Ata,
-            )),
+            FailureMode::WrongAtaAddress(wrong_ata_address),
             "fail_wrong_ata_address",
         )
     }
 
-    /// Build CREATE failure test with mint owned by wrong program
-    fn build_fail_mint_wrong_owner(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::MintWrongOwner(SYSTEM_PROGRAM_ID),
-            "fail_mint_wrong_owner",
-        )
-    }
-
-    /// Build CREATE failure test with invalid mint structure
-    fn build_fail_invalid_mint_structure(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::InvalidMintStructure(50), // Wrong size - should be MINT_ACCOUNT_SIZE
-            "fail_invalid_mint_structure",
-        )
-    }
-
-    /// Build CREATE_IDEMPOTENT failure test with invalid token account structure
-    fn build_fail_invalid_token_account_structure(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::CreateIdempotent,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::InvalidTokenAccountStructure,
-            "fail_invalid_token_account_structure",
-        )
-    }
-
-    /// Build RECOVER failure test with wallet not signer
-    fn build_fail_recover_wallet_not_signer(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::RecoverNested,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::RecoverWalletNotSigner,
-            "fail_recover_wallet_not_signer",
-        )
-    }
-
-    /// Build RECOVER failure test with multisig insufficient signers
-    fn build_fail_recover_multisig_insufficient_signers(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::RecoverMultisig,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::RecoverMultisigInsufficientSigners,
-            "fail_recover_multisig_insufficient_signers",
-        )
-    }
-
-    /// Build failure test with invalid instruction discriminator
-    fn build_fail_invalid_discriminator(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::InvalidDiscriminator(99), // Invalid discriminator (should be 0, 1, or 2)
-            "fail_invalid_discriminator",
-        )
-    }
-
-    /// Build failure test with invalid bump value
-    fn build_fail_invalid_bump_value(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant {
-                bump_arg: true,
-                ..TestVariant::BASE
-            },
-            ata_impl,
-            token_program_id,
-            FailureMode::InvalidBumpValue(99), // Invalid bump (not the correct bump)
-            "fail_invalid_bump_value",
-        )
-    }
-
-    /// Build CREATE failure test with ATA owned by system program (existing ATA with wrong owner)
-    fn build_fail_ata_owned_by_system_program(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::AtaWrongOwner(SYSTEM_PROGRAM_ID),
-            "fail_ata_owned_by_system_program",
-        )
-    }
-
-    /// Build RECOVER failure test with wrong nested ATA address
+    /// Custom builder for recover wrong nested ATA address test
     fn build_fail_recover_wrong_nested_ata_address(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
@@ -375,7 +458,7 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build RECOVER failure test with wrong destination address
+    /// Custom builder for recover wrong destination address test
     fn build_fail_recover_wrong_destination_address(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
@@ -443,7 +526,7 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build RECOVER failure test with invalid bump for RecoverNested
+    /// Custom builder for recover invalid bump value test
     fn build_fail_recover_invalid_bump_value(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
@@ -511,7 +594,7 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with wrong token account size
+    /// Custom builder for wrong token account size test
     fn build_fail_wrong_token_account_size(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
@@ -558,7 +641,7 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with token account pointing to wrong mint
+    /// Custom builder for token account wrong mint test
     fn build_fail_token_account_wrong_mint(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
@@ -623,7 +706,7 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Build CREATE failure test with token account having wrong owner
+    /// Custom builder for token account wrong owner test
     fn build_fail_token_account_wrong_owner(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
@@ -680,21 +763,6 @@ impl FailureTestBuilder {
         };
 
         (ix, accounts)
-    }
-
-    /// Build CREATE failure test with immutable account (non-writable)
-    fn build_fail_immutable_account(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case_with_name(
-            BaseTestType::Create,
-            TestVariant::BASE,
-            ata_impl,
-            token_program_id,
-            FailureMode::AtaNotWritable,
-            "fail_immutable_account",
-        )
     }
 }
 
@@ -786,7 +854,7 @@ impl FailureTestRunner {
             }
         }
 
-        // Show captured debug output only for security issues
+        // Show captured debug output only for unexpected results
         if needs_detailed_output {
             if !result.p_ata.captured_output.is_empty() {
                 println!("      P-ATA Debug Output:");
@@ -802,6 +870,26 @@ impl FailureTestRunner {
             }
         }
     }
+    /// Run a failure test with configuration against both implementations and compare results
+    fn run_failure_comparison_test_with_config(
+        config: &FailureTestConfig,
+        p_ata_impl: &AtaImplementation,
+        original_impl: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> ComparisonResult {
+        let test_builder = |ata_impl: &AtaImplementation, token_program_id: &Pubkey| {
+            FailureTestBuilder::build_failure_test(config, ata_impl, token_program_id)
+        };
+
+        Self::run_failure_comparison_test(
+            config.name,
+            test_builder,
+            p_ata_impl,
+            original_impl,
+            token_program_id,
+        )
+    }
+
     /// Run a failure test against both implementations and compare results
     fn run_failure_comparison_test<F>(
         name: &str,
@@ -925,163 +1013,32 @@ impl FailureTestRunner {
 
         let mut results = Vec::new();
 
-        // Basic account ownership failure tests
-        println!("\n--- Basic Account Ownership Failure Tests ---");
+        // Group tests by category and run them in organized sections
+        let mut tests_by_category: std::collections::HashMap<String, Vec<&FailureTestConfig>> =
+            std::collections::HashMap::new();
 
-        // Type alias for cleaner function pointer types
-        type TestFn = fn(&AtaImplementation, &Pubkey) -> (Instruction, Vec<(Pubkey, Account)>);
-
-        let basic_tests: [(&str, TestFn); 5] = [
-            (
-                "fail_wrong_payer_owner",
-                FailureTestBuilder::build_fail_wrong_payer_owner,
-            ),
-            (
-                "fail_payer_not_signed",
-                FailureTestBuilder::build_fail_payer_not_signed,
-            ),
-            (
-                "fail_wrong_system_program",
-                FailureTestBuilder::build_fail_wrong_system_program,
-            ),
-            (
-                "fail_wrong_token_program",
-                FailureTestBuilder::build_fail_wrong_token_program,
-            ),
-            (
-                "fail_insufficient_funds",
-                FailureTestBuilder::build_fail_insufficient_funds,
-            ),
-        ];
-
-        for (test_name, test_builder) in basic_tests {
-            let comparison = Self::run_failure_comparison_test(
-                test_name,
-                test_builder,
-                p_ata_impl,
-                original_impl,
-                token_program_id,
-            );
-            Self::print_failure_test_result_summary(&comparison);
-            results.push(comparison);
+        for config in FAILURE_TESTS {
+            let category_name = config.category.display_name().to_string();
+            tests_by_category
+                .entry(category_name)
+                .or_insert_with(Vec::new)
+                .push(config);
         }
 
-        // Address derivation and structure failure tests
-        println!("\n--- Address Derivation and Structure Failure Tests ---");
+        // Run tests organized by category
+        for (category_name, configs) in tests_by_category {
+            println!("\n--- {} ---", category_name);
 
-        let structure_tests: [(&str, TestFn); 6] = [
-            (
-                "fail_wrong_ata_address",
-                FailureTestBuilder::build_fail_wrong_ata_address,
-            ),
-            (
-                "fail_mint_wrong_owner",
-                FailureTestBuilder::build_fail_mint_wrong_owner,
-            ),
-            (
-                "fail_invalid_mint_structure",
-                FailureTestBuilder::build_fail_invalid_mint_structure,
-            ),
-            (
-                "fail_invalid_token_account_structure",
-                FailureTestBuilder::build_fail_invalid_token_account_structure,
-            ),
-            (
-                "fail_invalid_discriminator",
-                FailureTestBuilder::build_fail_invalid_discriminator,
-            ),
-            (
-                "fail_invalid_bump_value",
-                FailureTestBuilder::build_fail_invalid_bump_value,
-            ),
-        ];
-
-        for (test_name, test_builder) in structure_tests {
-            let comparison = Self::run_failure_comparison_test(
-                test_name,
-                test_builder,
-                p_ata_impl,
-                original_impl,
-                token_program_id,
-            );
-            Self::print_failure_test_result_summary(&comparison);
-            results.push(comparison);
-        }
-
-        // Recovery-specific failure tests
-        println!("\n--- Recovery Operation Failure Tests ---");
-
-        let recovery_tests: [(&str, TestFn); 5] = [
-            (
-                "fail_recover_wallet_not_signer",
-                FailureTestBuilder::build_fail_recover_wallet_not_signer,
-            ),
-            (
-                "fail_recover_multisig_insufficient_signers",
-                FailureTestBuilder::build_fail_recover_multisig_insufficient_signers,
-            ),
-            (
-                "fail_recover_wrong_nested_ata_address",
-                FailureTestBuilder::build_fail_recover_wrong_nested_ata_address,
-            ),
-            (
-                "fail_recover_wrong_destination_address",
-                FailureTestBuilder::build_fail_recover_wrong_destination_address,
-            ),
-            (
-                "fail_recover_invalid_bump_value",
-                FailureTestBuilder::build_fail_recover_invalid_bump_value,
-            ),
-        ];
-
-        for (test_name, test_builder) in recovery_tests {
-            let comparison = Self::run_failure_comparison_test(
-                test_name,
-                test_builder,
-                p_ata_impl,
-                original_impl,
-                token_program_id,
-            );
-            Self::print_failure_test_result_summary(&comparison);
-            results.push(comparison);
-        }
-
-        // Additional validation tests
-        println!("\n--- Additional Validation Coverage Tests ---");
-
-        let validation_tests: [(&str, TestFn); 5] = [
-            (
-                "fail_ata_owned_by_system_program",
-                FailureTestBuilder::build_fail_ata_owned_by_system_program,
-            ),
-            (
-                "fail_wrong_token_account_size",
-                FailureTestBuilder::build_fail_wrong_token_account_size,
-            ),
-            (
-                "fail_token_account_wrong_mint",
-                FailureTestBuilder::build_fail_token_account_wrong_mint,
-            ),
-            (
-                "fail_token_account_wrong_owner",
-                FailureTestBuilder::build_fail_token_account_wrong_owner,
-            ),
-            (
-                "fail_immutable_account",
-                FailureTestBuilder::build_fail_immutable_account,
-            ),
-        ];
-
-        for (test_name, test_builder) in validation_tests {
-            let comparison = Self::run_failure_comparison_test(
-                test_name,
-                test_builder,
-                p_ata_impl,
-                original_impl,
-                token_program_id,
-            );
-            Self::print_failure_test_result_summary(&comparison);
-            results.push(comparison);
+            for config in configs {
+                let comparison = Self::run_failure_comparison_test_with_config(
+                    config,
+                    p_ata_impl,
+                    original_impl,
+                    token_program_id,
+                );
+                Self::print_failure_test_result_summary(&comparison);
+                results.push(comparison);
+            }
         }
 
         Self::print_failure_summary(&results);

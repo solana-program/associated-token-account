@@ -443,7 +443,6 @@ impl CommonTestCaseBuilder {
             ata,
             wallet,
             mint,
-            bump,
         );
         let mut ix = Self::build_instruction(&config, variant, ata_implementation, &accounts, bump);
 
@@ -537,21 +536,12 @@ impl CommonTestCaseBuilder {
         ata: Pubkey,
         wallet: Pubkey,
         mint: Pubkey,
-        _bump: u8,
     ) -> Vec<(Pubkey, Account)> {
         if matches!(
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
-            return Self::build_recover_accounts(
-                config,
-                variant,
-                ata_implementation,
-                payer,
-                ata,
-                wallet,
-                mint,
-            );
+            return Self::build_recover_accounts(config, variant, ata_implementation);
         }
 
         let mut account_set =
@@ -593,10 +583,6 @@ impl CommonTestCaseBuilder {
         config: &TestCaseConfig,
         variant: TestVariant,
         ata_implementation: &AtaImplementation,
-        _payer: Pubkey,
-        _ata: Pubkey,
-        _wallet: Pubkey,
-        _mint: Pubkey,
     ) -> Vec<(Pubkey, Account)> {
         let test_bank = if config.failure_mode.is_some() {
             crate::common::TestBankId::Failures

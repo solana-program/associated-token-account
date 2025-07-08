@@ -699,7 +699,6 @@ pub struct ComparisonResult {
     pub p_ata: BenchmarkResult,
     pub spl_ata: BenchmarkResult,
     pub compute_savings: Option<i64>,
-    pub savings_percentage: Option<f64>,
     pub compatibility_status: CompatibilityStatus,
 }
 
@@ -870,14 +869,6 @@ impl BenchmarkRunner {
             None
         };
 
-        let savings_percentage = compute_savings.map(|savings| {
-            if original_result.compute_units > 0 {
-                (savings as f64 / original_result.compute_units as f64) * 100.0
-            } else {
-                0.0
-            }
-        });
-
         let compatibility_status =
             Self::determine_compatibility_status(&p_ata_result, &original_result);
 
@@ -886,7 +877,6 @@ impl BenchmarkRunner {
             p_ata: p_ata_result,
             spl_ata: original_result,
             compute_savings,
-            savings_percentage,
             compatibility_status,
         }
     }
@@ -919,25 +909,13 @@ impl BenchmarkRunner {
                 }
             }
             (true, false) => {
-                // P-ATA succeeded, Original failed
                 if p_ata_result.test_name.starts_with("fail_") {
-                    // CRITICAL SECURITY ISSUE: P-ATA succeeded in a failure test where original correctly failed!
                     CompatibilityStatus::IncompatibleSuccess
                 } else {
-                    // Performance test - P-ATA optimization (e.g., bump optimization)
                     CompatibilityStatus::OptimizedBehavior
                 }
             }
-            (false, true) => {
-                // P-ATA failed, Original succeeded
-                if p_ata_result.test_name.starts_with("fail_") {
-                    // CRITICAL SECURITY ISSUE: Original succeeded in a failure test where P-ATA correctly failed!
-                    CompatibilityStatus::IncompatibleSuccess
-                } else {
-                    // Performance test - Original works but P-ATA fails (concerning)
-                    CompatibilityStatus::IncompatibleSuccess
-                }
-            }
+            (false, true) => CompatibilityStatus::IncompatibleSuccess,
         }
     }
 
@@ -1103,10 +1081,10 @@ impl TestVariant {
             (false, false, false) => "p-ata",
             (true, false, false) => "rent arg",
             (false, true, false) => "bump arg",
-            (false, false, true) => "bump+len arg", // LEN variant now includes bump
+            (false, false, true) => "bump+len arg", // len cannot be passed without bump
             (true, true, false) => "rent+bump arg",
-            (true, false, true) => "rent+bump+len arg", // RENT+LEN variant now includes bump
-            (true, true, true) => "all optimizations",  // Special marker for best combination
+            (true, false, true) => "rent+bump+len arg", // len cannot be passed without bump
+            (true, true, true) => "all optimizations",
             _ => "unknown",
         }
     }

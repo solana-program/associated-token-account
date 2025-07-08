@@ -345,7 +345,7 @@ impl FailureTestBuilder {
             ],
         );
 
-        let mut accounts = RecoverAccountSet::new(
+        let accounts = RecoverAccountSet::new(
             wrong_nested_ata, // Use wrong address as provided
             nested_mint,
             dest_ata,

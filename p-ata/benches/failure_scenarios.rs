@@ -18,16 +18,44 @@ use common_builders::{CommonTestCaseBuilder, FailureMode};
 const FAKE_SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([1u8; 32]);
 const FAKE_TOKEN_PROGRAM_ID: Pubkey = Pubkey::new_from_array([2u8; 32]);
 
+// ================================ FAILURE TEST HELPERS ================================
+
+/// Log test information for debugging - only shown with --full-debug-logs feature
+#[allow(unused)]
+fn log_test_info(test_name: &str, ata_impl: &AtaImplementation, addresses: &[(&str, &Pubkey)]) {
+    #[cfg(feature = "full-debug-logs")]
+    {
+        let short_addresses: Vec<String> = addresses
+            .iter()
+            .map(|(name, addr)| format!("{}: {}", name, &addr.to_string()[0..8]))
+            .collect();
+
+        println!(
+            "🔍 Test: {} | Implementation: {} | {}",
+            test_name,
+            ata_impl.name,
+            short_addresses.join(" | ")
+        );
+
+        let full_addresses: Vec<String> = addresses
+            .iter()
+            .map(|(name, addr)| format!("{}: {}", name, addr))
+            .collect();
+
+        println!("    Full addresses: {}", full_addresses.join(" | "));
+    }
+}
+
 // ================================ FAILURE TEST BUILDERS ================================
 
 /// Failure test builders using the consolidated builder pattern where possible.
-/// Complex scenarios that require custom logic are implemented directly.
 
 // Helper function for complex cases that need custom logic
 fn build_base_failure_accounts(
     base_test: BaseTestType,
     variant: TestVariant,
     ata_implementation: &AtaImplementation,
+    token_program_id: &Pubkey,
 ) -> (Pubkey, Pubkey, Pubkey) {
     let test_number = common_builders::calculate_failure_test_number(base_test, variant);
 
@@ -47,11 +75,18 @@ fn build_base_failure_accounts(
         test_number,
         crate::common::AccountTypeId::Mint,
     );
-    let wallet = crate::common::structured_pk(
+    let all_ata_program_ids: Vec<Pubkey> = crate::common::AtaImplementation::all()
+        .iter()
+        .map(|a| a.program_id)
+        .collect();
+    let wallet = crate::common::structured_pk_with_optimal_common_bump(
         consistent_variant,
         crate::common::TestBankId::Failures,
         test_number,
         crate::common::AccountTypeId::Wallet,
+        &all_ata_program_ids,
+        &token_program_id,
+        &mint,
     );
 
     (payer, mint, wallet)
@@ -64,12 +99,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::WrongPayerOwner(*token_program_id),
+            "fail_wrong_payer_owner",
         )
     }
 
@@ -77,12 +113,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::PayerNotSigned,
+            "fail_payer_not_signed",
         )
     }
 
@@ -90,12 +127,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::WrongSystemProgram(FAKE_SYSTEM_PROGRAM_ID),
+            "fail_wrong_system_program",
         )
     }
 
@@ -103,12 +141,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::WrongTokenProgram(FAKE_TOKEN_PROGRAM_ID),
+            "fail_wrong_token_program",
         )
     }
 
@@ -116,12 +155,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::InsufficientFunds(1000),
+            "fail_insufficient_funds",
         )
     }
 
@@ -129,7 +169,7 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
@@ -140,6 +180,7 @@ impl FailureTestBuilder {
                 173,
                 crate::common::AccountTypeId::Ata,
             )),
+            "fail_wrong_ata_address",
         )
     }
 
@@ -148,12 +189,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::MintWrongOwner(SYSTEM_PROGRAM_ID),
+            "fail_mint_wrong_owner",
         )
     }
 
@@ -162,12 +204,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::InvalidMintStructure(50), // Wrong size - should be MINT_ACCOUNT_SIZE
+            "fail_invalid_mint_structure",
         )
     }
 
@@ -176,12 +219,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::CreateIdempotent,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::InvalidTokenAccountStructure,
+            "fail_invalid_token_account_structure",
         )
     }
 
@@ -190,12 +234,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::RecoverNested,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::RecoverWalletNotSigner,
+            "fail_recover_wallet_not_signer",
         )
     }
 
@@ -204,12 +249,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::RecoverMultisig,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::RecoverMultisigInsufficientSigners,
+            "fail_recover_multisig_insufficient_signers",
         )
     }
 
@@ -218,12 +264,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::InvalidDiscriminator(99), // Invalid discriminator (should be 0, 1, or 2)
+            "fail_invalid_discriminator",
         )
     }
 
@@ -232,7 +279,7 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant {
                 bump_arg: true,
@@ -241,6 +288,7 @@ impl FailureTestBuilder {
             ata_impl,
             token_program_id,
             FailureMode::InvalidBumpValue(99), // Invalid bump (not the correct bump)
+            "fail_invalid_bump_value",
         )
     }
 
@@ -249,12 +297,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::AtaWrongOwner(SYSTEM_PROGRAM_ID),
+            "fail_ata_owned_by_system_program",
         )
     }
 
@@ -281,6 +330,20 @@ impl FailureTestBuilder {
                     crate::common::AccountTypeId::Wallet,
                 ],
             );
+
+        // Log test name for identification
+        log_test_info(
+            "fail_recover_wrong_nested_ata_address",
+            ata_impl,
+            &[
+                ("wrong_nested_ata", &wrong_nested_ata),
+                ("nested_mint", &nested_mint),
+                ("dest_ata", &dest_ata),
+                ("owner_ata", &owner_ata),
+                ("owner_mint", &owner_mint),
+                ("wallet", &wallet),
+            ],
+        );
 
         let mut accounts = RecoverAccountSet::new(
             wrong_nested_ata, // Use wrong address as provided
@@ -336,6 +399,20 @@ impl FailureTestBuilder {
                 ],
             );
 
+        // Log test name for identification
+        log_test_info(
+            "fail_recover_wrong_destination_address",
+            ata_impl,
+            &[
+                ("nested_ata", &nested_ata),
+                ("nested_mint", &nested_mint),
+                ("wrong_dest_ata", &wrong_dest_ata),
+                ("owner_ata", &owner_ata),
+                ("owner_mint", &owner_mint),
+                ("wallet", &wallet),
+            ],
+        );
+
         let accounts = RecoverAccountSet::new(
             nested_ata,
             nested_mint,
@@ -390,6 +467,20 @@ impl FailureTestBuilder {
                 ],
             );
 
+        // Log test name for identification
+        log_test_info(
+            "fail_recover_invalid_bump_value",
+            ata_impl,
+            &[
+                ("nested_ata", &nested_ata),
+                ("nested_mint", &nested_mint),
+                ("dest_ata", &dest_ata),
+                ("owner_ata", &owner_ata),
+                ("owner_mint", &owner_mint),
+                ("wallet", &wallet),
+            ],
+        );
+
         let accounts = RecoverAccountSet::new(
             nested_ata,
             nested_mint,
@@ -429,7 +520,16 @@ impl FailureTestBuilder {
             BaseTestType::CreateIdempotent,
             TestVariant::BASE,
             ata_impl,
+            token_program_id,
         );
+
+        // Log test name for identification
+        log_test_info(
+            "fail_wrong_token_account_size",
+            ata_impl,
+            &[("payer", &payer), ("mint", &mint), ("wallet", &wallet)],
+        );
+
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             &ata_impl.program_id,
@@ -467,7 +567,16 @@ impl FailureTestBuilder {
             BaseTestType::CreateIdempotent,
             TestVariant::BASE,
             ata_impl,
+            token_program_id,
         );
+
+        // Log test name for identification
+        log_test_info(
+            "fail_token_account_wrong_mint",
+            ata_impl,
+            &[("payer", &payer), ("mint", &mint), ("wallet", &wallet)],
+        );
+
         let test_number = common_builders::calculate_failure_test_number(
             BaseTestType::CreateIdempotent,
             TestVariant::BASE,
@@ -523,7 +632,16 @@ impl FailureTestBuilder {
             BaseTestType::CreateIdempotent,
             TestVariant::BASE,
             ata_impl,
+            token_program_id,
         );
+
+        // Log test name for identification
+        log_test_info(
+            "fail_token_account_wrong_owner",
+            ata_impl,
+            &[("payer", &payer), ("mint", &mint), ("wallet", &wallet)],
+        );
+
         let test_number = common_builders::calculate_failure_test_number(
             BaseTestType::CreateIdempotent,
             TestVariant::BASE,
@@ -569,12 +687,13 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        CommonTestCaseBuilder::build_failure_test_case(
+        CommonTestCaseBuilder::build_failure_test_case_with_name(
             BaseTestType::Create,
             TestVariant::BASE,
             ata_impl,
             token_program_id,
             FailureMode::AtaNotWritable,
+            "fail_immutable_account",
         )
     }
 }
@@ -697,10 +816,8 @@ impl FailureTestRunner {
         let is_p_ata_only =
             name == "fail_invalid_bump_value" || name == "fail_recover_invalid_bump_value";
 
-        // Build test for P-ATA
+        // Build P-ATA test case
         let (p_ata_ix, p_ata_accounts) = test_builder(p_ata_impl, token_program_id);
-
-        // Run P-ATA benchmark with quiet logging first
         let mut p_ata_result = BenchmarkRunner::run_single_benchmark(
             name,
             &p_ata_ix,
@@ -709,10 +826,11 @@ impl FailureTestRunner {
             token_program_id,
         );
 
+        // Build comparison result
         let mut comparison_result = if is_p_ata_only {
-            // For P-ATA-only tests, create a N/A result for original ATA
+            // For P-ATA-only tests, create a dummy result for original ATA
             let original_result = BenchmarkResult {
-                implementation: "original-ata".to_string(),
+                implementation: original_impl.name.to_string(),
                 test_name: name.to_string(),
                 compute_units: 0,
                 success: false,
@@ -722,12 +840,17 @@ impl FailureTestRunner {
                 ),
                 captured_output: String::new(),
             };
-            BenchmarkRunner::create_comparison_result(name, p_ata_result, original_result)
-        } else {
-            // Build test for Original ATA (separate account set with correct ATA addresses)
-            let (original_ix, original_accounts) = test_builder(original_impl, token_program_id);
 
-            // Run Original ATA benchmark with quiet logging first
+            let mut result = BenchmarkRunner::create_comparison_result(
+                name,
+                p_ata_result.clone(),
+                original_result,
+            );
+            result.compatibility_status = CompatibilityStatus::OptimizedBehavior;
+            result
+        } else {
+            // Build Original ATA test case
+            let (original_ix, original_accounts) = test_builder(original_impl, token_program_id);
             let original_result = BenchmarkRunner::run_single_benchmark(
                 name,
                 &original_ix,
@@ -737,7 +860,7 @@ impl FailureTestRunner {
             );
 
             // Create comparison result
-            BenchmarkRunner::create_comparison_result(name, p_ata_result, original_result)
+            BenchmarkRunner::create_comparison_result(name, p_ata_result.clone(), original_result)
         };
 
         // Check if we need debug logging for problematic results

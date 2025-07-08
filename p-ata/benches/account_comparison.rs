@@ -5,6 +5,33 @@ use {
 
 use crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE;
 
+// ========================== UTILITY FUNCTIONS ==========================
+
+/// Calculate data differences between two byte arrays with a configurable limit
+fn calculate_data_differences(
+    left_data: &[u8],
+    right_data: &[u8],
+    max_differences: usize,
+) -> Vec<DataDifference> {
+    let mut differences = Vec::new();
+    let max_len = left_data.len().max(right_data.len());
+
+    for i in 0..max_len.min(max_differences) {
+        let left_byte = left_data.get(i).copied();
+        let right_byte = right_data.get(i).copied();
+
+        if left_byte != right_byte {
+            differences.push(DataDifference {
+                offset: i,
+                left_value: left_byte,
+                right_value: right_byte,
+            });
+        }
+    }
+
+    differences
+}
+
 // ========================== CORE COMPARISON TYPES ==========================
 
 #[derive(Debug, Clone)]
@@ -168,24 +195,7 @@ impl TokenAccountComparator {
         left_data: &[u8],
         right_data: &[u8],
     ) -> Vec<DataDifference> {
-        let mut differences = Vec::new();
-        let max_len = left_data.len().max(right_data.len());
-
-        for i in 0..max_len.min(100) {
-            // Limit to first 100 differences
-            let left_byte = left_data.get(i).copied();
-            let right_byte = right_data.get(i).copied();
-
-            if left_byte != right_byte {
-                differences.push(DataDifference {
-                    offset: i,
-                    left_value: left_byte,
-                    right_value: right_byte,
-                });
-            }
-        }
-
-        differences
+        calculate_data_differences(left_data, right_data, 100)
     }
 }
 
@@ -240,24 +250,7 @@ impl StandardAccountComparator {
         left_data: &[u8],
         right_data: &[u8],
     ) -> Vec<DataDifference> {
-        let mut differences = Vec::new();
-        let max_len = left_data.len().max(right_data.len());
-
-        for i in 0..max_len.min(20) {
-            // Limit to first 20 differences for standard accounts
-            let left_byte = left_data.get(i).copied();
-            let right_byte = right_data.get(i).copied();
-
-            if left_byte != right_byte {
-                differences.push(DataDifference {
-                    offset: i,
-                    left_value: left_byte,
-                    right_value: right_byte,
-                });
-            }
-        }
-
-        differences
+        calculate_data_differences(left_data, right_data, 20)
     }
 }
 
@@ -318,12 +311,8 @@ impl AccountComparisonService {
                             }
                             _ => {
                                 // Handle missing accounts
-                                results.push(self.create_missing_account_comparison(
-                                    i,
-                                    &account_type,
-                                    left_account.is_some(),
-                                    right_account.is_some(),
-                                ));
+                                results
+                                    .push(self.create_missing_account_comparison(i, &account_type));
                             }
                         }
                     }
@@ -335,7 +324,6 @@ impl AccountComparisonService {
                         results.push(self.create_instruction_mismatch_comparison(
                             i,
                             &account_type,
-                            left_meta.is_some(),
                             meta.pubkey,
                         ));
                     }
@@ -367,8 +355,6 @@ impl AccountComparisonService {
         &self,
         position: usize,
         account_type: &str,
-        left_exists: bool,
-        right_exists: bool,
     ) -> AccountComparison {
         AccountComparison {
             account_type: account_type.to_string(),
@@ -390,7 +376,6 @@ impl AccountComparisonService {
         &self,
         position: usize,
         account_type: &str,
-        left_exists: bool,
         pubkey: Pubkey,
     ) -> AccountComparison {
         // Check if this is a SysvarRent difference (expected optimization)

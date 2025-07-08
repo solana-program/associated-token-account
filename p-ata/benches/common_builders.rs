@@ -818,8 +818,6 @@ impl CommonTestCaseBuilder {
 
         let final_data = ata_implementation.adapt_instruction_data(raw_data);
 
-        // Debug output suppressed for cleaner test runs
-
         final_data
     }
 

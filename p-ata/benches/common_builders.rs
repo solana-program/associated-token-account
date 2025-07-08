@@ -342,10 +342,8 @@ impl CommonTestCaseBuilder {
 
         let (payer, mint, wallet) = Self::get_structured_addresses(
             &config,
-            &ata_implementation.variant,
             test_bank,
             test_number,
-            ata_implementation,
         );
 
         #[cfg(feature = "full-debug-logs")]
@@ -367,18 +365,14 @@ impl CommonTestCaseBuilder {
             );
         }
 
-        // The processor will always use instruction.program_id for PDA operations
         let derivation_program_id = ata_implementation.program_id;
 
         let (ata, bump) = if matches!(
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
-            // For recover operations, we need to use the SAME wallet that will be used in the accounts
-            // Use consistent variant for mint and wallet addresses
             let consistent_variant = &crate::common::AtaVariant::SplAta;
 
-            // Get the actual wallet that will be used - MUST match build_recover_accounts
             let actual_wallet = crate::common::structured_pk(
                 consistent_variant,
                 test_bank,
@@ -386,7 +380,6 @@ impl CommonTestCaseBuilder {
                 crate::common::AccountTypeId::Wallet,
             );
 
-            // Get the actual owner_mint that will be used (with optimal bump for owner_mint)
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
                 nested_mint,
@@ -413,7 +406,6 @@ impl CommonTestCaseBuilder {
                 )
             };
 
-            // Calculate owner_ata address using the SAME wallet that will be used in accounts
             let (owner_ata, bump) = Pubkey::find_program_address(
                 &[
                     actual_wallet.as_ref(),
@@ -435,7 +427,6 @@ impl CommonTestCaseBuilder {
             }
             (owner_ata, bump)
         } else {
-            // Standard case - use derivation program ID (executing ID for bump, reference ID for non-bump)
             let result = Pubkey::find_program_address(
                 &[
                     wallet.as_ref(),
@@ -445,12 +436,9 @@ impl CommonTestCaseBuilder {
                 &derivation_program_id,
             );
 
-            // Debug output suppressed for cleaner test runs
-
             result
         };
 
-        // Build accounts based on test type
         let mut accounts = Self::build_accounts(
             &config,
             variant,
@@ -461,11 +449,8 @@ impl CommonTestCaseBuilder {
             mint,
             bump,
         );
-
-        // Build instruction
         let mut ix = Self::build_instruction(&config, variant, ata_implementation, &accounts, bump);
 
-        // Apply failure mode if specified
         if let Some(failure_mode) = &config.failure_mode {
             Self::apply_failure_mode(
                 failure_mode,
@@ -483,13 +468,10 @@ impl CommonTestCaseBuilder {
         (ix, accounts)
     }
 
-    /// Get structured account addresses
     fn get_structured_addresses(
         config: &TestCaseConfig,
-        variant: &crate::common::AtaVariant,
         test_bank: crate::common::TestBankId,
         test_number: u8,
-        ata_implementation: &AtaImplementation,
     ) -> (Pubkey, Pubkey, Pubkey) {
         if config.use_fixed_mint_owner_payer {
             // Use fixed addresses for specific tests
@@ -509,7 +491,6 @@ impl CommonTestCaseBuilder {
         // Use consistent variant for mint and wallet to enable byte-for-byte comparison
         let consistent_variant = &crate::common::AtaVariant::SplAta;
 
-        // Use implementation-specific variant for payer (so different implementations get different payers)
         let payer = crate::common::structured_pk(
             consistent_variant,
             test_bank,
@@ -527,9 +508,6 @@ impl CommonTestCaseBuilder {
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig | BaseTestType::WorstCase
         ) {
-            // For recovery tests and worst case, use simple consistent wallet address
-            // Recovery tests need specific wallet structures (especially multisig)
-            // Worst case is excluded as requested
             crate::common::structured_pk(
                 consistent_variant,
                 test_bank,
@@ -537,7 +515,6 @@ impl CommonTestCaseBuilder {
                 crate::common::AccountTypeId::Wallet,
             )
         } else {
-            // For all other tests, use optimal common bump across all ATA implementations
             let all_ata_program_ids: Vec<Pubkey> = crate::common::AtaImplementation::all()
                 .iter()
                 .map(|a| a.program_id)
@@ -584,7 +561,6 @@ impl CommonTestCaseBuilder {
         let mut account_set =
             StandardAccountSet::new(payer, ata, wallet, mint, &config.token_program);
 
-        // Apply configurations
         if config.setup_existing_ata {
             account_set = account_set.with_existing_ata(&mint, &wallet, &config.token_program);
         }
@@ -636,7 +612,6 @@ impl CommonTestCaseBuilder {
         // Use consistent variant for mint and wallet addresses
         let consistent_variant = &crate::common::AtaVariant::SplAta;
 
-        // Get mint addresses
         let (owner_mint, nested_mint) = if let Some(SpecialAccountMod::NestedAta {
             owner_mint,
             nested_mint,

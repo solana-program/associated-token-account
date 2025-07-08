@@ -22,6 +22,8 @@ Expanded Functionality:
 
 `cargo build --features build-programs && cargo bench`
 
+Mollusk's extensive debug logs are filtered out unless a test has an unexpected result. To show all of them, run `cargo bench --features full-debug-logs`.
+
 *as of 2025-07-08, a6cc353*
 
 "optimum args" are:

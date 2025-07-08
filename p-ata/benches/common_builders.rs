@@ -6,6 +6,7 @@ use {
     spl_token_2022::extension::ExtensionType,
 };
 
+use crate::common::AllAtaImplementations;
 // Import types from parent crate's common module
 use crate::{
     account_templates::*, AccountBuilder, AtaImplementation, BaseTestType, TestVariant,
@@ -25,7 +26,7 @@ pub struct TestCaseConfig {
     pub use_extended_mint: bool,
     pub setup_topup: bool,
     pub setup_existing_ata: bool,
-    pub use_fixed_accounts: bool,
+    pub use_fixed_mint_owner_payer: bool,
     pub special_account_mods: Vec<SpecialAccountMod>,
     pub failure_mode: Option<FailureMode>,
 }
@@ -42,6 +43,7 @@ pub enum SpecialAccountMod {
         nested_mint: Pubkey,
     },
     FixedAddresses {
+        payer: Pubkey,
         wallet: Pubkey,
         mint: Pubkey,
     },
@@ -147,7 +149,7 @@ impl CommonTestCaseBuilder {
                 use_extended_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
-                use_fixed_accounts: false,
+                use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![],
                 failure_mode: None,
             },
@@ -158,7 +160,7 @@ impl CommonTestCaseBuilder {
                 use_extended_mint: false,
                 setup_topup: false,
                 setup_existing_ata: true, // ATA already exists
-                use_fixed_accounts: false,
+                use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![],
                 failure_mode: None,
             },
@@ -169,7 +171,7 @@ impl CommonTestCaseBuilder {
                 use_extended_mint: false,
                 setup_topup: true,
                 setup_existing_ata: false,
-                use_fixed_accounts: false,
+                use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![],
                 failure_mode: None,
             },
@@ -180,7 +182,7 @@ impl CommonTestCaseBuilder {
                 use_extended_mint: false,
                 setup_topup: true,
                 setup_existing_ata: false,
-                use_fixed_accounts: false,
+                use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![],
                 failure_mode: None,
             },
@@ -193,7 +195,7 @@ impl CommonTestCaseBuilder {
                 use_extended_mint: true,
                 setup_topup: false,
                 setup_existing_ata: false,
-                use_fixed_accounts: false,
+                use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![],
                 failure_mode: None,
             },
@@ -204,7 +206,7 @@ impl CommonTestCaseBuilder {
                 use_extended_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
-                use_fixed_accounts: true,
+                use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![SpecialAccountMod::NestedAta {
                     // No need to explicitly use AtaVariant::Original anymore
                     // structured_pk now automatically uses consistent addresses for mint types
@@ -230,7 +232,7 @@ impl CommonTestCaseBuilder {
                 use_extended_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
-                use_fixed_accounts: true,
+                use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![
                     SpecialAccountMod::NestedAta {
                         // No need to explicitly use AtaVariant::Original anymore
@@ -266,8 +268,14 @@ impl CommonTestCaseBuilder {
                 use_extended_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
-                use_fixed_accounts: true,
+                use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![SpecialAccountMod::FixedAddresses {
+                    payer: crate::common::structured_pk(
+                        &crate::common::AtaVariant::SplAta,
+                        crate::common::TestBankId::Benchmarks,
+                        base_test as u8,
+                        crate::common::AccountTypeId::Payer,
+                    ),
                     wallet: crate::common::structured_pk(
                         &crate::common::AtaVariant::SplAta,
                         crate::common::TestBankId::Benchmarks,
@@ -298,15 +306,10 @@ impl CommonTestCaseBuilder {
         } else {
             crate::common::TestBankId::Benchmarks
         };
-        let test_number = if matches!(
-            config.base_test,
-            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
-        ) {
-            // For recovery tests, use base test number (no variant offset) to ensure same addresses
-            calculate_test_number(config.base_test, TestVariant::BASE, config.setup_topup)
-        } else {
-            calculate_test_number(config.base_test, variant, config.setup_topup)
-        };
+        // For address generation, always use the actual variant for test number calculation
+        // This ensures P-ATA and SPL ATA use the same test number for the same variant,
+        // even though SPL ATA strips variant-specific instruction data
+        let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
 
         let (payer, mint, wallet) = Self::get_structured_addresses(
             &config,
@@ -314,6 +317,22 @@ impl CommonTestCaseBuilder {
             test_bank,
             test_number,
             ata_implementation,
+        );
+
+        // Log addresses to verify consistency between implementations
+        println!(
+            "🔍 Test: {} | Implementation: {} | Mint: {} | Owner: {} | Payer: {}",
+            config.base_test.name(),
+            ata_implementation.name,
+            mint.to_string()[0..8].to_string(),
+            wallet.to_string()[0..8].to_string(),
+            payer.to_string()[0..8].to_string()
+        );
+
+        // Log full addresses for debugging address consistency
+        println!(
+            "    Full addresses: Mint: {} | Owner: {} | Payer: {}",
+            mint, wallet, payer
         );
 
         // The processor will always use instruction.program_id for PDA operations
@@ -324,6 +343,9 @@ impl CommonTestCaseBuilder {
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
             // For recover operations, we need to use the SAME wallet that will be used in the accounts
+            // Use consistent variant for mint and wallet addresses
+            let consistent_variant = &crate::common::AtaVariant::SplAta;
+
             // Get the actual wallet that will be used (with optimal bump for owner_mint)
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
@@ -337,13 +359,13 @@ impl CommonTestCaseBuilder {
             } else {
                 (
                     crate::common::structured_pk(
-                        &ata_implementation.variant,
+                        consistent_variant,
                         test_bank,
                         test_number,
                         crate::common::AccountTypeId::OwnerMint,
                     ),
                     crate::common::structured_pk(
-                        &ata_implementation.variant,
+                        consistent_variant,
                         test_bank,
                         test_number,
                         crate::common::AccountTypeId::NestedMint,
@@ -353,7 +375,7 @@ impl CommonTestCaseBuilder {
 
             // For recovery tests, use a simple consistent wallet address (no optimal bump needed)
             let actual_wallet = crate::common::structured_pk(
-                &ata_implementation.variant,
+                consistent_variant,
                 test_bank,
                 test_number,
                 crate::common::AccountTypeId::Wallet,
@@ -425,59 +447,52 @@ impl CommonTestCaseBuilder {
         test_number: u8,
         ata_implementation: &AtaImplementation,
     ) -> (Pubkey, Pubkey, Pubkey) {
-        if config.use_fixed_accounts {
+        if config.use_fixed_mint_owner_payer {
             // Use fixed addresses for specific tests
-            if let Some(SpecialAccountMod::FixedAddresses { wallet, mint }) = config
+            if let Some(SpecialAccountMod::FixedAddresses {
+                payer,
+                wallet,
+                mint,
+            }) = config
                 .special_account_mods
                 .iter()
                 .find(|m| matches!(m, SpecialAccountMod::FixedAddresses { .. }))
             {
-                let payer = crate::common::structured_pk(
-                    variant,
-                    test_bank,
-                    test_number,
-                    crate::common::AccountTypeId::Payer,
-                );
-                return (payer, *mint, *wallet);
+                return (*payer, *mint, *wallet);
             }
         }
 
+        // Use consistent variant for mint and wallet to enable byte-for-byte comparison
+        let consistent_variant = &crate::common::AtaVariant::SplAta;
+
+        // Use implementation-specific variant for payer (so different implementations get different payers)
         let payer = crate::common::structured_pk(
-            variant,
+            consistent_variant,
             test_bank,
             test_number,
             crate::common::AccountTypeId::Payer,
         );
+
         let mint = crate::common::structured_pk(
-            variant,
+            consistent_variant,
             test_bank,
             test_number,
             crate::common::AccountTypeId::Mint,
         );
-        let wallet = if matches!(
-            config.base_test,
-            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
-        ) {
-            // For recovery tests, use a simple consistent wallet address (no optimal bump needed)
-            // This ensures both P-ATA and Original ATA use the exact same wallet address
-            crate::common::structured_pk(
-                variant,
-                test_bank,
-                test_number,
-                crate::common::AccountTypeId::Wallet,
-            )
-        } else {
-            // For non-recovery tests, use optimal bump as usual
-            crate::common::structured_pk_with_optimal_bump(
-                variant,
-                test_bank,
-                test_number,
-                crate::common::AccountTypeId::Wallet,
-                &ata_implementation.program_id,
-                &config.token_program,
-                &mint,
-            )
-        };
+        // For non-recovery tests, use optimal common bump across all ATA implementations
+        let all_ata_program_ids: Vec<Pubkey> = crate::common::AtaImplementation::all()
+            .iter()
+            .map(|a| a.program_id)
+            .collect();
+        let wallet = crate::common::structured_pk_with_optimal_common_bump(
+            consistent_variant,
+            test_bank,
+            test_number,
+            crate::common::AccountTypeId::Wallet,
+            &all_ata_program_ids,
+            &config.token_program,
+            &mint,
+        );
         (payer, mint, wallet)
     }
 
@@ -560,6 +575,9 @@ impl CommonTestCaseBuilder {
         let test_number =
             calculate_test_number(config.base_test, TestVariant::BASE, config.setup_topup);
 
+        // Use consistent variant for mint and wallet addresses
+        let consistent_variant = &crate::common::AtaVariant::SplAta;
+
         // Get mint addresses
         let (owner_mint, nested_mint) = if let Some(SpecialAccountMod::NestedAta {
             owner_mint,
@@ -573,13 +591,13 @@ impl CommonTestCaseBuilder {
         } else {
             (
                 crate::common::structured_pk(
-                    &ata_implementation.variant,
+                    consistent_variant,
                     test_bank,
                     test_number,
                     crate::common::AccountTypeId::OwnerMint,
                 ),
                 crate::common::structured_pk(
-                    &ata_implementation.variant,
+                    consistent_variant,
                     test_bank,
                     test_number,
                     crate::common::AccountTypeId::NestedMint,
@@ -588,7 +606,7 @@ impl CommonTestCaseBuilder {
         };
 
         let actual_wallet = crate::common::structured_pk(
-            &ata_implementation.variant,
+            consistent_variant,
             test_bank,
             test_number,
             crate::common::AccountTypeId::Wallet,

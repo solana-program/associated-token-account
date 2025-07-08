@@ -209,11 +209,11 @@ impl PerformanceTestOrchestrator {
             token_program_id,
         );
 
-        // For original ATA, use base variant (no optimizations) for comparison
-        let original_variant = TestVariant::BASE;
+        // For address generation consistency, use the same variant as P-ATA
+        // SPL ATA will strip variant-specific instruction data in adapt_instruction_data()
         let (original_ix, original_accounts) = CommonTestCaseBuilder::build_test_case(
             base_test,
-            original_variant,
+            variant, // Use same variant for consistent address generation
             spl_impl,
             token_program_id,
         );

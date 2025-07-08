@@ -108,16 +108,12 @@ impl AccountComparator for TokenAccountComparator {
             token_analysis: None,
         };
 
-        // For token accounts, analyze structure and behavioral equivalence
         if account_type == "ATA Account"
             && left.data.len() >= TOKEN_ACCOUNT_SIZE
             && right.data.len() >= TOKEN_ACCOUNT_SIZE
         {
             let analysis = self.analyze_token_account_structure(&left.data, &right.data);
-            details.behavioral_equivalent = analysis.amount_match
-                && analysis.state_match
-                && analysis.delegate_match
-                && analysis.delegated_amount_match;
+            details.behavioral_equivalent = data_match && lamports_match && owner_match;
             details.token_analysis = Some(analysis);
         }
 
@@ -467,6 +463,12 @@ impl ComparisonFormatter {
 
                     if let Some(ref token_analysis) = comparison.details.token_analysis {
                         output.extend(self.format_token_analysis(token_analysis));
+                        // Also show byte differences for token accounts to debug issues
+                        if !comparison.details.data_differences.is_empty() {
+                            output.extend(
+                                self.format_raw_differences(&comparison.details.data_differences),
+                            );
+                        }
                     } else {
                         output.extend(
                             self.format_raw_differences(&comparison.details.data_differences),

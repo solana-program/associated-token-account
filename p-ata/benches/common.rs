@@ -42,6 +42,13 @@ impl AccountBuilder {
     }
 
     pub fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
+        // Log token account data creation to debug address consistency
+        println!(
+            "🔧 Creating token account data | Mint: {} | Owner: {}",
+            mint.to_string()[0..8].to_string(),
+            owner.to_string()[0..8].to_string()
+        );
+
         build_token_account_data_core(
             mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
             owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
@@ -227,52 +234,78 @@ pub fn structured_pk_multi<const N: usize>(
     account_types.map(|account_type| structured_pk(variant, test_bank, test_number, account_type))
 }
 
-/// Find a structured public key that gives optimal bump (255) for ATA derivation
-pub fn structured_pk_with_optimal_bump(
+/// Find a pubkey that gives the same lowest bump across multiple ATA program IDs
+///
+/// This function finds a pubkey that produces the lowest common bump value across all
+/// provided ATA program IDs. It starts with bump 255 (optimal) and works down until
+/// it finds a pubkey that gives the same bump for all program IDs.
+///
+/// # Arguments
+/// * `variant` - The ATA variant to use for base key generation
+/// * `test_bank` - The test bank ID for structuring
+/// * `test_number` - The test number for structuring  
+/// * `account_type` - The account type for structuring
+/// * `ata_program_ids` - Slice of ATA program IDs to find common bump for
+/// * `token_program_id` - The token program ID for PDA derivation
+/// * `mint` - The mint pubkey for PDA derivation
+///
+/// # Returns
+/// A pubkey that gives the same lowest possible bump across all provided program IDs
+pub fn structured_pk_with_optimal_common_bump(
     variant: &AtaVariant,
     test_bank: TestBankId,
     test_number: u8,
     account_type: AccountTypeId,
-    ata_program_id: &Pubkey,
+    ata_program_ids: &[Pubkey], // can be 1; otherwise, finds pk with COMMON optimal bump
     token_program_id: &Pubkey,
     mint: &Pubkey,
 ) -> Pubkey {
-    // Start with the base structured key
-    let base_key = structured_pk(variant, test_bank, test_number, account_type);
-
-    // Test if base key already has optimal bump
-    let (_, bump) = Pubkey::find_program_address(
-        &[base_key.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-        ata_program_id,
-    );
-
-    if bump == 255 {
-        return base_key;
+    // Handle empty array case
+    if ata_program_ids.is_empty() {
+        return structured_pk(variant, test_bank, test_number, account_type);
     }
 
-    // Search for a key that gives optimal bump by modifying the last 4 bytes
-    // Start with the base key bytes (which already have the correct effective_variant logic applied)
+    // Start with the base structured key
+    let base_key = structured_pk(variant, test_bank, test_number, account_type);
     let mut key_bytes = base_key.to_bytes();
 
-    // Try different variations until we find one with bump 255
-    for modifier in 0u32..10000 {
-        // Modify the last 4 bytes with the modifier
-        let modifier_bytes = modifier.to_le_bytes();
-        key_bytes[28..32].copy_from_slice(&modifier_bytes);
+    // Try different variations until we find one with common optimal bump
+    // Start with bump 255 and work down if needed
+    for target_bump in (0..=255u8).rev() {
+        // For each target bump, try to find a key that produces it across all program IDs
+        for modifier in 0u32..10000 {
+            // Modify the last 4 bytes with the modifier
+            let modifier_bytes = modifier.to_le_bytes();
+            key_bytes[28..32].copy_from_slice(&modifier_bytes);
 
-        let test_key = Pubkey::new_from_array(key_bytes);
-        let (_, test_bump) = Pubkey::find_program_address(
-            &[test_key.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            ata_program_id,
-        );
+            let test_key = Pubkey::new_from_array(key_bytes);
 
-        if test_bump == 255 {
-            // Found optimal bump - return silently unless debug mode is enabled
-            return test_key;
+            // Check if this key produces the target bump for all program IDs
+            let bumps: Vec<u8> = ata_program_ids
+                .iter()
+                .map(|program_id| {
+                    let (_, bump) = Pubkey::find_program_address(
+                        &[test_key.as_ref(), token_program_id.as_ref(), mint.as_ref()],
+                        program_id,
+                    );
+                    bump
+                })
+                .collect();
+
+            // Check if all bumps are the same and match our target
+            if bumps.iter().all(|&bump| bump == target_bump) {
+                return test_key;
+            }
+        }
+
+        // If we found a common bump less than 255, we're done
+        // (since we're searching from highest to lowest bump)
+        if target_bump < 255 {
+            break;
         }
     }
 
-    // If we couldn't find optimal bump, return base key silently
+    // If we couldn't find a common optimal bump, return base key
     base_key
 }
 
@@ -630,7 +663,26 @@ impl AtaImplementation {
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub enum CompatibilityStatus {
-    Identical,           // Both succeeded with identical account states
+    /// Both implementations succeeded and produced byte-for-byte identical results.
+    ///
+    /// **GUARANTEES:**
+    /// - Both instructions succeeded
+    /// - All **writable accounts** (including ATA accounts) are byte-for-byte identical:
+    ///   - `data`: Complete binary equality
+    ///   - `lamports`: Exact same balance  
+    ///   - `owner`: Same program owner
+    /// - Read-only accounts are not compared (they shouldn't change)
+    ///
+    /// **IMPLEMENTATION NOTES:**
+    /// - Mint and owner addresses are intentionally kept consistent between P-ATA and SPL ATA
+    ///   tests to enable true byte-for-byte comparison of ATA accounts
+    /// - SysvarRent differences are handled separately and don't affect this status
+    ///
+    /// **DOES NOT GUARANTEE:**
+    /// - Identical compute unit consumption (tracked separately)
+    /// - Identical instruction data in the case of new p-ATA optimizations)
+    /// - Read-only account equality (not relevant for result validation)
+    Identical,
     BothRejected,        // Both failed with same error types
     OptimizedBehavior,   // P-ATA succeeded where original failed (bump optimization)
     AccountMismatch,     // Both succeeded but account states differ (concerning)

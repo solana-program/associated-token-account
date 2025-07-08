@@ -30,16 +30,30 @@ fn build_base_failure_accounts(
     ata_implementation: &AtaImplementation,
 ) -> (Pubkey, Pubkey, Pubkey) {
     let test_number = common_builders::calculate_failure_test_number(base_test, variant);
-    let [payer, mint, wallet] = crate::common::structured_pk_multi(
+
+    // Use implementation-specific variant for payer
+    let payer = crate::common::structured_pk(
         &ata_implementation.variant,
         crate::common::TestBankId::Failures,
         test_number,
-        [
-            crate::common::AccountTypeId::Payer,
-            crate::common::AccountTypeId::Mint,
-            crate::common::AccountTypeId::Wallet,
-        ],
+        crate::common::AccountTypeId::Payer,
     );
+
+    // Use consistent variant for mint and wallet to enable byte-for-byte comparison
+    let consistent_variant = &crate::common::AtaVariant::SplAta;
+    let mint = crate::common::structured_pk(
+        consistent_variant,
+        crate::common::TestBankId::Failures,
+        test_number,
+        crate::common::AccountTypeId::Mint,
+    );
+    let wallet = crate::common::structured_pk(
+        consistent_variant,
+        crate::common::TestBankId::Failures,
+        test_number,
+        crate::common::AccountTypeId::Wallet,
+    );
+
     (payer, mint, wallet)
 }
 

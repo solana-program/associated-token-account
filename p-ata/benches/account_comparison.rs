@@ -5,11 +5,82 @@ use {
 
 use crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE;
 
+// ========================== ACCOUNT TYPE ENUM ==========================
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccountType {
+    Payer,
+    AtaAccount,
+    WalletOwner,
+    Mint,
+    SystemProgram,
+    TokenProgram,
+    RentSysvar,
+    Generic(usize),
+}
+
+impl std::fmt::Display for AccountType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            AccountType::Payer => write!(f, "Payer"),
+            AccountType::AtaAccount => write!(f, "ATA Account"),
+            AccountType::WalletOwner => write!(f, "Wallet/Owner"),
+            AccountType::Mint => write!(f, "Mint"),
+            AccountType::SystemProgram => write!(f, "System Program"),
+            AccountType::TokenProgram => write!(f, "Token Program"),
+            AccountType::RentSysvar => write!(f, "Rent Sysvar"),
+            AccountType::Generic(pos) => write!(f, "Account #{}", pos),
+        }
+    }
+}
+
+impl AccountType {
+    pub fn from_position(pos: usize) -> Self {
+        match pos {
+            0 => AccountType::Payer,
+            1 => AccountType::AtaAccount,
+            2 => AccountType::WalletOwner,
+            3 => AccountType::Mint,
+            4 => AccountType::SystemProgram,
+            5 => AccountType::TokenProgram,
+            6 => AccountType::RentSysvar,
+            _ => AccountType::Generic(pos),
+        }
+    }
+}
+
+// ========================== UTILITY FUNCTIONS ==========================
+
+/// Calculate data differences between two byte arrays with a configurable limit
+fn calculate_data_differences(
+    left_data: &[u8],
+    right_data: &[u8],
+    max_differences: usize,
+) -> Vec<DataDifference> {
+    let mut differences = Vec::new();
+    let max_len = left_data.len().max(right_data.len());
+
+    for i in 0..max_len.min(max_differences) {
+        let left_byte = left_data.get(i).copied();
+        let right_byte = right_data.get(i).copied();
+
+        if left_byte != right_byte {
+            differences.push(DataDifference {
+                offset: i,
+                left_value: left_byte,
+                right_value: right_byte,
+            });
+        }
+    }
+
+    differences
+}
+
 // ========================== CORE COMPARISON TYPES ==========================
 
 #[derive(Debug, Clone)]
 pub struct AccountComparison {
-    pub account_type: String,
+    pub account_type: AccountType,
     pub position: usize,
     pub data_match: bool,
     pub lamports_match: bool,
@@ -19,8 +90,8 @@ pub struct AccountComparison {
 
 impl AccountComparison {
     pub fn is_equivalent(&self) -> bool {
-        match self.account_type.as_str() {
-            "ATA Account" => {
+        match self.account_type {
+            AccountType::AtaAccount => {
                 // For ATA accounts, we check behavioral equivalence
                 self.details.behavioral_equivalent
             }
@@ -71,7 +142,7 @@ pub trait AccountComparator {
         &self,
         left: &Account,
         right: &Account,
-        account_type: &str,
+        account_type: &AccountType,
         position: usize,
     ) -> AccountComparison;
 }
@@ -85,7 +156,7 @@ impl AccountComparator for TokenAccountComparator {
         &self,
         left: &Account,
         right: &Account,
-        account_type: &str,
+        account_type: &AccountType,
         position: usize,
     ) -> AccountComparison {
         let data_match = left.data == right.data;
@@ -108,7 +179,7 @@ impl AccountComparator for TokenAccountComparator {
             token_analysis: None,
         };
 
-        if account_type == "ATA Account"
+        if *account_type == AccountType::AtaAccount
             && left.data.len() >= TOKEN_ACCOUNT_SIZE
             && right.data.len() >= TOKEN_ACCOUNT_SIZE
         {
@@ -122,7 +193,7 @@ impl AccountComparator for TokenAccountComparator {
         }
 
         AccountComparison {
-            account_type: account_type.to_string(),
+            account_type: account_type.clone(),
             position,
             data_match,
             lamports_match,
@@ -168,24 +239,7 @@ impl TokenAccountComparator {
         left_data: &[u8],
         right_data: &[u8],
     ) -> Vec<DataDifference> {
-        let mut differences = Vec::new();
-        let max_len = left_data.len().max(right_data.len());
-
-        for i in 0..max_len.min(100) {
-            // Limit to first 100 differences
-            let left_byte = left_data.get(i).copied();
-            let right_byte = right_data.get(i).copied();
-
-            if left_byte != right_byte {
-                differences.push(DataDifference {
-                    offset: i,
-                    left_value: left_byte,
-                    right_value: right_byte,
-                });
-            }
-        }
-
-        differences
+        calculate_data_differences(left_data, right_data, 100)
     }
 }
 
@@ -196,7 +250,7 @@ impl AccountComparator for StandardAccountComparator {
         &self,
         left: &Account,
         right: &Account,
-        account_type: &str,
+        account_type: &AccountType,
         position: usize,
     ) -> AccountComparison {
         let data_match = left.data == right.data;
@@ -224,7 +278,7 @@ impl AccountComparator for StandardAccountComparator {
         }
 
         AccountComparison {
-            account_type: account_type.to_string(),
+            account_type: account_type.clone(),
             position,
             data_match,
             lamports_match,
@@ -240,24 +294,7 @@ impl StandardAccountComparator {
         left_data: &[u8],
         right_data: &[u8],
     ) -> Vec<DataDifference> {
-        let mut differences = Vec::new();
-        let max_len = left_data.len().max(right_data.len());
-
-        for i in 0..max_len.min(20) {
-            // Limit to first 20 differences for standard accounts
-            let left_byte = left_data.get(i).copied();
-            let right_byte = right_data.get(i).copied();
-
-            if left_byte != right_byte {
-                differences.push(DataDifference {
-                    offset: i,
-                    left_value: left_byte,
-                    right_value: right_byte,
-                });
-            }
-        }
-
-        differences
+        calculate_data_differences(left_data, right_data, 20)
     }
 }
 
@@ -318,12 +355,8 @@ impl AccountComparisonService {
                             }
                             _ => {
                                 // Handle missing accounts
-                                results.push(self.create_missing_account_comparison(
-                                    i,
-                                    &account_type,
-                                    left_account.is_some(),
-                                    right_account.is_some(),
-                                ));
+                                results
+                                    .push(self.create_missing_account_comparison(i, &account_type));
                             }
                         }
                     }
@@ -335,7 +368,6 @@ impl AccountComparisonService {
                         results.push(self.create_instruction_mismatch_comparison(
                             i,
                             &account_type,
-                            left_meta.is_some(),
                             meta.pubkey,
                         ));
                     }
@@ -350,13 +382,14 @@ impl AccountComparisonService {
         &self,
         left: &Account,
         right: &Account,
-        account_type: &str,
+        account_type: &AccountType,
         position: usize,
     ) -> AccountComparison {
         match account_type {
-            "ATA Account" => self
-                .token_comparator
-                .compare(left, right, account_type, position),
+            AccountType::AtaAccount => {
+                self.token_comparator
+                    .compare(left, right, account_type, position)
+            }
             _ => self
                 .standard_comparator
                 .compare(left, right, account_type, position),
@@ -366,12 +399,10 @@ impl AccountComparisonService {
     fn create_missing_account_comparison(
         &self,
         position: usize,
-        account_type: &str,
-        left_exists: bool,
-        right_exists: bool,
+        account_type: &AccountType,
     ) -> AccountComparison {
         AccountComparison {
-            account_type: account_type.to_string(),
+            account_type: account_type.clone(),
             position,
             data_match: false,
             lamports_match: false,
@@ -389,15 +420,14 @@ impl AccountComparisonService {
     fn create_instruction_mismatch_comparison(
         &self,
         position: usize,
-        account_type: &str,
-        left_exists: bool,
+        account_type: &AccountType,
         pubkey: Pubkey,
     ) -> AccountComparison {
         // Check if this is a SysvarRent difference (expected optimization)
         let is_sysvar_rent = pubkey.to_string() == "SysvarRent111111111111111111111111111111111";
 
         AccountComparison {
-            account_type: account_type.to_string(),
+            account_type: account_type.clone(),
             position,
             data_match: is_sysvar_rent, // SysvarRent differences are expected
             lamports_match: is_sysvar_rent,
@@ -412,17 +442,8 @@ impl AccountComparisonService {
         }
     }
 
-    fn get_account_type_by_position(&self, pos: usize) -> String {
-        match pos {
-            0 => "Payer".to_string(),
-            1 => "ATA Account".to_string(),
-            2 => "Wallet/Owner".to_string(),
-            3 => "Mint".to_string(),
-            4 => "System Program".to_string(),
-            5 => "Token Program".to_string(),
-            6 => "Rent Sysvar".to_string(),
-            _ => format!("Account #{}", pos),
-        }
+    fn get_account_type_by_position(&self, pos: usize) -> AccountType {
+        AccountType::from_position(pos)
     }
 
     pub fn all_accounts_equivalent(&self, comparisons: &[AccountComparison]) -> bool {
@@ -432,7 +453,7 @@ impl AccountComparisonService {
     pub fn has_expected_differences(&self, comparisons: &[AccountComparison]) -> bool {
         comparisons
             .iter()
-            .any(|c| c.account_type == "Rent Sysvar" && c.is_equivalent())
+            .any(|c| c.account_type == AccountType::RentSysvar && c.is_equivalent())
     }
 }
 

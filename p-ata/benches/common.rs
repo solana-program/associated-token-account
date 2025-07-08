@@ -237,8 +237,7 @@ pub fn structured_pk_multi<const N: usize>(
 /// Find a pubkey that gives the same lowest bump across multiple ATA program IDs
 ///
 /// This function finds a pubkey that produces the lowest common bump value across all
-/// provided ATA program IDs. It starts with bump 255 (optimal) and works down until
-/// it finds a pubkey that gives the same bump for all program IDs.
+/// provided ATA program IDs.
 ///
 /// # Arguments
 /// * `variant` - The ATA variant to use for base key generation

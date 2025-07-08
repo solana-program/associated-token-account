@@ -197,7 +197,9 @@ fn variant_to_byte(variant: &AtaVariant) -> u8 {
 }
 
 /// Generate a structured pubkey from 4-byte coordinate system
-/// [variant, test_bank, test_number, account_type]
+/// [variant, test_bank, test_number, account_type].
+/// Avoids some issues with test cross-contamination by using predictable
+/// but different keys for different tests.
 pub fn structured_pk(
     variant: &AtaVariant,
     test_bank: TestBankId,
@@ -223,7 +225,9 @@ pub fn structured_pk(
     Pubkey::new_from_array(bytes)
 }
 
-/// Generate multiple structured pubkeys at once
+/// Generate multiple structured pubkeys at once.
+/// Avoids some issues with test cross-contamination by using predictable
+/// but different keys for different tests.
 #[allow(dead_code)]
 pub fn structured_pk_multi<const N: usize>(
     variant: &AtaVariant,
@@ -238,6 +242,9 @@ pub fn structured_pk_multi<const N: usize>(
 ///
 /// This function finds a pubkey that produces the lowest common bump value across all
 /// provided ATA program IDs.
+/// 
+/// Avoids some issues with test cross-contamination by using predictable
+/// but different keys for different tests.
 ///
 /// # Arguments
 /// * `variant` - The ATA variant to use for base key generation
@@ -249,7 +256,7 @@ pub fn structured_pk_multi<const N: usize>(
 /// * `mint` - The mint pubkey for PDA derivation
 ///
 /// # Returns
-/// A pubkey that gives the same lowest possible bump across all provided program IDs
+/// A pubkey that gives the same lowest possible bump across all provided program IDs.
 pub fn structured_pk_with_optimal_common_bump(
     variant: &AtaVariant,
     test_bank: TestBankId,

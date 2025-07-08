@@ -42,7 +42,7 @@ impl AccountBuilder {
     }
 
     pub fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
-        // Log token account data creation to debug address consistency
+        #[cfg(feature = "full-debug-logs")]
         println!(
             "🔧 Creating token account data | Mint: {} | Owner: {}",
             mint.to_string()[0..8].to_string(),

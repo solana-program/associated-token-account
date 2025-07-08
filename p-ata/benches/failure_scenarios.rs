@@ -705,6 +705,7 @@ struct FailureTestRunner;
 impl FailureTestRunner {
     /// Print failure test results - detailed only for unexpected successes (security issues)
     fn print_failure_test_result_summary(result: &ComparisonResult) {
+        println!("Test: {}", result.test_name);
         // Check if we need detailed output (security issues or unexpected results)
         let needs_detailed_output = matches!(
             result.compatibility_status,

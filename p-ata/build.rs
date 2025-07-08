@@ -28,8 +28,8 @@ mod builder {
         // Build token-2022 program
         build_token_2022(&manifest_dir, &Path::new(""));
 
-        // Build original ATA program for comparison
-        build_original_ata(&manifest_dir, &Path::new(""));
+        // Build original SPL ATA program for comparison
+        build_spl_ata(&manifest_dir, &Path::new(""));
 
         // Build P-ATA program variants
         build_p_ata_variants(&manifest_dir);
@@ -97,37 +97,37 @@ mod builder {
         );
     }
 
-    fn build_original_ata(manifest_dir: &str, _programs_dir: &Path) {
-        println!("cargo:warning=Building original ATA program...");
+    fn build_spl_ata(manifest_dir: &str, _programs_dir: &Path) {
+        println!("cargo:warning=Building SPL ATA program...");
 
-        // The original ATA program is in the root program/ directory
-        let original_ata_dir = Path::new(manifest_dir)
+        // The SPL ATA program is in the root program/ directory
+        let spl_ata_dir = Path::new(manifest_dir)
             .parent()
             .expect("Failed to get parent directory")
             .join("program");
 
-        if !original_ata_dir.exists() {
+        if !spl_ata_dir.exists() {
             println!(
-                "cargo:warning=Original ATA program directory not found at {:?}, skipping...",
-                original_ata_dir
+                "cargo:warning=SPL ATA program directory not found at {:?}, skipping...",
+                spl_ata_dir
             );
             return;
         }
 
         let output = Command::new("cargo")
             .args(["build-sbf"])
-            .current_dir(&original_ata_dir)
+            .current_dir(&spl_ata_dir)
             .output()
-            .expect("Failed to execute cargo build-sbf for original ATA");
+            .expect("Failed to execute cargo build-sbf for SPL ATA");
 
         if !output.status.success() {
             panic!(
-                "Original ATA build failed: {}",
+                "SPL ATA build failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }
 
-        println!("cargo:warning=Original ATA built successfully to ../target/deploy/");
+        println!("cargo:warning=SPL ATA built successfully to ../target/deploy/");
     }
 
     fn build_p_ata_variants(manifest_dir: &str) {
@@ -137,7 +137,7 @@ mod builder {
         build_p_ata_prefunded(manifest_dir);
 
         // Build standard variant second
-        build_p_ata_standard(manifest_dir);
+        build_p_ata_legacy(manifest_dir);
     }
 
     fn build_p_ata_prefunded(manifest_dir: &str) {
@@ -204,19 +204,19 @@ mod builder {
         println!("cargo:warning=P-ATA prefunded built and renamed successfully");
     }
 
-    fn build_p_ata_standard(manifest_dir: &str) {
-        println!("cargo:warning=Building P-ATA standard variant...");
+    fn build_p_ata_legacy(manifest_dir: &str) {
+        println!("cargo:warning=Building P-ATA legacy variant...");
 
         // Build standard variant (without create-account-prefunded feature)
         let output = Command::new("cargo")
             .args(["build-sbf"])
             .current_dir(manifest_dir)
             .output()
-            .expect("Failed to execute cargo build-sbf for P-ATA standard");
+            .expect("Failed to execute cargo build-sbf for P-ATA legacy");
 
         if !output.status.success() {
             panic!(
-                "P-ATA standard build failed: {}",
+                "P-ATA legacy build failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
         }
@@ -232,7 +232,7 @@ mod builder {
                         let pubkey_bytes = &keypair_json[32..64];
                         let pubkey = Pubkey::new_from_array(pubkey_bytes.try_into().unwrap());
                         println!(
-                            "cargo:warning=Built P-ATA standard with program ID: {}",
+                            "cargo:warning=Built P-ATA legacy with program ID: {}",
                             pubkey
                         );
                     }
@@ -240,6 +240,6 @@ mod builder {
             }
         }
 
-        println!("cargo:warning=P-ATA standard built successfully to target/deploy/");
+        println!("cargo:warning=P-ATA legacy built successfully to target/deploy/");
     }
 }

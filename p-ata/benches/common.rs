@@ -129,7 +129,7 @@ impl AccountBuilder {
     pub fn token_2022_mint_data(decimals: u8) -> Vec<u8> {
         let mut data = [0u8; 82];
         let mint_authority = structured_pk(
-            &AtaVariant::Original,
+            &AtaVariant::SplAta,
             TestBankId::Benchmarks,
             123,
             AccountTypeId::Mint,
@@ -177,9 +177,9 @@ pub enum AccountTypeId {
 /// Convert AtaVariant to byte value
 fn variant_to_byte(variant: &AtaVariant) -> u8 {
     match variant {
-        AtaVariant::PAtaStandard => 0,
+        AtaVariant::PAtaLegacy => 0,
         AtaVariant::PAtaPrefunded => 1,
-        AtaVariant::Original => 2,
+        AtaVariant::SplAta => 2,
     }
 }
 
@@ -191,11 +191,22 @@ pub fn structured_pk(
     test_number: u8,
     account_type: AccountTypeId,
 ) -> Pubkey {
+    // For proper byte-for-byte comparison between implementations,
+    // use consistent addresses for wallet/owner and mint accounts
+    let effective_variant = match account_type {
+        AccountTypeId::Wallet
+        | AccountTypeId::Mint
+        | AccountTypeId::OwnerMint
+        | AccountTypeId::NestedMint => &AtaVariant::SplAta, // Always use Original for consistency
+        _ => variant, // Use actual variant for other account types (Payer, ATA addresses, etc.)
+    };
+
     let mut bytes = [0u8; 32];
-    bytes[0] = variant_to_byte(variant);
+    bytes[0] = variant_to_byte(effective_variant);
     bytes[1] = test_bank as u8;
     bytes[2] = test_number;
     bytes[3] = account_type as u8;
+
     Pubkey::new_from_array(bytes)
 }
 
@@ -220,6 +231,16 @@ pub fn structured_pk_with_optimal_bump(
     token_program_id: &Pubkey,
     mint: &Pubkey,
 ) -> Pubkey {
+    // For proper byte-for-byte comparison between implementations,
+    // use consistent addresses for wallet/owner and mint accounts
+    let effective_variant = match account_type {
+        AccountTypeId::Wallet
+        | AccountTypeId::Mint
+        | AccountTypeId::OwnerMint
+        | AccountTypeId::NestedMint => &AtaVariant::SplAta, // Always use Original for consistency
+        _ => variant, // Use actual variant for other account types (Payer, ATA addresses, etc.)
+    };
+
     // Start with the base structured key
     let base_key = structured_pk(variant, test_bank, test_number, account_type);
 
@@ -235,7 +256,7 @@ pub fn structured_pk_with_optimal_bump(
 
     // Search for a key that gives optimal bump by modifying the last 4 bytes
     let mut key_bytes = [0u8; 32];
-    key_bytes[0] = variant_to_byte(variant);
+    key_bytes[0] = variant_to_byte(effective_variant);
     key_bytes[1] = test_bank as u8;
     key_bytes[2] = test_number;
     key_bytes[3] = account_type as u8;
@@ -312,6 +333,14 @@ fn build_token_account_data_core(mint: &[u8; 32], owner: &[u8; 32], amount: u64)
 
 pub struct BenchmarkSetup;
 
+pub struct AllProgramIds {
+    pub spl_ata_program_id: Pubkey,
+    pub pata_prefunded_program_id: Pubkey,
+    pub pata_legacy_program_id: Pubkey,
+    pub token_program_id: Pubkey,
+    pub token_2022_program_id: Pubkey,
+}
+
 impl BenchmarkSetup {
     /// Setup SBF output directory and copy required files
     pub fn setup_sbf_environment(manifest_dir: &str) -> String {
@@ -367,89 +396,86 @@ impl BenchmarkSetup {
     }
 
     /// Load program keypairs and return program IDs
-    pub fn load_program_ids(manifest_dir: &str) -> (Pubkey, Pubkey) {
+    pub fn load_program_ids(manifest_dir: &str) -> AllProgramIds {
         use solana_keypair::Keypair;
         use solana_signer::Signer;
         use std::fs;
 
-        // Load ATA program keypair
-        let ata_keypair_path = format!(
-            "{}/target/deploy/pinocchio_ata_program-keypair.json",
-            manifest_dir
-        );
-        let ata_keypair_data = fs::read_to_string(&ata_keypair_path)
-            .expect("Failed to read pinocchio_ata_program-keypair.json");
-        let ata_keypair_bytes: Vec<u8> = serde_json::from_str(&ata_keypair_data)
-            .expect("Failed to parse pinocchio_ata_program keypair JSON");
-        let ata_keypair = Keypair::try_from(&ata_keypair_bytes[..])
-            .expect("Invalid pinocchio_ata_program keypair");
-        let ata_program_id = ata_keypair.pubkey();
+        let programs_to_load: Vec<(&str, &str)> = vec![
+            (
+                "/target/deploy/pinocchio_ata_program-keypair.json",
+                "pinocchio_ata_program",
+            ),
+            (
+                "/target/deploy/pinocchio_ata_program_prefunded-keypair.json",
+                "pinocchio_ata_program_prefunded",
+            ),
+            (
+                "../target/deploy/spl_associated_token_account-keypair.json",
+                "spl_associated_token_account",
+            ),
+            (
+                "/programs/token-2022/target/deploy/spl_token_2022-keypair.json",
+                "spl_token_2022",
+            ),
+            (
+                "/programs/token/target/deploy/pinocchio_token_program-keypair.json",
+                "pinocchio_token_program",
+            ),
+        ];
 
-        // Use SPL Token interface ID for token program
-        let token_program_id = Pubkey::from(spl_token_interface::program::ID);
+        let mut program_ids: AllProgramIds = AllProgramIds {
+            spl_ata_program_id: Pubkey::default(),
+            pata_prefunded_program_id: Pubkey::default(),
+            pata_legacy_program_id: Pubkey::default(),
+            token_program_id: Pubkey::default(),
+            token_2022_program_id: Pubkey::default(),
+        };
 
-        (ata_program_id, token_program_id)
-    }
-
-    /// Try to load P-ATA prefunded program ID, return None if not available
-    pub(crate) fn try_load_prefunded_ata_program_id(manifest_dir: &str) -> Option<Pubkey> {
-        use solana_keypair::Keypair;
-        use solana_signer::Signer;
-        use std::fs;
-
-        let prefunded_keypair_path = format!(
-            "{}/target/deploy/pinocchio_ata_program_prefunded-keypair.json",
-            manifest_dir
-        );
-
-        if let Ok(keypair_data) = fs::read_to_string(&prefunded_keypair_path) {
-            if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
-                if let Ok(keypair) = Keypair::try_from(&keypair_bytes[..]) {
-                    return Some(keypair.pubkey());
+        for (keypair_path, program_name) in programs_to_load {
+            let keypair_path = format!("{}/{}", manifest_dir, keypair_path);
+            let keypair_data = fs::read_to_string(&keypair_path)
+                .expect(&format!("Failed to read {}", keypair_path));
+            let keypair_bytes: Vec<u8> = serde_json::from_str(&keypair_data).expect(&format!(
+                "Failed to parse keypair JSON for {}",
+                keypair_path
+            ));
+            let keypair = Keypair::try_from(&keypair_bytes[..])
+                .expect(&format!("Invalid keypair for {}", keypair_path));
+            let program_id = keypair.pubkey();
+            println!("Loaded {} program ID: {}", program_name, program_id);
+            match program_name {
+                "pinocchio_ata_program" => program_ids.pata_legacy_program_id = program_id,
+                "pinocchio_ata_program_prefunded" => {
+                    program_ids.pata_prefunded_program_id = program_id
                 }
+                "spl_associated_token_account" => program_ids.spl_ata_program_id = program_id,
+                "spl_token_2022" => program_ids.token_2022_program_id = program_id,
+                "pinocchio_token_program" => program_ids.token_program_id = program_id,
+                _ => panic!("Unknown program name: {}", program_name),
             }
         }
 
-        None
-    }
+        if program_ids.token_program_id == Pubkey::default() {
+            panic!("Token program ID not found");
+        }
+        // Use SPL Token interface ID for p-token program
+        program_ids.token_program_id = Pubkey::from(spl_token_interface::program::ID);
 
-    /// Load all available program IDs (P-ATA variants + original)
-    pub(crate) fn load_all_program_ids(
-        manifest_dir: &str,
-    ) -> (Pubkey, Option<Pubkey>, Option<Pubkey>, Pubkey) {
-        let (standard_program_id, token_program_id) = Self::load_program_ids(manifest_dir);
-        let prefunded_program_id = Self::try_load_prefunded_ata_program_id(manifest_dir);
-        let original_program_id = Self::try_load_original_ata_program_id(manifest_dir);
-
-        (
-            standard_program_id,
-            prefunded_program_id,
-            original_program_id,
-            token_program_id,
-        )
-    }
-
-    /// Try to load original ATA program ID, return None if not available
-    pub(crate) fn try_load_original_ata_program_id(manifest_dir: &str) -> Option<Pubkey> {
-        use solana_keypair::Keypair;
-        use solana_signer::Signer;
-        use std::fs;
-
-        // Original ATA is built to ../target/deploy/ (parent directory)
-        let original_keypair_path = format!(
-            "{}/../target/deploy/spl_associated_token_account-keypair.json",
-            manifest_dir
-        );
-
-        if let Ok(keypair_data) = fs::read_to_string(&original_keypair_path) {
-            if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
-                if let Ok(keypair) = Keypair::try_from(&keypair_bytes[..]) {
-                    return Some(keypair.pubkey());
-                }
-            }
+        if program_ids.pata_prefunded_program_id == Pubkey::default() {
+            panic!("P-ATA prefunded program ID not found");
+        }
+        if program_ids.pata_legacy_program_id == Pubkey::default() {
+            panic!("P-ATA standard program ID not found");
+        }
+        if program_ids.spl_ata_program_id == Pubkey::default() {
+            panic!("SPL ATA program ID not found");
+        }
+        if program_ids.token_2022_program_id == Pubkey::default() {
+            panic!("Token 2022 program ID not found");
         }
 
-        None
+        program_ids
     }
 
     #[allow(dead_code)]
@@ -463,19 +489,19 @@ impl BenchmarkSetup {
 
         // Simple validation test - create a basic instruction and ensure it doesn't crash
         let payer = structured_pk(
-            &AtaVariant::Original,
+            &AtaVariant::SplAta,
             TestBankId::Benchmarks,
             1,
             AccountTypeId::Payer,
         );
         let mint = structured_pk(
-            &AtaVariant::Original,
+            &AtaVariant::SplAta,
             TestBankId::Benchmarks,
             1,
             AccountTypeId::Mint,
         );
         let wallet = structured_pk(
-            &AtaVariant::Original,
+            &AtaVariant::SplAta,
             TestBankId::Benchmarks,
             1,
             AccountTypeId::Wallet,
@@ -543,36 +569,46 @@ pub struct AtaImplementation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AtaVariant {
-    PAtaStandard,  // P-ATA without create-account-prefunded
+    PAtaLegacy,    // P-ATA without create-account-prefunded
     PAtaPrefunded, // P-ATA with create-account-prefunded
-    Original,      // Original SPL ATA
+    SplAta,        // Original SPL ATA
+}
+
+pub struct AllAtaImplementations {
+    pub spl_impl: AtaImplementation,
+    pub pata_prefunded_impl: AtaImplementation,
+    pub pata_legacy_impl: AtaImplementation,
+}
+
+impl AllAtaImplementations {
+    pub fn iter(&self) -> impl Iterator<Item = &AtaImplementation> {
+        vec![
+            &self.spl_impl,
+            &self.pata_prefunded_impl,
+            &self.pata_legacy_impl,
+        ]
+        .into_iter()
+    }
 }
 
 impl AtaImplementation {
-    pub fn all() -> Vec<Self> {
+    pub fn all() -> AllAtaImplementations {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let (standard_program_id, prefunded_program_id, original_program_id, _token_program_id) =
-            BenchmarkSetup::load_all_program_ids(manifest_dir);
+        let program_ids = BenchmarkSetup::load_program_ids(manifest_dir);
 
-        let mut implementations = vec![Self::p_ata_standard(standard_program_id)];
-
-        if let Some(prefunded_id) = prefunded_program_id {
-            implementations.push(Self::p_ata_prefunded(prefunded_id));
+        AllAtaImplementations {
+            spl_impl: Self::spl_ata(program_ids.spl_ata_program_id),
+            pata_prefunded_impl: Self::p_ata_prefunded(program_ids.pata_prefunded_program_id),
+            pata_legacy_impl: Self::p_ata_legacy(program_ids.pata_legacy_program_id),
         }
-
-        if let Some(original_id) = original_program_id {
-            implementations.push(Self::original(original_id));
-        }
-
-        implementations
     }
 
-    pub fn p_ata_standard(program_id: Pubkey) -> Self {
+    pub fn p_ata_legacy(program_id: Pubkey) -> Self {
         Self {
-            name: "p-ata-standard",
+            name: "p-ata-legacy",
             program_id,
             binary_name: "pinocchio_ata_program",
-            variant: AtaVariant::PAtaStandard,
+            variant: AtaVariant::PAtaLegacy,
         }
     }
 
@@ -585,25 +621,25 @@ impl AtaImplementation {
         }
     }
 
-    pub fn original(program_id: Pubkey) -> Self {
+    pub fn spl_ata(program_id: Pubkey) -> Self {
         Self {
-            name: "original",
+            name: "spl-ata",
             program_id,
             binary_name: "spl_associated_token_account",
-            variant: AtaVariant::Original,
+            variant: AtaVariant::SplAta,
         }
     }
 
     /// Adapt instruction data for this implementation
     pub fn adapt_instruction_data(&self, data: Vec<u8>) -> Vec<u8> {
         match self.variant {
-            AtaVariant::PAtaStandard | AtaVariant::PAtaPrefunded => data, // P-ATA supports bump optimizations
-            AtaVariant::Original => {
-                // Original ATA doesn't support bump optimizations, strip them
+            AtaVariant::PAtaLegacy | AtaVariant::PAtaPrefunded => data, // P-ATA supports bump optimizations
+            AtaVariant::SplAta => {
+                // SPL ATA doesn't support bump optimizations, strip them
                 match data.as_slice() {
-                    [0, _bump] => vec![0], // Create with bump -> Create without bump
-                    [2, _bump] => vec![2], // RecoverNested with bump -> RecoverNested without bump
-                    _ => data,             // Pass through other formats
+                    [0, _bump] => vec![0],
+                    [2, _bump] => vec![2],
+                    _ => data,
                 }
             }
         }
@@ -637,7 +673,7 @@ pub struct BenchmarkResult {
 pub struct ComparisonResult {
     pub test_name: String,
     pub p_ata: BenchmarkResult,
-    pub original: BenchmarkResult,
+    pub spl_ata: BenchmarkResult,
     pub compute_savings: Option<i64>,
     pub savings_percentage: Option<f64>,
     pub compatibility_status: CompatibilityStatus,
@@ -658,8 +694,30 @@ impl ComparisonRunner {
     ) -> BenchmarkResult {
         let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
 
-        // First run with quiet logging
+        // First run with quiet logging unless full-debug-logs feature is enabled
+        #[cfg(not(feature = "full-debug-logs"))]
         let result = mollusk.process_instruction(ix, accounts);
+
+        #[cfg(feature = "full-debug-logs")]
+        let result = {
+            // Enable debug logging for full-debug-logs feature
+            let _original_rust_log =
+                std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
+            std::env::set_var("RUST_LOG", "debug");
+            let _ = solana_logger::setup_with(
+                "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
+            );
+
+            let result = mollusk.process_instruction(ix, accounts);
+
+            // Restore original logging
+            std::env::set_var("RUST_LOG", &_original_rust_log);
+            let _ = solana_logger::setup_with(
+                "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+            );
+
+            result
+        };
 
         let success = matches!(
             result.program_result,
@@ -705,11 +763,14 @@ impl ComparisonRunner {
 
         let (result, output) = captured_output;
 
-        // Restore quiet logging
-        std::env::set_var("RUST_LOG", &original_rust_log);
-        let _ = solana_logger::setup_with(
-            "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
-        );
+        // Restore quiet logging unless full-debug-logs feature is enabled
+        #[cfg(not(feature = "full-debug-logs"))]
+        {
+            std::env::set_var("RUST_LOG", &original_rust_log);
+            let _ = solana_logger::setup_with(
+                "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+            );
+        }
 
         let success = matches!(
             result.program_result,
@@ -758,7 +819,7 @@ impl ComparisonRunner {
     pub fn create_mollusk_for_all_ata_implementations(token_program_id: &Pubkey) -> Mollusk {
         let mut mollusk = Mollusk::default();
 
-        for implementation in AtaImplementation::all() {
+        for implementation in AtaImplementation::all().iter() {
             mollusk.add_program(
                 &implementation.program_id,
                 implementation.binary_name,
@@ -802,7 +863,7 @@ impl ComparisonRunner {
         ComparisonResult {
             test_name: test_name.to_string(),
             p_ata: p_ata_result,
-            original: original_result,
+            spl_ata: original_result,
             compute_savings,
             savings_percentage,
             compatibility_status,
@@ -892,8 +953,8 @@ impl ComparisonRunner {
         );
         println!(
             "  Original: {:>8} CUs | {}",
-            result.original.compute_units,
-            if result.original.success {
+            result.spl_ata.compute_units,
+            if result.spl_ata.success {
                 "Success"
             } else {
                 "Failed"
@@ -918,7 +979,7 @@ impl ComparisonRunner {
             CompatibilityStatus::Identical => {
                 if result.test_name.starts_with("fail_")
                     && result.p_ata.success
-                    && result.original.success
+                    && result.spl_ata.success
                 {
                     println!("  Status: Both succeeded (TEST ISSUE - should fail!)")
                 } else {
@@ -943,11 +1004,11 @@ impl ComparisonRunner {
             CompatibilityStatus::IncompatibleSuccess => {
                 if result.test_name.starts_with("fail_") {
                     // Check which implementation actually succeeded
-                    if result.p_ata.success && !result.original.success {
+                    if result.p_ata.success && !result.spl_ata.success {
                         println!(
                             "  Status: 🚨 CRITICAL SECURITY ISSUE - P-ATA bypassed validation!"
                         )
-                    } else if !result.p_ata.success && result.original.success {
+                    } else if !result.p_ata.success && result.spl_ata.success {
                         println!("  Status: 🚨 CRITICAL SECURITY ISSUE - Original ATA bypassed validation!")
                     } else {
                         println!("  Status: 🚨 CRITICAL SECURITY ISSUE - Validation mismatch!")
@@ -964,8 +1025,8 @@ impl ComparisonRunner {
                 println!("  P-ATA Error: {}", error);
             }
         }
-        if !result.original.success {
-            if let Some(ref error) = result.original.error_message {
+        if !result.spl_ata.success {
+            if let Some(ref error) = result.spl_ata.error_message {
                 println!("  Original Error: {}", error);
             }
         }
@@ -1084,8 +1145,8 @@ impl BaseTestType {
     pub fn required_pata_variant(&self) -> AtaVariant {
         match self {
             Self::CreateTopup => AtaVariant::PAtaPrefunded, // Uses create-account-prefunded feature
-            Self::CreateTopupNoCap => AtaVariant::PAtaStandard, // Uses standard P-ATA without the feature
-            _ => AtaVariant::PAtaStandard, // All other tests use standard P-ATA
+            Self::CreateTopupNoCap => AtaVariant::PAtaLegacy, // Uses standard P-ATA without the feature
+            _ => AtaVariant::PAtaLegacy,                      // All other tests use standard P-ATA
         }
     }
 

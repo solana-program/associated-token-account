@@ -3082,7 +3082,7 @@ source = "git+https://github.com/rustopian/pinocchio.git?branch=create-account-p
 
 [[package]]
 name = "pinocchio-ata-program"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "assert_matches",
  "bs58 0.4.0",

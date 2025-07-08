@@ -1,5 +1,4 @@
 use {
-    mollusk_svm::program::loader_keys::LOADER_V3,
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
@@ -9,18 +8,11 @@ use {
 
 // Import types from parent crate's common module
 use crate::{
-    AccountBuilder, AtaImplementation, BaseTestType, TestVariant, NATIVE_LOADER_ID,
+    account_templates::*, AccountBuilder, AtaImplementation, BaseTestType, TestVariant,
     SYSTEM_PROGRAM_ID,
 };
 
 use crate::common::constants::account_sizes::*;
-
-// Helper function for topup accounts
-fn modify_account_for_topup(account: &mut Account) {
-    account.lamports = 1_000_000; // Some lamports but below rent-exempt
-    account.data = vec![]; // No data allocated
-    account.owner = SYSTEM_PROGRAM_ID; // Still system-owned
-}
 
 // ======================= CONSOLIDATED TEST CASE BUILDERS =======================
 
@@ -359,7 +351,6 @@ impl CommonTestCaseBuilder {
                 )
             };
 
-            // Use the SAME wallet calculation as in build_recover_accounts
             // For recovery tests, use a simple consistent wallet address (no optimal bump needed)
             let actual_wallet = crate::common::structured_pk(
                 &ata_implementation.variant,
@@ -501,9 +492,6 @@ impl CommonTestCaseBuilder {
         mint: Pubkey,
         _bump: u8,
     ) -> Vec<(Pubkey, Account)> {
-        let mut accounts = Vec::new();
-
-        // Handle special test cases
         if matches!(
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
@@ -519,84 +507,60 @@ impl CommonTestCaseBuilder {
             );
         }
 
-        // Standard accounts
-        accounts.push((payer, AccountBuilder::system_account(1_000_000_000)));
+        let mut account_set =
+            StandardAccountSet::new(payer, ata, wallet, mint, &config.token_program);
 
-        // ATA account
-        let ata_account = if config.setup_existing_ata {
-            AccountBuilder::token_account(&mint, &wallet, 0, &config.token_program)
-        } else {
-            let mut acc = AccountBuilder::system_account(0);
-            if config.setup_topup {
-                modify_account_for_topup(&mut acc);
-                // Debug output suppressed for cleaner test runs
-            }
-            acc
-        };
-        accounts.push((ata, ata_account));
+        // Apply configurations
+        if config.setup_existing_ata {
+            account_set = account_set.with_existing_ata(&mint, &wallet, &config.token_program);
+        }
 
-        // Wallet account
-        accounts.push((wallet, AccountBuilder::system_account(0)));
+        if config.setup_topup {
+            account_set = account_set.with_topup_ata();
+        }
 
-        // Mint account
-        let mint_account = if config.token_program
+        if config.use_extended_mint {
+            account_set = account_set.with_extended_mint(0, &config.token_program);
+        }
+
+        // Handle Token-2022 special case
+        if config.token_program
             == Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
                 "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-            )) {
-            // Use special Token-2022 mint data format
-            AccountBuilder::token_2022_mint_account(0, &config.token_program)
-        } else {
-            // Use standard or extended mint format
-            AccountBuilder::mint_account(0, &config.token_program, config.use_extended_mint)
-        };
-        accounts.push((mint, mint_account));
-
-        // Standard program accounts
-        accounts.push((
-            SYSTEM_PROGRAM_ID,
-            AccountBuilder::executable_program(NATIVE_LOADER_ID),
-        ));
-        accounts.push((
-            config.token_program,
-            AccountBuilder::executable_program(LOADER_V3),
-        ));
-
-        // Conditional accounts
-        if variant.rent_arg {
-            accounts.push((rent::id(), AccountBuilder::rent_sysvar()));
+            ))
+        {
+            account_set = account_set.with_token_2022_mint(0);
         }
+
+        // Convert to accounts vector, adding rent sysvar if needed
+        let accounts = if variant.rent_arg {
+            account_set.with_rent_sysvar().to_vec()
+        } else {
+            account_set.to_vec()
+        };
 
         accounts
     }
 
-    /// Build recover-specific accounts
+    /// Build recover-specific accounts using RecoverAccountSet template
     fn build_recover_accounts(
         config: &TestCaseConfig,
-        variant: TestVariant,
+        _variant: TestVariant,
         ata_implementation: &AtaImplementation,
         _payer: Pubkey,
         _ata: Pubkey,
         _wallet: Pubkey,
         _mint: Pubkey,
     ) -> Vec<(Pubkey, Account)> {
-        let mut accounts = Vec::new();
-
         let test_bank = if config.failure_mode.is_some() {
             crate::common::TestBankId::Failures
         } else {
             crate::common::TestBankId::Benchmarks
         };
-        let test_number = if matches!(
-            config.base_test,
-            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
-        ) {
-            // For recovery tests, use base test number (no variant offset) to ensure same addresses
-            calculate_test_number(config.base_test, TestVariant::BASE, config.setup_topup)
-        } else {
-            calculate_test_number(config.base_test, variant, config.setup_topup)
-        };
+        let test_number =
+            calculate_test_number(config.base_test, TestVariant::BASE, config.setup_topup);
 
-        // Find nested ATA configuration
+        // Get mint addresses
         let (owner_mint, nested_mint) = if let Some(SpecialAccountMod::NestedAta {
             owner_mint,
             nested_mint,
@@ -607,9 +571,6 @@ impl CommonTestCaseBuilder {
         {
             (*owner_mint, *nested_mint)
         } else {
-            // Use default values for recover tests - these should be consistent across implementations
-            // No need to worry about which variant we pass - structured_pk automatically uses
-            // consistent addresses for mint types
             (
                 crate::common::structured_pk(
                     &ata_implementation.variant,
@@ -626,8 +587,6 @@ impl CommonTestCaseBuilder {
             )
         };
 
-        // For recovery tests, use a simple consistent wallet address (no optimal bump needed)
-        // This ensures both P-ATA and Original ATA use the exact same wallet address
         let actual_wallet = crate::common::structured_pk(
             &ata_implementation.variant,
             test_bank,
@@ -635,6 +594,7 @@ impl CommonTestCaseBuilder {
             crate::common::AccountTypeId::Wallet,
         );
 
+        // Calculate addresses
         let (owner_ata, _) = Pubkey::find_program_address(
             &[
                 actual_wallet.as_ref(),
@@ -653,8 +613,7 @@ impl CommonTestCaseBuilder {
             &ata_implementation.program_id,
         );
 
-        // For recover instructions, the bump should be for the destination ATA
-        let (dest_ata, _dest_bump) = Pubkey::find_program_address(
+        let (dest_ata, _) = Pubkey::find_program_address(
             &[
                 actual_wallet.as_ref(),
                 config.token_program.as_ref(),
@@ -663,36 +622,16 @@ impl CommonTestCaseBuilder {
             &ata_implementation.program_id,
         );
 
-        // Build accounts
-        accounts.push((
+        let mut account_set = RecoverAccountSet::new(
             nested_ata,
-            AccountBuilder::token_account(&nested_mint, &owner_ata, 100, &config.token_program),
-        ));
-        accounts.push((
             nested_mint,
-            AccountBuilder::mint_account(0, &config.token_program, false),
-        ));
-        accounts.push((
             dest_ata,
-            AccountBuilder::token_account(&nested_mint, &actual_wallet, 0, &config.token_program),
-        ));
-        accounts.push((
             owner_ata,
-            AccountBuilder::token_account(&owner_mint, &actual_wallet, 0, &config.token_program),
-        ));
-        accounts.push((
             owner_mint,
-            AccountBuilder::mint_account(0, &config.token_program, false),
-        ));
-        accounts.push((actual_wallet, AccountBuilder::system_account(1_000_000_000)));
-        accounts.push((
-            config.token_program,
-            AccountBuilder::executable_program(LOADER_V3),
-        ));
-        accounts.push((
-            Pubkey::from(spl_token_interface::program::ID),
-            AccountBuilder::executable_program(LOADER_V3),
-        ));
+            actual_wallet,
+            &config.token_program,
+            100, // token amount
+        );
 
         // Handle multisig if needed
         if let Some(SpecialAccountMod::MultisigWallet { threshold, signers }) = config
@@ -700,27 +639,10 @@ impl CommonTestCaseBuilder {
             .iter()
             .find(|m| matches!(m, SpecialAccountMod::MultisigWallet { .. }))
         {
-            // Replace wallet with multisig account
-            if let Some(wallet_pos) = accounts.iter().position(|(pk, _)| *pk == actual_wallet) {
-                accounts[wallet_pos] = (
-                    actual_wallet,
-                    Account {
-                        lamports: 1_000_000_000,
-                        data: AccountBuilder::multisig_data(*threshold, signers),
-                        owner: config.token_program,
-                        executable: false,
-                        rent_epoch: 0,
-                    },
-                );
-            }
-
-            // Add signer accounts
-            for signer in signers {
-                accounts.push((*signer, AccountBuilder::system_account(1_000_000_000)));
-            }
+            account_set = account_set.with_multisig(*threshold, signers.clone());
         }
 
-        accounts
+        account_set.to_vec()
     }
 
     /// Build instruction based on configuration

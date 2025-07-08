@@ -9,7 +9,10 @@ use {
     std::env,
 };
 
+pub mod account_templates;
 pub mod constants;
+
+use account_templates::*;
 use constants::{account_sizes::*, lamports::*};
 
 // ================================ CONSTANTS ================================
@@ -234,16 +237,6 @@ pub fn structured_pk_with_optimal_bump(
     token_program_id: &Pubkey,
     mint: &Pubkey,
 ) -> Pubkey {
-    // For proper byte-for-byte comparison between implementations,
-    // use consistent addresses for wallet/owner and mint accounts
-    let effective_variant = match account_type {
-        AccountTypeId::Wallet
-        | AccountTypeId::Mint
-        | AccountTypeId::OwnerMint
-        | AccountTypeId::NestedMint => &AtaVariant::SplAta, // Always use Original for consistency
-        _ => variant, // Use actual variant for other account types (Payer, ATA addresses, etc.)
-    };
-
     // Start with the base structured key
     let base_key = structured_pk(variant, test_bank, test_number, account_type);
 
@@ -258,11 +251,8 @@ pub fn structured_pk_with_optimal_bump(
     }
 
     // Search for a key that gives optimal bump by modifying the last 4 bytes
-    let mut key_bytes = [0u8; 32];
-    key_bytes[0] = variant_to_byte(effective_variant);
-    key_bytes[1] = test_bank as u8;
-    key_bytes[2] = test_number;
-    key_bytes[3] = account_type as u8;
+    // Start with the base key bytes (which already have the correct effective_variant logic applied)
+    let mut key_bytes = base_key.to_bytes();
 
     // Try different variations until we find one with bump 255
     for modifier in 0u32..10000 {
@@ -518,23 +508,7 @@ impl BenchmarkSetup {
             program_id,
         );
 
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            (ata, AccountBuilder::system_account(0)),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
+        let accounts = StandardAccountSet::new(payer, ata, wallet, mint, token_program_id).to_vec();
 
         let ix = Instruction {
             program_id: *program_id,

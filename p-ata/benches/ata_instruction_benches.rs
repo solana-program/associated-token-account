@@ -13,8 +13,6 @@ use common_builders::CommonTestCaseBuilder;
 mod account_comparison;
 use account_comparison::{AccountComparisonService, ComparisonFormatter};
 
-use crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE;
-
 // ============================ SETUP AND CONFIGURATION =============================
 
 impl BenchmarkSetup {

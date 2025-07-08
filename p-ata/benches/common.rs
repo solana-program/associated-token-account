@@ -816,14 +816,11 @@ impl BenchmarkRunner {
     {
         use std::sync::{Arc, Mutex};
 
-        // Create a buffer to capture output
         let captured = Arc::new(Mutex::new(Vec::new()));
         let captured_clone = captured.clone();
 
-        // Execute the function - RUST_LOG should already be set appropriately by caller
         let result = f();
 
-        // Extract captured output
         let captured_text = if let Ok(buffer) = captured_clone.lock() {
             String::from_utf8_lossy(&buffer).to_string()
         } else {
@@ -901,20 +898,12 @@ impl BenchmarkRunner {
 
         match (p_ata_result.success, original_result.success) {
             (true, true) => {
-                // Both succeeded - check if this is the Token-2022 test which has expected differences
-                if p_ata_result.test_name.starts_with("fail_") {
-                    // CRITICAL: Both implementations succeeded in a failure test - this is a test issue!
-                    CompatibilityStatus::Identical
-                } else {
-                    // For other tests, assume identical if both succeeded
-                    CompatibilityStatus::Identical
-                }
+                CompatibilityStatus::Identical
             }
             (false, false) => {
                 // Both failed - check if they failed with same error type
                 match (&p_ata_result.error_message, &original_result.error_message) {
                     (Some(p_ata_err), Some(orig_err)) => {
-                        // Simple heuristic: if error messages contain similar keywords, consider them compatible
                         if Self::errors_are_compatible(p_ata_err, orig_err) {
                             CompatibilityStatus::BothRejected
                         } else {
@@ -949,7 +938,6 @@ impl BenchmarkRunner {
 
     /// Check if two error messages are compatible (same type of error)
     fn errors_are_compatible(p_ata_err: &str, orig_err: &str) -> bool {
-        // Check for exact match - identical errors are always compatible
         p_ata_err == orig_err
     }
 
@@ -979,13 +967,13 @@ impl BenchmarkRunner {
         );
 
         // Savings analysis (mainly relevant for successful tests)
-        if let (Some(savings), Some(percentage)) =
-            (result.compute_savings, result.savings_percentage)
+        if let Some(savings) =
+            result.compute_savings
         {
             if savings > 0 {
-                println!("  Savings: {:>8} CUs ({:.1}%)", savings, percentage);
+                println!("  Savings: {:>8} CUs ", savings,);
             } else if savings < 0 {
-                println!("  Overhead: {:>7} CUs ({:.1}%)", -savings, -percentage);
+                println!("  Overhead: {:>7} CUs ", -savings,);
             } else {
                 println!("  Equal compute usage");
             }

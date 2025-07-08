@@ -10,6 +10,8 @@ use common::*;
 mod common_builders;
 use common_builders::CommonTestCaseBuilder;
 
+use crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE;
+
 // ============================ SETUP AND CONFIGURATION =============================
 
 impl BenchmarkSetup {
@@ -29,7 +31,7 @@ impl BenchmarkSetup {
             ata_implementation,
             token_program_id,
         );
-        println!("Running test case: {:?}", test_ix);
+        // println!("Running test case: {:?}", test_ix);
         let result = mollusk.process_instruction(&test_ix, &test_accounts);
 
         match result.program_result {
@@ -728,8 +730,8 @@ impl ComparisonRunner {
                                 // For token accounts, use behavioral equivalence check
                                 let account_type = Self::get_account_type_by_position(i);
                                 if account_type == "ATA Account"
-                                    && p_ata_acc.data.len() >= 165
-                                    && spl_ata_acc.data.len() >= 165
+                                    && p_ata_acc.data.len() >= TOKEN_ACCOUNT_SIZE
+                                    && spl_ata_acc.data.len() >= TOKEN_ACCOUNT_SIZE
                                 {
                                     if !Self::validate_token_account_behavioral_equivalence_quiet(
                                         &p_ata_acc.data,
@@ -943,7 +945,10 @@ impl ComparisonRunner {
             spl_ata_data.len()
         ));
 
-        if account_type == "ATA Account" && p_ata_data.len() >= 165 && spl_ata_data.len() >= 165 {
+        if account_type == "ATA Account"
+            && p_ata_data.len() >= TOKEN_ACCOUNT_SIZE
+            && spl_ata_data.len() >= TOKEN_ACCOUNT_SIZE
+        {
             // For ATA accounts, do structural analysis
             let structural_output =
                 Self::compare_token_account_structure_quiet(p_ata_data, spl_ata_data);
@@ -1016,7 +1021,7 @@ impl ComparisonRunner {
         output.push("     🔍 Token Account Structure Analysis:".to_string());
 
         // Parse token account structure (based on spl-token layout)
-        if p_ata_data.len() >= 165 && spl_ata_data.len() >= 165 {
+        if p_ata_data.len() >= TOKEN_ACCOUNT_SIZE && spl_ata_data.len() >= TOKEN_ACCOUNT_SIZE {
             // Mint and Owner are expected to be different (different test inputs)
             let p_ata_mint = &p_ata_data[0..32];
             let spl_ata_mint = &spl_ata_data[0..32];
@@ -1111,7 +1116,7 @@ impl ComparisonRunner {
         spl_ata_data: &[u8],
         output: &mut Vec<String>,
     ) -> bool {
-        if p_ata_data.len() < 165 || spl_ata_data.len() < 165 {
+        if p_ata_data.len() < TOKEN_ACCOUNT_SIZE || spl_ata_data.len() < TOKEN_ACCOUNT_SIZE {
             return false;
         }
 

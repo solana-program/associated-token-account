@@ -9,6 +9,9 @@ use {
     std::env,
 };
 
+pub mod constants;
+use constants::{account_sizes::*, lamports::*};
+
 // ================================ CONSTANTS ================================
 
 pub const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
@@ -58,7 +61,7 @@ impl AccountBuilder {
         let mut data = Self::mint_data(decimals);
         data.resize(required_len, 0u8);
 
-        let cursor = 82;
+        let cursor = MINT_ACCOUNT_SIZE;
         let immutable_owner_header = [7u8, 0u8, 0u8, 0u8];
         data[cursor..cursor + 4].copy_from_slice(&immutable_owner_header);
 
@@ -94,7 +97,7 @@ impl AccountBuilder {
         token_program_id: &Pubkey,
     ) -> Account {
         Account {
-            lamports: 2_000_000, // rent-exempt
+            lamports: TOKEN_ACCOUNT_RENT_EXEMPT,
             data: Self::token_account_data(mint, owner, amount),
             owner: *token_program_id,
             executable: false,
@@ -104,7 +107,7 @@ impl AccountBuilder {
 
     pub fn mint_account(decimals: u8, token_program_id: &Pubkey, extended: bool) -> Account {
         Account {
-            lamports: 1_000_000_000,
+            lamports: ONE_SOL,
             data: if extended {
                 Self::extended_mint_data(decimals)
             } else {
@@ -118,7 +121,7 @@ impl AccountBuilder {
 
     pub fn token_2022_mint_account(decimals: u8, token_program_id: &Pubkey) -> Account {
         Account {
-            lamports: 1_000_000_000,
+            lamports: ONE_SOL,
             data: Self::token_2022_mint_data(decimals),
             owner: *token_program_id,
             executable: false,
@@ -127,7 +130,7 @@ impl AccountBuilder {
     }
 
     pub fn token_2022_mint_data(decimals: u8) -> Vec<u8> {
-        let mut data = [0u8; 82];
+        let mut data = [0u8; MINT_ACCOUNT_SIZE];
         let mint_authority = structured_pk(
             &AtaVariant::SplAta,
             TestBankId::Benchmarks,
@@ -309,8 +312,8 @@ pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> 
 }
 
 #[inline(always)]
-fn build_mint_data_core(decimals: u8) -> [u8; 82] {
-    let mut data = [0u8; 82];
+fn build_mint_data_core(decimals: u8) -> [u8; MINT_ACCOUNT_SIZE] {
+    let mut data = [0u8; MINT_ACCOUNT_SIZE];
     data[0..4].copy_from_slice(&0u32.to_le_bytes());
     data[44] = decimals;
     data[45] = 1;
@@ -320,8 +323,12 @@ fn build_mint_data_core(decimals: u8) -> [u8; 82] {
 }
 
 #[inline(always)]
-fn build_token_account_data_core(mint: &[u8; 32], owner: &[u8; 32], amount: u64) -> [u8; 165] {
-    let mut data = [0u8; 165];
+fn build_token_account_data_core(
+    mint: &[u8; 32],
+    owner: &[u8; 32],
+    amount: u64,
+) -> [u8; TOKEN_ACCOUNT_SIZE] {
+    let mut data = [0u8; TOKEN_ACCOUNT_SIZE];
     data[0..32].copy_from_slice(mint);
     data[32..64].copy_from_slice(owner);
     data[64..72].copy_from_slice(&amount.to_le_bytes());
@@ -443,7 +450,7 @@ impl BenchmarkSetup {
             let keypair = Keypair::try_from(&keypair_bytes[..])
                 .expect(&format!("Invalid keypair for {}", keypair_path));
             let program_id = keypair.pubkey();
-            println!("Loaded {} program ID: {}", program_name, program_id);
+            // println!("Loaded {} program ID: {}", program_name, program_id);
             match program_name {
                 "pinocchio_ata_program" => program_ids.pata_legacy_program_id = program_id,
                 "pinocchio_ata_program_prefunded" => {

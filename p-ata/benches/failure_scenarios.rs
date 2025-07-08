@@ -154,7 +154,7 @@ impl FailureTestBuilder {
             TestVariant::BASE,
             ata_impl,
             token_program_id,
-            FailureMode::InvalidMintStructure(50), // Wrong size - should be 82
+            FailureMode::InvalidMintStructure(50), // Wrong size - should be MINT_ACCOUNT_SIZE
         )
     }
 
@@ -491,7 +491,7 @@ impl FailureTestBuilder {
                 ata,
                 Account {
                     lamports: 2_000_000,
-                    data: vec![0u8; 100], // Wrong size - should be 165
+                    data: vec![0u8; 100], // Wrong size - should be TOKEN_ACCOUNT_SIZE
                     owner: *token_program_id,
                     executable: false,
                     rent_epoch: 0,

@@ -13,6 +13,8 @@ use crate::{
     SYSTEM_PROGRAM_ID,
 };
 
+use crate::common::constants::account_sizes::*;
+
 // Helper function for topup accounts
 fn modify_account_for_topup(account: &mut Account) {
     account.lamports = 1_000_000; // Some lamports but below rent-exempt
@@ -839,7 +841,7 @@ impl CommonTestCaseBuilder {
                 ])
                 .expect("failed to calculate Token-2022 account length") as u16
             } else if config.use_extended_mint {
-                170 // Standard extended mint case
+                170 // with immutable owner extension
             } else {
                 165 // Standard token account size
             };
@@ -942,7 +944,7 @@ impl CommonTestCaseBuilder {
             FailureMode::InvalidTokenAccountStructure => {
                 // Set ATA with invalid token account data
                 if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
-                    accounts[pos].1.data = vec![0xFF; 165]; // Invalid data
+                    accounts[pos].1.data = vec![0xFF; TOKEN_ACCOUNT_SIZE]; // Invalid data
                     accounts[pos].1.owner = config.token_program;
                     accounts[pos].1.lamports = 2_000_000;
                 }
@@ -965,8 +967,8 @@ impl CommonTestCaseBuilder {
                 if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
                     let new_account = Account {
                         lamports: 2_000_000,
-                        data: vec![0u8; 165], // Non-empty data indicates "already in use"
-                        owner: *wrong_owner,  // Should be SYSTEM_PROGRAM_ID for this test
+                        data: vec![0u8; TOKEN_ACCOUNT_SIZE], // Non-empty data indicates "already in use"
+                        owner: *wrong_owner, // Should be SYSTEM_PROGRAM_ID for this test
                         executable: false,
                         rent_epoch: 0,
                     };
@@ -1033,7 +1035,7 @@ impl CommonTestCaseBuilder {
                 // Set ATA with invalid extension data
                 if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == ata) {
                     let mut data = vec![0u8; 200];
-                    data[165..169].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes()); // Invalid extension type
+                    data[TOKEN_ACCOUNT_SIZE..169].copy_from_slice(&0xFFFFFFFFu32.to_le_bytes()); // Invalid extension type
                     accounts[pos].1.data = data;
                     accounts[pos].1.owner = config.token_program;
                     accounts[pos].1.lamports = 2_000_000;
@@ -1106,7 +1108,7 @@ impl CommonTestCaseBuilder {
             FailureMode::InvalidMultisigData => {
                 // Set multisig with invalid data
                 if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == wallet) {
-                    accounts[pos].1.data = vec![0xFF; 355]; // Invalid multisig data
+                    accounts[pos].1.data = vec![0xFF; MULTISIG_ACCOUNT_SIZE]; // Invalid multisig data
                     accounts[pos].1.owner = config.token_program;
                 }
             }
@@ -1123,7 +1125,7 @@ impl CommonTestCaseBuilder {
                 // Set multisig as uninitialized
                 if let Some(pos) = accounts.iter().position(|(pk, _)| *pk == wallet) {
                     let signer1 = Pubkey::new_unique();
-                    let mut data = vec![0u8; 355];
+                    let mut data = vec![0u8; MULTISIG_ACCOUNT_SIZE];
                     data[0] = 1; // m = 1
                     data[1] = 1; // n = 1
                     data[2] = 0; // is_initialized = false

@@ -242,7 +242,7 @@ pub fn structured_pk_multi<const N: usize>(
 ///
 /// This function finds a pubkey that produces the lowest common bump value across all
 /// provided ATA program IDs.
-/// 
+///
 /// Avoids some issues with test cross-contamination by using predictable
 /// but different keys for different tests.
 ///
@@ -904,9 +904,7 @@ impl BenchmarkRunner {
         }
 
         match (p_ata_result.success, original_result.success) {
-            (true, true) => {
-                CompatibilityStatus::Identical
-            }
+            (true, true) => CompatibilityStatus::Identical,
             (false, false) => {
                 // Both failed - check if they failed with same error type
                 match (&p_ata_result.error_message, &original_result.error_message) {
@@ -974,9 +972,7 @@ impl BenchmarkRunner {
         );
 
         // Savings analysis (mainly relevant for successful tests)
-        if let Some(savings) =
-            result.compute_savings
-        {
+        if let Some(savings) = result.compute_savings {
             if savings > 0 {
                 println!("  Savings: {:>8} CUs ", savings,);
             } else if savings < 0 {

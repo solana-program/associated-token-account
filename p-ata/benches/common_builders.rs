@@ -340,11 +340,7 @@ impl CommonTestCaseBuilder {
         // even though SPL ATA strips variant-specific instruction data
         let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
 
-        let (payer, mint, wallet) = Self::get_structured_addresses(
-            &config,
-            test_bank,
-            test_number,
-        );
+        let (payer, mint, wallet) = Self::get_structured_addresses(&config, test_bank, test_number);
 
         #[cfg(feature = "full-debug-logs")]
         {

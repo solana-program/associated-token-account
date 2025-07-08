@@ -1,5 +1,4 @@
 use {
-    mollusk_svm::program::loader_keys::LOADER_V3,
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_logger,
@@ -8,7 +7,7 @@ use {
 
 #[path = "common.rs"]
 mod common;
-use common::*;
+use common::{account_templates::*, *};
 
 #[path = "common_builders.rs"]
 mod common_builders;
@@ -154,7 +153,7 @@ impl FailureTestBuilder {
             TestVariant::BASE,
             ata_impl,
             token_program_id,
-            FailureMode::InvalidMintStructure(50), // Wrong size - should be 82
+            FailureMode::InvalidMintStructure(50), // Wrong size - should be MINT_ACCOUNT_SIZE
         )
     }
 
@@ -269,38 +268,17 @@ impl FailureTestBuilder {
                 ],
             );
 
-        let accounts = vec![
-            // Wrong nested ATA address (doesn't match proper derivation)
-            (
-                wrong_nested_ata,
-                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
-            ),
-            (
-                nested_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                dest_ata,
-                AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_ata,
-                AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (wallet, AccountBuilder::system_account(1_000_000_000)),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-            (
-                Pubkey::from(spl_token_interface::program::ID),
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
+        let mut accounts = RecoverAccountSet::new(
+            wrong_nested_ata, // Use wrong address as provided
+            nested_mint,
+            dest_ata,
+            owner_ata,
+            owner_mint,
+            wallet,
+            token_program_id,
+            100, // token amount
+        )
+        .to_vec();
 
         let ix = Instruction {
             program_id: ata_impl.program_id,
@@ -344,38 +322,17 @@ impl FailureTestBuilder {
                 ],
             );
 
-        let accounts = vec![
-            (
-                nested_ata,
-                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
-            ),
-            (
-                nested_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            // Wrong destination ATA
-            (
-                wrong_dest_ata,
-                AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_ata,
-                AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (wallet, AccountBuilder::system_account(1_000_000_000)),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-            (
-                Pubkey::from(spl_token_interface::program::ID),
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
+        let accounts = RecoverAccountSet::new(
+            nested_ata,
+            nested_mint,
+            wrong_dest_ata, // Use wrong destination address as provided
+            owner_ata,
+            owner_mint,
+            wallet,
+            token_program_id,
+            100, // token amount
+        )
+        .to_vec();
 
         let ix = Instruction {
             program_id: ata_impl.program_id,
@@ -419,37 +376,17 @@ impl FailureTestBuilder {
                 ],
             );
 
-        let accounts = vec![
-            (
-                nested_ata,
-                AccountBuilder::token_account(&nested_mint, &owner_ata, 100, token_program_id),
-            ),
-            (
-                nested_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                dest_ata,
-                AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_ata,
-                AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
-            ),
-            (
-                owner_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (wallet, AccountBuilder::system_account(1_000_000_000)),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-            (
-                Pubkey::from(spl_token_interface::program::ID),
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
+        let accounts = RecoverAccountSet::new(
+            nested_ata,
+            nested_mint,
+            dest_ata,
+            owner_ata,
+            owner_mint,
+            wallet,
+            token_program_id,
+            100, // token amount
+        )
+        .to_vec();
 
         let ix = Instruction {
             program_id: ata_impl.program_id,
@@ -484,33 +421,12 @@ impl FailureTestBuilder {
             &ata_impl.program_id,
         );
 
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            // ATA exists but wrong size
-            (
-                ata,
-                Account {
-                    lamports: 2_000_000,
-                    data: vec![0u8; 100], // Wrong size - should be 165
-                    owner: *token_program_id,
-                    executable: false,
-                    rent_epoch: 0,
-                },
-            ),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
+        let mut accounts = StandardAccountSet::new(payer, ata, wallet, mint, token_program_id)
+            .with_existing_ata(&mint, &wallet, token_program_id)
+            .to_vec();
+
+        // Apply failure: set ATA to wrong size
+        FailureAccountBuilder::set_wrong_data_size(&mut accounts, ata, 100);
 
         let ix = Instruction {
             program_id: ata_impl.program_id,
@@ -553,31 +469,20 @@ impl FailureTestBuilder {
             &ata_impl.program_id,
         );
 
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            // ATA points to wrong mint
-            (
-                ata,
-                AccountBuilder::token_account(&wrong_mint, &wallet, 0, token_program_id),
-            ),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                wrong_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
+        let mut accounts =
+            StandardAccountSet::new(payer, ata, wallet, mint, token_program_id).to_vec();
+
+        // Replace ATA with one pointing to wrong mint
+        if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == ata) {
+            accounts[pos].1 =
+                AccountBuilder::token_account(&wrong_mint, &wallet, 0, token_program_id);
+        }
+
+        // Add the wrong mint account
+        accounts.push((
+            wrong_mint,
+            AccountBuilder::mint_account(0, token_program_id, false),
+        ));
 
         let ix = Instruction {
             program_id: ata_impl.program_id,
@@ -620,27 +525,14 @@ impl FailureTestBuilder {
             &ata_impl.program_id,
         );
 
-        let accounts = vec![
-            (payer, AccountBuilder::system_account(1_000_000_000)),
-            // ATA has wrong owner
-            (
-                ata,
-                AccountBuilder::token_account(&mint, &wrong_owner, 0, token_program_id),
-            ),
-            (wallet, AccountBuilder::system_account(0)),
-            (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
-            (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(NATIVE_LOADER_ID),
-            ),
-            (
-                *token_program_id,
-                AccountBuilder::executable_program(LOADER_V3),
-            ),
-        ];
+        let mut accounts =
+            StandardAccountSet::new(payer, ata, wallet, mint, token_program_id).to_vec();
+
+        // Replace ATA with one having wrong owner
+        if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == ata) {
+            accounts[pos].1 =
+                AccountBuilder::token_account(&mint, &wrong_owner, 0, token_program_id);
+        }
 
         let ix = Instruction {
             program_id: ata_impl.program_id,

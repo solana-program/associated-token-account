@@ -10,6 +10,9 @@ use common::*;
 mod common_builders;
 use common_builders::CommonTestCaseBuilder;
 
+mod account_comparison;
+use account_comparison::{AccountComparisonService, ComparisonFormatter};
+
 use crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE;
 
 // ============================ SETUP AND CONFIGURATION =============================
@@ -37,7 +40,7 @@ impl BenchmarkSetup {
         match result.program_result {
             mollusk_svm::result::ProgramResult::Success => {
                 println!(
-                    "✓ Benchmark setup validation passed for {}",
+                    "✓ ATA setup validation passed for {}",
                     ata_implementation.name
                 );
                 Ok(())
@@ -52,9 +55,9 @@ impl BenchmarkSetup {
 
 // =============================== COMPARISON FRAMEWORK ===============================
 
-struct ComparisonRunner;
+struct PerformanceTestOrchestrator;
 
-impl ComparisonRunner {
+impl PerformanceTestOrchestrator {
     /// Select the appropriate P-ATA implementation for a given test
     fn select_pata_implementation<'a>(
         base_test: BaseTestType,
@@ -217,7 +220,7 @@ impl ComparisonRunner {
 
         // Handle special cases where original ATA doesn't support the feature
         let mut original_result = if Self::original_supports_test(base_test) {
-            common::ComparisonRunner::run_single_benchmark(
+            common::BenchmarkRunner::run_single_benchmark(
                 test_name,
                 &original_ix,
                 &original_accounts,
@@ -235,7 +238,7 @@ impl ComparisonRunner {
             }
         };
 
-        let mut p_ata_result = common::ComparisonRunner::run_single_benchmark(
+        let mut p_ata_result = common::BenchmarkRunner::run_single_benchmark(
             test_name,
             &p_ata_ix,
             &p_ata_accounts,
@@ -260,7 +263,7 @@ impl ComparisonRunner {
 
         if needs_debug_logging {
             // Re-run with debug logging to capture verbose output
-            p_ata_result = common::ComparisonRunner::run_single_benchmark_with_debug(
+            p_ata_result = common::BenchmarkRunner::run_single_benchmark_with_debug(
                 test_name,
                 &p_ata_ix,
                 &p_ata_accounts,
@@ -270,7 +273,7 @@ impl ComparisonRunner {
 
             if Self::original_supports_test(base_test) {
                 // Also re-run original ATA with debug logging
-                original_result = common::ComparisonRunner::run_single_benchmark_with_debug(
+                original_result = common::BenchmarkRunner::run_single_benchmark_with_debug(
                     test_name,
                     &original_ix,
                     &original_accounts,
@@ -418,9 +421,6 @@ impl ComparisonRunner {
             common::CompatibilityStatus::Identical => {
                 println!("✅ Byte-for-Byte Identical",);
             }
-            common::CompatibilityStatus::ExpectedDifferences => {
-                println!("📊 Expected differences",);
-            }
             common::CompatibilityStatus::BothRejected => {
                 println!("❌ Both failed (compatible)");
             }
@@ -511,7 +511,6 @@ impl ComparisonRunner {
             match result.compatibility_status {
                 common::CompatibilityStatus::Identical => identical_count += 1,
                 common::CompatibilityStatus::OptimizedBehavior => optimized_count += 1,
-                common::CompatibilityStatus::ExpectedDifferences => expected_diff_count += 1,
                 common::CompatibilityStatus::BothRejected => both_rejected_count += 1,
                 common::CompatibilityStatus::AccountMismatch => {
                     account_mismatch_count += 1;
@@ -585,19 +584,19 @@ impl ComparisonRunner {
         token_program_id: &Pubkey,
     ) -> ComparisonResult {
         // Start with basic comparison
-        let mut comparison = common::ComparisonRunner::create_comparison_result(
+        let mut comparison = common::BenchmarkRunner::create_comparison_result(
             test_name,
             p_ata_result.clone(),
             spl_ata_result.clone(),
         );
 
-        // If both succeeded, perform byte-for-byte account state comparison
+        // If both succeeded, perform account state comparison using new service
         if p_ata_result.success && spl_ata_result.success {
-            let mollusk = common::ComparisonRunner::create_mollusk_for_all_ata_implementations(
+            let mollusk = common::BenchmarkRunner::create_mollusk_for_all_ata_implementations(
                 token_program_id,
             );
 
-            // Execute P-ATA instruction and capture final account states
+            // Execute both instructions and capture final account states
             let p_ata_execution = mollusk.process_instruction(p_ata_ix, p_ata_accounts);
             let spl_ata_execution = mollusk.process_instruction(spl_ata_ix, spl_ata_accounts);
 
@@ -608,594 +607,47 @@ impl ComparisonRunner {
                 &p_ata_execution.program_result,
                 &spl_ata_execution.program_result,
             ) {
-                // Check if this is just a SysvarRent difference (expected P-ATA optimization)
-                let has_sysvar_rent_difference =
-                    Self::has_sysvar_rent_difference(p_ata_ix, spl_ata_ix);
-
-                // Compare account states byte-for-byte
-                let accounts_match = Self::compare_account_states(
+                // Use the new comparison service
+                let comparison_service = AccountComparisonService::new();
+                let comparison_results = comparison_service.compare_account_states(
                     &p_ata_execution.resulting_accounts,
                     &spl_ata_execution.resulting_accounts,
-                    p_ata_ix,
-                    spl_ata_ix,
+                    &p_ata_ix.accounts,
+                    &spl_ata_ix.accounts,
                 );
 
-                if !accounts_match {
-                    // Check if it's just SysvarRent differences (expected optimization)
-                    if has_sysvar_rent_difference
-                        && Self::accounts_match_except_sysvar_rent(
-                            &p_ata_execution.resulting_accounts,
-                            &spl_ata_execution.resulting_accounts,
-                            p_ata_ix,
-                            spl_ata_ix,
-                        )
-                    {
-                        comparison.compatibility_status =
-                            common::CompatibilityStatus::ExpectedDifferences;
-                    } else {
-                        // Real account state mismatch
-                        comparison.compatibility_status =
-                            common::CompatibilityStatus::AccountMismatch;
+                // Determine compatibility based on comparison results
+                let all_equivalent =
+                    comparison_service.all_accounts_equivalent(&comparison_results);
+                let has_expected_differences =
+                    comparison_service.has_expected_differences(&comparison_results);
+
+                if !all_equivalent {
+                    comparison.compatibility_status = common::CompatibilityStatus::AccountMismatch;
+                }
+
+                // Format and display comparison results if there are any issues
+                if !all_equivalent || has_expected_differences {
+                    let formatter = ComparisonFormatter::new();
+                    let debug_output = formatter.format_comparison_results(&comparison_results);
+
+                    if !debug_output.is_empty() {
+                        println!("\nACCOUNT STATE COMPARISON:");
+                        for line in debug_output {
+                            println!("{}", line);
+                        }
+                    }
+
+                    if !all_equivalent {
+                        println!("\n❌ Account state differences detected!");
+                    } else if has_expected_differences {
+                        println!("\n📊 Expected differences detected (P-ATA optimizations)");
                     }
                 }
             }
         }
 
         comparison
-    }
-
-    fn has_sysvar_rent_difference(p_ata_ix: &Instruction, original_ix: &Instruction) -> bool {
-        let sysvar_rent = "SysvarRent111111111111111111111111111111111"
-            .parse::<Pubkey>()
-            .unwrap();
-
-        let p_ata_has_rent = p_ata_ix
-            .accounts
-            .iter()
-            .any(|meta| meta.pubkey == sysvar_rent);
-        let original_has_rent = original_ix
-            .accounts
-            .iter()
-            .any(|meta| meta.pubkey == sysvar_rent);
-
-        p_ata_has_rent != original_has_rent
-    }
-
-    fn accounts_match_except_sysvar_rent(
-        p_ata_accounts: &[(Pubkey, Account)],
-        spl_ata_accounts: &[(Pubkey, Account)],
-        p_ata_ix: &Instruction,
-        spl_ata_ix: &Instruction,
-    ) -> bool {
-        let sysvar_rent = "SysvarRent111111111111111111111111111111111"
-            .parse::<Pubkey>()
-            .unwrap();
-
-        // Filter out SysvarRent accounts and compare the rest
-        let p_ata_filtered: Vec<_> = p_ata_accounts
-            .iter()
-            .filter(|(pubkey, _)| *pubkey != sysvar_rent)
-            .collect();
-        let spl_ata_filtered: Vec<_> = spl_ata_accounts
-            .iter()
-            .filter(|(pubkey, _)| *pubkey != sysvar_rent)
-            .collect();
-
-        // Create filtered instructions without SysvarRent
-        let p_ata_ix_filtered = Instruction {
-            program_id: p_ata_ix.program_id,
-            accounts: p_ata_ix
-                .accounts
-                .iter()
-                .filter(|meta| meta.pubkey != sysvar_rent)
-                .cloned()
-                .collect(),
-            data: p_ata_ix.data.clone(),
-        };
-
-        let spl_ata_ix_filtered = Instruction {
-            program_id: spl_ata_ix.program_id,
-            accounts: spl_ata_ix
-                .accounts
-                .iter()
-                .filter(|meta| meta.pubkey != sysvar_rent)
-                .cloned()
-                .collect(),
-            data: spl_ata_ix.data.clone(),
-        };
-
-        // Now compare using the existing logic but with filtered data
-        let p_ata_map: std::collections::HashMap<&Pubkey, &Account> =
-            p_ata_filtered.iter().map(|(k, v)| (k, v)).collect();
-        let spl_ata_map: std::collections::HashMap<&Pubkey, &Account> =
-            spl_ata_filtered.iter().map(|(k, v)| (k, v)).collect();
-
-        let max_accounts = p_ata_ix_filtered
-            .accounts
-            .len()
-            .max(spl_ata_ix_filtered.accounts.len());
-
-        for i in 0..max_accounts {
-            let p_ata_meta = p_ata_ix_filtered.accounts.get(i);
-            let spl_ata_meta = spl_ata_ix_filtered.accounts.get(i);
-
-            match (p_ata_meta, spl_ata_meta) {
-                (Some(p_ata_meta), Some(spl_ata_meta)) => {
-                    if p_ata_meta.is_writable || spl_ata_meta.is_writable {
-                        let p_ata_account = p_ata_map.get(&p_ata_meta.pubkey);
-                        let spl_ata_account = spl_ata_map.get(&spl_ata_meta.pubkey);
-
-                        match (p_ata_account, spl_ata_account) {
-                            (Some(&p_ata_acc), Some(&spl_ata_acc)) => {
-                                // For token accounts, use behavioral equivalence check
-                                let account_type = Self::get_account_type_by_position(i);
-                                if account_type == "ATA Account"
-                                    && p_ata_acc.data.len() >= TOKEN_ACCOUNT_SIZE
-                                    && spl_ata_acc.data.len() >= TOKEN_ACCOUNT_SIZE
-                                {
-                                    if !Self::validate_token_account_behavioral_equivalence_quiet(
-                                        &p_ata_acc.data,
-                                        &spl_ata_acc.data,
-                                        &mut Vec::new(),
-                                    ) {
-                                        return false;
-                                    }
-                                } else if p_ata_acc.data != spl_ata_acc.data
-                                    || p_ata_acc.lamports != spl_ata_acc.lamports
-                                    || p_ata_acc.owner != spl_ata_acc.owner
-                                {
-                                    return false;
-                                }
-                            }
-                            (Some(_), None) | (None, Some(_)) => return false,
-                            (None, None) => {}
-                        }
-                    }
-                }
-                (Some(_), None) | (None, Some(_)) => return false,
-                (None, None) => break,
-            }
-        }
-
-        true
-    }
-
-    fn compare_account_states(
-        p_ata_accounts: &[(Pubkey, Account)],
-        spl_ata_accounts: &[(Pubkey, Account)],
-        p_ata_ix: &Instruction,
-        spl_ata_ix: &Instruction,
-    ) -> bool {
-        // Convert to maps for easier comparison
-        let p_ata_map: std::collections::HashMap<&Pubkey, &Account> =
-            p_ata_accounts.iter().map(|(k, v)| (k, v)).collect();
-        let spl_ata_map: std::collections::HashMap<&Pubkey, &Account> =
-            spl_ata_accounts.iter().map(|(k, v)| (k, v)).collect();
-
-        let mut all_match = true;
-        let mut debug_output = Vec::new();
-        let mut has_expected_differences = false;
-
-        // Compare accounts by their ROLE/POSITION in the instruction, not by address
-        let max_accounts = p_ata_ix.accounts.len().max(spl_ata_ix.accounts.len());
-
-        for i in 0..max_accounts {
-            let p_ata_meta = p_ata_ix.accounts.get(i);
-            let spl_ata_meta = spl_ata_ix.accounts.get(i);
-
-            match (p_ata_meta, spl_ata_meta) {
-                (Some(p_ata_meta), Some(spl_ata_meta)) => {
-                    // Only compare writable accounts (the ones that change)
-                    if p_ata_meta.is_writable || spl_ata_meta.is_writable {
-                        let account_type = Self::get_account_type_by_position(i);
-
-                        let p_ata_account = p_ata_map.get(&p_ata_meta.pubkey);
-                        let spl_ata_account = spl_ata_map.get(&spl_ata_meta.pubkey);
-
-                        match (p_ata_account, spl_ata_account) {
-                            (Some(&p_ata_acc), Some(&spl_ata_acc)) => {
-                                // Compare account data - capture output for later
-                                let (data_match, data_output) = Self::compare_account_data_quiet(
-                                    &p_ata_acc.data,
-                                    &spl_ata_acc.data,
-                                    &account_type,
-                                    &p_ata_meta.pubkey,
-                                    &spl_ata_meta.pubkey,
-                                );
-
-                                let (lamports_match, lamports_output) =
-                                    Self::compare_lamports_quiet(
-                                        p_ata_acc.lamports,
-                                        spl_ata_acc.lamports,
-                                        &account_type,
-                                    );
-
-                                let (owner_match, owner_output) = Self::compare_owner_quiet(
-                                    &p_ata_acc.owner,
-                                    &spl_ata_acc.owner,
-                                    &account_type,
-                                );
-
-                                if !data_match || !lamports_match || !owner_match {
-                                    // Only add debug output if there are issues
-                                    debug_output
-                                        .push(format!("\n📋 {} (Position {})", account_type, i));
-                                    debug_output
-                                        .push(format!("  P-ATA Address:  {}", p_ata_meta.pubkey));
-                                    debug_output.push(format!(
-                                        "  SPL ATA Address: {}",
-                                        spl_ata_meta.pubkey
-                                    ));
-                                    debug_output.extend(data_output);
-                                    debug_output.extend(lamports_output);
-                                    debug_output.extend(owner_output);
-                                    all_match = false;
-                                }
-                            }
-                            (Some(_), None) => {
-                                debug_output
-                                    .push(format!("\n📋 {} (Position {})", account_type, i));
-                                debug_output.push(
-                                    "  ❌ P-ATA account exists but SPL ATA account missing!"
-                                        .to_string(),
-                                );
-                                all_match = false;
-                            }
-                            (None, Some(_)) => {
-                                debug_output
-                                    .push(format!("\n📋 {} (Position {})", account_type, i));
-                                debug_output.push(
-                                    "  ❌ SPL ATA account exists but P-ATA account missing!"
-                                        .to_string(),
-                                );
-                                all_match = false;
-                            }
-                            (None, None) => {
-                                // Both missing - this is fine, no output needed
-                            }
-                        }
-                    }
-                }
-                (Some(p_ata_meta), None) => {
-                    // Check if this is SysvarRent (expected P-ATA optimization)
-                    if p_ata_meta.pubkey.to_string()
-                        == "SysvarRent111111111111111111111111111111111"
-                    {
-                        debug_output.push(format!(
-                            "\n📋 Position {} - P-ATA includes SysvarRent optimization",
-                            i
-                        ));
-                        has_expected_differences = true;
-                    } else {
-                        debug_output.push(format!(
-                            "\n📋 Position {} - P-ATA has unexpected extra account: {}",
-                            i, p_ata_meta.pubkey
-                        ));
-                        all_match = false;
-                    }
-                }
-                (None, Some(spl_ata_meta)) => {
-                    // Check if this is SysvarRent (expected Original ATA requirement)
-                    if spl_ata_meta.pubkey.to_string()
-                        == "SysvarRent111111111111111111111111111111111"
-                    {
-                        debug_output.push(format!(
-                            "\n📋 Position {} - SPL ATA requires SysvarRent (P-ATA optimized it away)",
-                            i
-                        ));
-                        has_expected_differences = true;
-                    } else {
-                        debug_output.push(format!(
-                            "\n📋 Position {} - SPL ATA has unexpected extra account: {}",
-                            i, spl_ata_meta.pubkey
-                        ));
-                        all_match = false;
-                    }
-                }
-                (None, None) => break,
-            }
-        }
-
-        // Only print debug output if there were issues
-        if !all_match || has_expected_differences {
-            println!("\nACCOUNT STATE COMPARISON:");
-            for line in debug_output {
-                println!("{}", line);
-            }
-
-            if !all_match {
-                println!("\n❌ Account state differences detected!");
-            } else if has_expected_differences {
-                println!("\n📊 Expected differences detected (P-ATA optimizations)");
-            }
-        }
-
-        all_match
-    }
-
-    fn get_account_type_by_position(pos: usize) -> String {
-        match pos {
-            0 => "Payer".to_string(),
-            1 => "ATA Account".to_string(),
-            2 => "Wallet/Owner".to_string(),
-            3 => "Mint".to_string(),
-            4 => "System Program".to_string(),
-            5 => "Token Program".to_string(),
-            6 => "Rent Sysvar".to_string(),
-            _ => format!("Account #{}", pos),
-        }
-    }
-
-    fn compare_account_data_quiet(
-        p_ata_data: &[u8],
-        spl_ata_data: &[u8],
-        account_type: &str,
-        _p_ata_addr: &Pubkey,
-        _original_addr: &Pubkey,
-    ) -> (bool, Vec<String>) {
-        let mut output = Vec::new();
-
-        if p_ata_data == spl_ata_data {
-            return (true, output); // No output for matches
-        }
-
-        output.push(format!(
-            "  📊 Data: Different ({} vs {} bytes)",
-            p_ata_data.len(),
-            spl_ata_data.len()
-        ));
-
-        if account_type == "ATA Account"
-            && p_ata_data.len() >= TOKEN_ACCOUNT_SIZE
-            && spl_ata_data.len() >= TOKEN_ACCOUNT_SIZE
-        {
-            // For ATA accounts, do structural analysis
-            let structural_output =
-                Self::compare_token_account_structure_quiet(p_ata_data, spl_ata_data);
-            output.extend(structural_output);
-
-            // Check behavioral equivalence
-            let equivalent = Self::validate_token_account_behavioral_equivalence_quiet(
-                p_ata_data,
-                spl_ata_data,
-                &mut output,
-            );
-            (equivalent, output)
-        } else {
-            // For non-ATA accounts, show raw differences
-            let raw_output = Self::compare_raw_bytes_quiet(p_ata_data, spl_ata_data);
-            output.extend(raw_output);
-            (false, output) // Non-ATA accounts should generally be identical
-        }
-    }
-
-    fn compare_lamports_quiet(
-        p_ata_lamports: u64,
-        spl_ata_lamports: u64,
-        _account_type: &str,
-    ) -> (bool, Vec<String>) {
-        let mut output = Vec::new();
-
-        if p_ata_lamports == spl_ata_lamports {
-            (true, output) // No output for matches
-        } else {
-            output.push("  ❌ Lamports: MISMATCH!".to_string());
-            output.push(format!(
-                "     P-ATA: {} SOL",
-                p_ata_lamports as f64 / 1_000_000_000.0
-            ));
-            output.push(format!(
-                "     SPL ATA: {} SOL",
-                spl_ata_lamports as f64 / 1_000_000_000.0
-            ));
-            output.push(format!(
-                "     Difference: {} lamports",
-                p_ata_lamports as i64 - spl_ata_lamports as i64
-            ));
-            (false, output)
-        }
-    }
-
-    fn compare_owner_quiet(
-        p_ata_owner: &Pubkey,
-        spl_ata_owner: &Pubkey,
-        _account_type: &str,
-    ) -> (bool, Vec<String>) {
-        let mut output = Vec::new();
-
-        if p_ata_owner == spl_ata_owner {
-            (true, output) // No output for matches
-        } else {
-            output.push("  ❌ Owner: MISMATCH!".to_string());
-            output.push(format!("     P-ATA: {}", p_ata_owner));
-            output.push(format!("     SPL ATA: {}", spl_ata_owner));
-            (false, output)
-        }
-    }
-
-    fn compare_token_account_structure_quiet(
-        p_ata_data: &[u8],
-        spl_ata_data: &[u8],
-    ) -> Vec<String> {
-        let mut output = Vec::new();
-        output.push("     🔍 Token Account Structure Analysis:".to_string());
-
-        // Parse token account structure (based on spl-token layout)
-        if p_ata_data.len() >= TOKEN_ACCOUNT_SIZE && spl_ata_data.len() >= TOKEN_ACCOUNT_SIZE {
-            // Mint and Owner are expected to be different (different test inputs)
-            let p_ata_mint = &p_ata_data[0..32];
-            let spl_ata_mint = &spl_ata_data[0..32];
-            output.push(
-                "       📍 Mint: P-ATA test uses different mint than Original test (expected)"
-                    .to_string(),
-            );
-            output.push(format!(
-                "         P-ATA points to: {}...",
-                Self::bytes_to_hex(&p_ata_mint[0..8])
-            ));
-            output.push(format!(
-                "         Original points to: {}...",
-                Self::bytes_to_hex(&spl_ata_mint[0..8])
-            ));
-
-            let p_ata_owner = &p_ata_data[32..64];
-            let spl_ata_owner = &spl_ata_data[32..64];
-            output.push(
-                "       📍 Owner: P-ATA test uses different owner than Original test (expected)"
-                    .to_string(),
-            );
-            output.push(format!(
-                "         P-ATA points to: {}...",
-                Self::bytes_to_hex(&p_ata_owner[0..8])
-            ));
-            output.push(format!(
-                "         Original points to: {}...",
-                Self::bytes_to_hex(&spl_ata_owner[0..8])
-            ));
-
-            // Amount should be the same for equivalent operations
-            let p_ata_amount =
-                u64::from_le_bytes(p_ata_data[64..72].try_into().unwrap_or([0u8; 8]));
-            let spl_ata_amount =
-                u64::from_le_bytes(spl_ata_data[64..72].try_into().unwrap_or([0u8; 8]));
-            if p_ata_amount != spl_ata_amount {
-                output.push(format!(
-                    "       ❌ Amount differs: P-ATA={}, SPL ATA={}",
-                    p_ata_amount, spl_ata_amount
-                ));
-            } else {
-                output.push(format!(
-                    "       ✅ Amount: {} tokens (correct)",
-                    p_ata_amount
-                ));
-            }
-
-            // State should be the same
-            if p_ata_data[108] != spl_ata_data[108] {
-                output.push(format!(
-                    "       ❌ State differs: P-ATA={}, SPL ATA={}",
-                    p_ata_data[108], spl_ata_data[108]
-                ));
-            } else {
-                output.push(format!("       ✅ State: {} (correct)", p_ata_data[108]));
-            }
-
-            // Check other structural fields
-            let p_ata_delegate = &p_ata_data[72..104];
-            let spl_ata_delegate = &spl_ata_data[72..104];
-            if p_ata_delegate != spl_ata_delegate {
-                output.push("       ❌ Delegate differs - structural issue!".to_string());
-            } else if p_ata_delegate == &[0u8; 32] {
-                output.push("       ✅ Delegate: None (correct for new ATA)".to_string());
-            } else {
-                output.push("       ✅ Delegate: Identical".to_string());
-            }
-
-            let p_ata_delegated =
-                u64::from_le_bytes(p_ata_data[104..112].try_into().unwrap_or([0u8; 8]));
-            let spl_ata_delegated =
-                u64::from_le_bytes(spl_ata_data[104..112].try_into().unwrap_or([0u8; 8]));
-            if p_ata_delegated != spl_ata_delegated {
-                output.push(format!(
-                    "       ❌ Delegated amount differs: P-ATA={}, SPL ATA={}",
-                    p_ata_delegated, spl_ata_delegated
-                ));
-            } else {
-                output.push(format!(
-                    "       ✅ Delegated amount: {} (correct)",
-                    p_ata_delegated
-                ));
-            }
-        }
-
-        output
-    }
-
-    fn validate_token_account_behavioral_equivalence_quiet(
-        p_ata_data: &[u8],
-        spl_ata_data: &[u8],
-        output: &mut Vec<String>,
-    ) -> bool {
-        if p_ata_data.len() < TOKEN_ACCOUNT_SIZE || spl_ata_data.len() < TOKEN_ACCOUNT_SIZE {
-            return false;
-        }
-
-        let mut equivalent = true;
-
-        // Check behavioral fields that should be identical for equivalent operations
-        let p_ata_amount = u64::from_le_bytes(p_ata_data[64..72].try_into().unwrap_or([0u8; 8]));
-        let spl_ata_amount =
-            u64::from_le_bytes(spl_ata_data[64..72].try_into().unwrap_or([0u8; 8]));
-        if p_ata_amount != spl_ata_amount {
-            equivalent = false;
-        }
-
-        if p_ata_data[108] != spl_ata_data[108] {
-            equivalent = false;
-        }
-
-        let p_ata_delegate = &p_ata_data[72..104];
-        let spl_ata_delegate = &spl_ata_data[72..104];
-        if p_ata_delegate != spl_ata_delegate {
-            equivalent = false;
-        }
-
-        let p_ata_delegated =
-            u64::from_le_bytes(p_ata_data[104..112].try_into().unwrap_or([0u8; 8]));
-        let spl_ata_delegated =
-            u64::from_le_bytes(spl_ata_data[104..112].try_into().unwrap_or([0u8; 8]));
-        if p_ata_delegated != spl_ata_delegated {
-            equivalent = false;
-        }
-
-        if equivalent {
-            output.push("     ✅ Behavioral equivalence: PASSED (accounts behave identically despite different inputs)".to_string());
-        } else {
-            output.push("     ❌ Behavioral equivalence: FAILED (different behavior for equivalent operations)".to_string());
-        }
-
-        equivalent
-    }
-
-    fn compare_raw_bytes_quiet(p_ata_data: &[u8], spl_ata_data: &[u8]) -> Vec<String> {
-        let mut output = Vec::new();
-        let max_len = p_ata_data.len().max(spl_ata_data.len());
-        let mut diff_count = 0;
-
-        output.push("     📊 Byte-by-byte differences:".to_string());
-        for i in 0..max_len {
-            let p_ata_byte = p_ata_data.get(i).copied();
-            let spl_ata_byte = spl_ata_data.get(i).copied();
-
-            if p_ata_byte != spl_ata_byte && diff_count < 20 {
-                // Show first 20 differences
-                output.push(format!(
-                    "       Offset {}: P-ATA={:02x?}, SPL ATA={:02x?}",
-                    i, p_ata_byte, spl_ata_byte
-                ));
-                diff_count += 1;
-            } else if p_ata_byte != spl_ata_byte {
-                diff_count += 1;
-            }
-        }
-
-        if diff_count > 20 {
-            output.push(format!(
-                "       ... and {} more differences",
-                diff_count - 20
-            ));
-        }
-        output.push(format!("     Total differences: {} bytes", diff_count));
-
-        output
-    }
-
-    fn bytes_to_hex(bytes: &[u8]) -> String {
-        bytes
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<Vec<_>>()
-            .join("")
     }
 
     fn output_matrix_data(
@@ -1231,9 +683,6 @@ impl ComparisonRunner {
                         let compatibility = match result.compatibility_status {
                             common::CompatibilityStatus::Identical => "identical",
                             common::CompatibilityStatus::OptimizedBehavior => "optimized",
-                            common::CompatibilityStatus::ExpectedDifferences => {
-                                "expected_difference"
-                            }
                             _ => "other",
                         };
 
@@ -1348,7 +797,7 @@ fn main() {
 
     println!("\n🔍 Running comparison between implementations");
 
-    let mollusk = common::ComparisonRunner::create_mollusk_for_all_ata_implementations(
+    let mollusk = common::BenchmarkRunner::create_mollusk_for_all_ata_implementations(
         &program_ids.token_program_id,
     );
 
@@ -1383,7 +832,7 @@ fn main() {
     }
 
     // Run comparison using the appropriate P-ATA implementation for each test
-    let _comparison_results = ComparisonRunner::run_full_comparison(
+    let _comparison_results = PerformanceTestOrchestrator::run_full_comparison(
         &impls.pata_legacy_impl,
         &impls.pata_prefunded_impl,
         &impls.spl_impl,

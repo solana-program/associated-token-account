@@ -687,7 +687,7 @@ impl FailureTestRunner {
         let (p_ata_ix, p_ata_accounts) = test_builder(p_ata_impl, token_program_id);
 
         // Run P-ATA benchmark with quiet logging first
-        let mut p_ata_result = ComparisonRunner::run_single_benchmark(
+        let mut p_ata_result = BenchmarkRunner::run_single_benchmark(
             name,
             &p_ata_ix,
             &p_ata_accounts,
@@ -708,13 +708,13 @@ impl FailureTestRunner {
                 ),
                 captured_output: String::new(),
             };
-            ComparisonRunner::create_comparison_result(name, p_ata_result, original_result)
+            BenchmarkRunner::create_comparison_result(name, p_ata_result, original_result)
         } else {
             // Build test for Original ATA (separate account set with correct ATA addresses)
             let (original_ix, original_accounts) = test_builder(original_impl, token_program_id);
 
             // Run Original ATA benchmark with quiet logging first
-            let original_result = ComparisonRunner::run_single_benchmark(
+            let original_result = BenchmarkRunner::run_single_benchmark(
                 name,
                 &original_ix,
                 &original_accounts,
@@ -723,7 +723,7 @@ impl FailureTestRunner {
             );
 
             // Create comparison result
-            ComparisonRunner::create_comparison_result(name, p_ata_result, original_result)
+            BenchmarkRunner::create_comparison_result(name, p_ata_result, original_result)
         };
 
         // Check if we need debug logging for problematic results
@@ -731,7 +731,7 @@ impl FailureTestRunner {
 
         if needs_debug_logging {
             // Re-run with debug logging to capture verbose output
-            p_ata_result = ComparisonRunner::run_single_benchmark_with_debug(
+            p_ata_result = BenchmarkRunner::run_single_benchmark_with_debug(
                 name,
                 &p_ata_ix,
                 &p_ata_accounts,
@@ -743,7 +743,7 @@ impl FailureTestRunner {
                 // Also re-run original ATA with debug logging
                 let (original_ix, original_accounts) =
                     test_builder(original_impl, token_program_id);
-                let original_result = ComparisonRunner::run_single_benchmark_with_debug(
+                let original_result = BenchmarkRunner::run_single_benchmark_with_debug(
                     name,
                     &original_ix,
                     &original_accounts,
@@ -753,7 +753,7 @@ impl FailureTestRunner {
 
                 // Update comparison result with debug output
                 comparison_result =
-                    ComparisonRunner::create_comparison_result(name, p_ata_result, original_result);
+                    BenchmarkRunner::create_comparison_result(name, p_ata_result, original_result);
             } else {
                 // For P-ATA-only tests, just update the P-ATA result
                 comparison_result.p_ata = p_ata_result;
@@ -784,9 +784,6 @@ impl FailureTestRunner {
         token_program_id: &Pubkey,
     ) -> Vec<ComparisonResult> {
         println!("\n=== P-ATA VS ORIGINAL ATA FAILURE SCENARIOS COMPARISON ===");
-        println!(
-            "This validates that P-ATA maintains the same security properties as the original ATA"
-        );
 
         let mut results = Vec::new();
 
@@ -1248,9 +1245,9 @@ fn main() {
 
     // Validate both setups work
     let p_ata_mollusk =
-        ComparisonRunner::create_mollusk_for_all_ata_implementations(&program_ids.token_program_id);
+        BenchmarkRunner::create_mollusk_for_all_ata_implementations(&program_ids.token_program_id);
     let original_mollusk =
-        ComparisonRunner::create_mollusk_for_all_ata_implementations(&program_ids.token_program_id);
+        BenchmarkRunner::create_mollusk_for_all_ata_implementations(&program_ids.token_program_id);
 
     if let Err(e) = BenchmarkSetup::validate_setup(
         &p_ata_mollusk,

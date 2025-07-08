@@ -633,7 +633,6 @@ pub enum CompatibilityStatus {
     Identical,           // Both succeeded with identical account states
     BothRejected,        // Both failed with same error types
     OptimizedBehavior,   // P-ATA succeeded where original failed (bump optimization)
-    ExpectedDifferences, // Both succeeded but with expected differences (e.g., different ATA addresses)
     AccountMismatch,     // Both succeeded but account states differ (concerning)
     IncompatibleFailure, // Both failed but with different error codes
     IncompatibleSuccess, // One succeeded, one failed unexpectedly
@@ -662,9 +661,9 @@ pub struct ComparisonResult {
 
 // ========================== SHARED COMPARISON RUNNER ============================
 
-pub struct ComparisonRunner;
+pub struct BenchmarkRunner;
 
-impl ComparisonRunner {
+impl BenchmarkRunner {
     /// Run a single benchmark for one implementation
     pub fn run_single_benchmark(
         test_name: &str,
@@ -972,9 +971,6 @@ impl ComparisonRunner {
             }
             CompatibilityStatus::OptimizedBehavior => {
                 println!("  Status: P-ATA optimization working")
-            }
-            CompatibilityStatus::ExpectedDifferences => {
-                println!("  Status: Both succeeded with expected differences")
             }
             CompatibilityStatus::AccountMismatch => {
                 println!("  Status: Account mismatch (concerning)")

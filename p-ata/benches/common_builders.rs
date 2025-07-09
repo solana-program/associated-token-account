@@ -358,14 +358,8 @@ impl CommonTestCaseBuilder {
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
-            let consistent_variant = &crate::common::AtaVariant::SplAta;
-
-            let actual_wallet = crate::common::structured_pk(
-                consistent_variant,
-                test_bank,
-                test_number,
-                crate::common::AccountTypeId::Wallet,
-            );
+            // `wallet` is now the optimally-engineered pubkey from get_structured_addresses.
+            let actual_wallet = wallet;
 
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
@@ -377,53 +371,46 @@ impl CommonTestCaseBuilder {
             {
                 (*owner_mint, *nested_mint)
             } else {
-                (
-                    crate::common::structured_pk(
-                        consistent_variant,
-                        test_bank,
-                        test_number,
-                        crate::common::AccountTypeId::OwnerMint,
-                    ),
-                    crate::common::structured_pk(
-                        consistent_variant,
-                        test_bank,
-                        test_number,
-                        crate::common::AccountTypeId::NestedMint,
-                    ),
-                )
+                panic!("Could not find NestedAta config for recover test");
             };
 
-            let (owner_ata, bump) = Pubkey::find_program_address(
+            // Directly use the optimal bump 255
+            let bump = 255;
+            let owner_ata = Pubkey::create_program_address(
                 &[
                     actual_wallet.as_ref(),
                     config.token_program.as_ref(),
                     owner_mint.as_ref(),
+                    &[bump],
                 ],
                 &derivation_program_id,
-            );
-
-            // Debug logging for recover_multisig bump calculations
-            #[cfg(feature = "full-debug-logs")]
-            if matches!(config.base_test, BaseTestType::RecoverMultisig) {
-                println!("🔍 [DEBUG] Bump calculation in build_with_config:");
-                println!("    wallet: {}", actual_wallet);
-                println!("    token_program: {}", config.token_program);
-                println!("    owner_mint: {}", owner_mint);
-                println!("    derivation_program_id: {}", derivation_program_id);
-                println!("    calculated bump: {}", bump);
-            }
+            )
+            .expect("Failed to create PDA for recover test with optimal bump 255");
             (owner_ata, bump)
-        } else {
-            let result = Pubkey::find_program_address(
+        } else if matches!(config.base_test, BaseTestType::WorstCase) {
+            // WorstCase test uses a non-optimal wallet, so find the canonical bump.
+            Pubkey::find_program_address(
                 &[
                     wallet.as_ref(),
                     config.token_program.as_ref(),
                     mint.as_ref(),
                 ],
                 &derivation_program_id,
-            );
-
-            result
+            )
+        } else {
+            // Standard tests use an engineered wallet for an optimal bump of 255.
+            let bump = 255;
+            let ata = Pubkey::create_program_address(
+                &[
+                    wallet.as_ref(),
+                    config.token_program.as_ref(),
+                    mint.as_ref(),
+                    &[bump],
+                ],
+                &derivation_program_id,
+            )
+            .expect("Failed to create PDA with optimal bump 255");
+            (ata, bump)
         };
 
         let mut accounts = Self::build_accounts(
@@ -492,8 +479,37 @@ impl CommonTestCaseBuilder {
         );
         let wallet = if matches!(
             config.base_test,
-            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig | BaseTestType::WorstCase
+            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
+            // For recover tests, the wallet must be engineered using the owner_mint as a seed.
+            let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
+                owner_mint,
+                nested_mint,
+            }) = config
+                .special_account_mods
+                .iter()
+                .find(|m| matches!(m, SpecialAccountMod::NestedAta { .. }))
+            {
+                (*owner_mint, *nested_mint)
+            } else {
+                // This should not happen if config is built correctly
+                panic!("Could not find NestedAta config for recover test");
+            };
+
+            let all_ata_program_ids: Vec<Pubkey> = crate::common::AtaImplementation::all()
+                .iter()
+                .map(|a| a.program_id)
+                .collect();
+            crate::common::structured_pk_with_optimal_common_bump(
+                consistent_variant,
+                test_bank,
+                test_number,
+                crate::common::AccountTypeId::Wallet,
+                &all_ata_program_ids,
+                &config.token_program,
+                &owner_mint,
+            )
+        } else if matches!(config.base_test, BaseTestType::WorstCase) {
             crate::common::structured_pk(
                 consistent_variant,
                 test_bank,
@@ -532,7 +548,7 @@ impl CommonTestCaseBuilder {
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
-            return Self::build_recover_accounts(config, variant, ata_implementation);
+            return Self::build_recover_accounts(config, ata_implementation, wallet, ata);
         }
 
         let mut account_set =
@@ -568,19 +584,10 @@ impl CommonTestCaseBuilder {
     /// Build recover-specific accounts using RecoverAccountSet template
     fn build_recover_accounts(
         config: &TestCaseConfig,
-        variant: TestVariant,
         ata_implementation: &AtaImplementation,
+        actual_wallet: Pubkey,
+        owner_ata: Pubkey,
     ) -> Vec<(Pubkey, Account)> {
-        let test_bank = if config.failure_mode.is_some() {
-            crate::common::TestBankId::Failures
-        } else {
-            crate::common::TestBankId::Benchmarks
-        };
-        let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
-
-        // Use consistent variant for mint and wallet addresses
-        let consistent_variant = &crate::common::AtaVariant::SplAta;
-
         let (owner_mint, nested_mint) = if let Some(SpecialAccountMod::NestedAta {
             owner_mint,
             nested_mint,
@@ -591,38 +598,9 @@ impl CommonTestCaseBuilder {
         {
             (*owner_mint, *nested_mint)
         } else {
-            (
-                crate::common::structured_pk(
-                    consistent_variant,
-                    test_bank,
-                    test_number,
-                    crate::common::AccountTypeId::OwnerMint,
-                ),
-                crate::common::structured_pk(
-                    consistent_variant,
-                    test_bank,
-                    test_number,
-                    crate::common::AccountTypeId::NestedMint,
-                ),
-            )
+            // This case should ideally not be hit if config is constructed correctly
+            panic!("Recover test requires NestedAta modification");
         };
-
-        let actual_wallet = crate::common::structured_pk(
-            consistent_variant,
-            test_bank,
-            test_number,
-            crate::common::AccountTypeId::Wallet,
-        );
-
-        // Calculate addresses
-        let (owner_ata, _) = Pubkey::find_program_address(
-            &[
-                actual_wallet.as_ref(),
-                config.token_program.as_ref(),
-                owner_mint.as_ref(),
-            ],
-            &ata_implementation.program_id,
-        );
 
         // Debug logging for recover_multisig address calculations
         #[cfg(feature = "full-debug-logs")]
@@ -635,7 +613,7 @@ impl CommonTestCaseBuilder {
                 "    ata_implementation.program_id: {}",
                 ata_implementation.program_id
             );
-            println!("    calculated owner_ata: {}", owner_ata);
+            println!("    owner_ata (from caller): {}", owner_ata);
         }
 
         let (nested_ata, _) = Pubkey::find_program_address(

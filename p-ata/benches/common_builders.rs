@@ -791,11 +791,11 @@ impl CommonTestCaseBuilder {
         ata_implementation: &AtaImplementation,
         bump: u8,
     ) -> Vec<u8> {
-        let mut raw_data = vec![config.instruction_discriminator];
+        let mut data = vec![config.instruction_discriminator];
 
         // If len_arg is specified, we MUST also include bump (P-ATA requirement)
         if variant.bump_arg || variant.len_arg {
-            raw_data.push(bump);
+            data.push(bump);
         }
 
         if variant.len_arg {
@@ -813,12 +813,10 @@ impl CommonTestCaseBuilder {
             } else {
                 165 // Standard token account size
             };
-            raw_data.extend_from_slice(&account_len.to_le_bytes());
+            data.extend_from_slice(&account_len.to_le_bytes());
         }
 
-        let final_data = ata_implementation.adapt_instruction_data(raw_data);
-
-        final_data
+        data
     }
 
     /// Apply failure mode to instruction and accounts using focused helper functions

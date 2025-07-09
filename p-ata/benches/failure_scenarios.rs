@@ -606,11 +606,22 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
-    /// Custom builder for wrong token account size test
-    fn build_fail_wrong_token_account_size(
+    /// Generic helper for CreateIdempotent failure tests that have an existing ATA
+    fn build_create_idempotent_failure_test<F>(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        test_name: &'static str,
+        failure_applicator: F,
+    ) -> (Instruction, Vec<(Pubkey, Account)>)
+    where
+        F: FnOnce(
+            &mut Vec<(Pubkey, Account)>,
+            &Pubkey, // ata
+            &Pubkey, // mint
+            &Pubkey, // wallet
+            &AtaImplementation,
+        ),
+    {
         let (payer, mint, wallet) = build_base_failure_accounts(
             BaseTestType::CreateIdempotent,
             TestVariant::BASE,
@@ -618,9 +629,8 @@ impl FailureTestBuilder {
             token_program_id,
         );
 
-        // Log test name for identification
         log_test_info(
-            "fail_wrong_token_account_size",
+            test_name,
             ata_impl,
             &[("payer", &payer), ("mint", &mint), ("wallet", &wallet)],
         );
@@ -634,8 +644,8 @@ impl FailureTestBuilder {
             .with_existing_ata(&mint, &wallet, token_program_id)
             .to_vec();
 
-        // Apply failure: set ATA to wrong size
-        FailureAccountBuilder::set_wrong_data_size(&mut accounts, ata, 100);
+        // Apply the specific failure condition to the accounts
+        failure_applicator(&mut accounts, &ata, &mint, &wallet, ata_impl);
 
         let ix = Instruction {
             program_id: ata_impl.program_id,
@@ -651,6 +661,22 @@ impl FailureTestBuilder {
         };
 
         (ix, accounts)
+    }
+
+    /// Custom builder for wrong token account size test
+    fn build_fail_wrong_token_account_size(
+        ata_impl: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        Self::build_create_idempotent_failure_test(
+            ata_impl,
+            token_program_id,
+            "fail_wrong_token_account_size",
+            |accounts, ata, _mint, _wallet, _ata_impl| {
+                // Apply failure: set ATA to wrong size
+                FailureAccountBuilder::set_wrong_data_size(accounts, *ata, 100);
+            },
+        )
     }
 
     /// Custom builder for token account wrong mint test
@@ -658,64 +684,35 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(
-            BaseTestType::CreateIdempotent,
-            TestVariant::BASE,
+        Self::build_create_idempotent_failure_test(
             ata_impl,
             token_program_id,
-        );
-
-        // Log test name for identification
-        log_test_info(
             "fail_token_account_wrong_mint",
-            ata_impl,
-            &[("payer", &payer), ("mint", &mint), ("wallet", &wallet)],
-        );
+            |accounts, ata, _mint, wallet, ata_impl| {
+                let test_number = common_builders::calculate_failure_test_number(
+                    BaseTestType::CreateIdempotent,
+                    TestVariant::BASE,
+                );
+                let wrong_mint = crate::common::structured_pk(
+                    &ata_impl.variant,
+                    crate::common::TestBankId::Failures,
+                    test_number + 1,
+                    crate::common::AccountTypeId::Mint,
+                );
 
-        let test_number = common_builders::calculate_failure_test_number(
-            BaseTestType::CreateIdempotent,
-            TestVariant::BASE,
-        );
-        let wrong_mint = crate::common::structured_pk(
-            &ata_impl.variant,
-            crate::common::TestBankId::Failures,
-            test_number + 1,
-            crate::common::AccountTypeId::Mint,
-        );
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            &ata_impl.program_id,
-        );
+                // Replace ATA with one pointing to wrong mint
+                if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == *ata) {
+                    accounts[pos].1 =
+                        AccountBuilder::token_account(&wrong_mint, wallet, 0, token_program_id);
+                }
 
-        let mut accounts =
-            StandardAccountSet::new(payer, ata, wallet, mint, token_program_id).to_vec();
-
-        // Replace ATA with one pointing to wrong mint
-        if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == ata) {
-            accounts[pos].1 =
-                AccountBuilder::token_account(&wrong_mint, &wallet, 0, token_program_id);
-        }
-
-        // Add the wrong mint account
-        accounts.push((
-            wrong_mint,
-            AccountBuilder::mint_account(0, token_program_id, false),
-        ));
-
-        let ix = Instruction {
-            program_id: ata_impl.program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![1u8], // CreateIdempotent instruction
-        };
-
-        (ix, accounts)
+                // Add the wrong mint account
+                accounts.push((
+                    wrong_mint,
+                    AccountBuilder::mint_account(0, token_program_id, false),
+                ));
+            },
+        )
     }
 
     /// Custom builder for token account wrong owner test
@@ -723,58 +720,29 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let (payer, mint, wallet) = build_base_failure_accounts(
-            BaseTestType::CreateIdempotent,
-            TestVariant::BASE,
+        Self::build_create_idempotent_failure_test(
             ata_impl,
             token_program_id,
-        );
-
-        // Log test name for identification
-        log_test_info(
             "fail_token_account_wrong_owner",
-            ata_impl,
-            &[("payer", &payer), ("mint", &mint), ("wallet", &wallet)],
-        );
+            |accounts, ata, mint, _wallet, ata_impl| {
+                let test_number = common_builders::calculate_failure_test_number(
+                    BaseTestType::CreateIdempotent,
+                    TestVariant::BASE,
+                );
+                let wrong_owner = crate::common::structured_pk(
+                    &ata_impl.variant,
+                    crate::common::TestBankId::Failures,
+                    test_number + 1,
+                    crate::common::AccountTypeId::Wallet,
+                );
 
-        let test_number = common_builders::calculate_failure_test_number(
-            BaseTestType::CreateIdempotent,
-            TestVariant::BASE,
-        );
-        let wrong_owner = crate::common::structured_pk(
-            &ata_impl.variant,
-            crate::common::TestBankId::Failures,
-            test_number + 1,
-            crate::common::AccountTypeId::Wallet,
-        );
-        let (ata, _bump) = Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-            &ata_impl.program_id,
-        );
-
-        let mut accounts =
-            StandardAccountSet::new(payer, ata, wallet, mint, token_program_id).to_vec();
-
-        // Replace ATA with one having wrong owner
-        if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == ata) {
-            accounts[pos].1 =
-                AccountBuilder::token_account(&mint, &wrong_owner, 0, token_program_id);
-        }
-
-        let ix = Instruction {
-            program_id: ata_impl.program_id,
-            accounts: vec![
-                AccountMeta::new(payer, true),
-                AccountMeta::new(ata, false),
-                AccountMeta::new_readonly(wallet, false),
-                AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
-                AccountMeta::new_readonly(*token_program_id, false),
-            ],
-            data: vec![1u8], // CreateIdempotent instruction
-        };
-
-        (ix, accounts)
+                // Replace ATA with one having wrong owner
+                if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == *ata) {
+                    accounts[pos].1 =
+                        AccountBuilder::token_account(mint, &wrong_owner, 0, token_program_id);
+                }
+            },
+        )
     }
 
     /// Custom builder: use original Token program but provide an extended (Token-2022 style) mint

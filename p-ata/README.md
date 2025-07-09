@@ -16,7 +16,7 @@ Expanded Functionality:
 
 - `RecoverNested` works with multisig accounts (satisfying [#24](https://github.com/solana-program/associated-token-account/issues/24))
 - `CreateAccountPrefunded` is supported for cheaper calls of p-ata's `Create` when the account rent has been topped up in advance. Conditional on [SIMD-312](https://github.com/solana-foundation/solana-improvement-documents/pull/312), but alternative code is provided if `not(feature = "create-account-prefunded")`. Enabling this feature saves this flow ~2500 CUs (Compute Units). Currently, branches of `agave`, `system`, `pinocchio`, and `mollusk` with `CreateAccountPrefunded` support are patched in.
-- In descending order of significance,`bump`, `rent`, and (TokenAccount) `len` can be passed in by client to save compute.
+- In descending order of significance,`bump`, `rent`, and (TokenAccount) `token_account_len` can be passed in by client to save compute.
 
 ## Testing and Benchmarking
 
@@ -28,7 +28,7 @@ Mollusk's extensive debug logs are filtered out unless a test has an unexpected 
 
 "optimum args" are:
 - `bump`
-- for Token-2022, `len` passed in the data
+- for Token-2022, `token_account_len` passed in the data
 - for some items, `rent` passed in as an optional additional account
 
 | Test                   |    SPL ATA     | p-ata, no new args   | p-ata w/ bump | p-ata w/ optimum args | Notes                                                 |

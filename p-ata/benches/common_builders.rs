@@ -335,7 +335,7 @@ impl CommonTestCaseBuilder {
 
         #[cfg(feature = "full-debug-logs")]
         {
-            let display_test_name = _test_name.unwrap_or(config.base_test.name());
+            let display_test_name = _test_name.unwrap_or(&config.base_test.to_string());
             println!(
                 "🔍 Test: {} | Implementation: {} | Mint: {} | Owner: {} | Payer: {}",
                 display_test_name,

@@ -1,3 +1,4 @@
+use strum::Display;
 use {
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
@@ -31,25 +32,17 @@ struct FailureTestConfig {
     builder_type: TestBuilderType,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Display)]
+#[strum(serialize_all = "title_case")]
 enum TestCategory {
+    #[strum(to_string = "Basic Account Ownership Failure Tests")]
     BasicAccountOwnership,
+    #[strum(to_string = "Address Derivation and Structure Failure Tests")]
     AddressDerivationStructure,
+    #[strum(to_string = "Recovery Operation Failure Tests")]
     RecoveryOperations,
+    #[strum(to_string = "Additional Validation Coverage Tests")]
     AdditionalValidation,
-}
-
-impl TestCategory {
-    fn display_name(&self) -> &'static str {
-        match self {
-            TestCategory::BasicAccountOwnership => "Basic Account Ownership Failure Tests",
-            TestCategory::AddressDerivationStructure => {
-                "Address Derivation and Structure Failure Tests"
-            }
-            TestCategory::RecoveryOperations => "Recovery Operation Failure Tests",
-            TestCategory::AdditionalValidation => "Additional Validation Coverage Tests",
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -749,105 +742,49 @@ impl FailureTestBuilder {
 struct FailureTestRunner;
 
 impl FailureTestRunner {
-    /// Print failure test results - detailed only for unexpected successes (security issues)
-    fn print_failure_test_result_summary(result: &ComparisonResult) {
-        println!("Test: {}", result.test_name);
-        // Check if we need detailed output (security issues or unexpected results)
-        let needs_detailed_output = matches!(
-            result.compatibility_status,
-            CompatibilityStatus::IncompatibleSuccess | CompatibilityStatus::Identical
-        ) && (result.p_ata.success || result.spl_ata.success);
-
-        match result.compatibility_status {
-            CompatibilityStatus::BothRejected => {
-                // Expected: both failed - brief output
-                println!("    ❌ Both failed (expected)");
-            }
-            CompatibilityStatus::OptimizedBehavior => {
-                // P-ATA-only feature - brief output
-                if result
-                    .spl_ata
-                    .error_message
-                    .as_ref()
-                    .map_or(false, |msg| msg.contains("N/A"))
-                {
-                    println!("    🚀 P-ATA-only feature");
-                } else {
-                    println!("    🚀 P-ATA optimization");
-                }
+    /// Print a single failure test result with detailed compatibility info
+    fn print_single_failure_result(result: &ComparisonResult) {
+        let (status_icon, status_text) = match result.compatibility_status {
+            CompatibilityStatus::BothRejected => ("✅", "Both failed as expected (Same Error)"),
+            CompatibilityStatus::Identical => {
+                ("🚨", "Both succeeded (TEST ISSUE: should have failed)")
             }
             CompatibilityStatus::IncompatibleFailure => {
-                // Different error messages but both failed - brief output (detailed in summary)
-                println!("    ⚠️ Different error messages (both failed)");
+                ("⚠️", "Both failed but with DIFFERENT errors")
             }
-            _ => {
-                // Unexpected successes or critical issues - FULL detailed output
-                println!("    🚨 UNEXPECTED RESULT - DETAILED ANALYSIS:");
-
-                let p_ata_status = if result.p_ata.success {
-                    "✅ SUCCESS (UNEXPECTED!)".to_string()
+            CompatibilityStatus::IncompatibleSuccess => {
+                if result.p_ata.success && !result.spl_ata.success {
+                    (
+                        "🚨",
+                        "P-ATA succeeded where SPL ATA failed (SECURITY ISSUE)",
+                    )
+                } else if !result.p_ata.success && result.spl_ata.success {
+                    (
+                        "🚨",
+                        "SPL ATA succeeded where P-ATA failed (SECURITY ISSUE)",
+                    )
                 } else {
-                    "❌ Failed (expected)".to_string()
-                };
-
-                let spl_ata_status = if result.spl_ata.success {
-                    "✅ SUCCESS (UNEXPECTED!)".to_string()
-                } else {
-                    "❌ Failed (expected)".to_string()
-                };
-
-                println!("      P-ATA: {}", p_ata_status);
-                println!("      SPL ATA: {}", spl_ata_status);
-
-                // Show error details for failures
-                if !result.p_ata.success {
-                    if let Some(ref error) = result.p_ata.error_message {
-                        println!("      P-ATA Error: {}", error);
-                    }
-                }
-                if !result.spl_ata.success {
-                    if let Some(ref error) = result.spl_ata.error_message {
-                        println!("      SPL ATA Error: {}", error);
-                    }
-                }
-
-                // Show compatibility assessment
-                match result.compatibility_status {
-                    CompatibilityStatus::IncompatibleSuccess => {
-                        if result.p_ata.success && !result.spl_ata.success {
-                            println!("      🔴 SECURITY ISSUE: P-ATA bypassed validation!");
-                        } else if !result.p_ata.success && result.spl_ata.success {
-                            println!("      🔴 SECURITY ISSUE: SPL ATA bypassed validation!");
-                        }
-                    }
-                    CompatibilityStatus::Identical => {
-                        if result.p_ata.success && result.spl_ata.success {
-                            println!("      🔴 TEST ISSUE: Both succeeded when they should fail!");
-                        }
-                    }
-                    _ => {
-                        println!("      Status: {:?}", result.compatibility_status);
-                    }
+                    ("❓", "Incompatible success/failure status unknown")
                 }
             }
-        }
+            _ => ("❓", "Unexpected compatibility status"),
+        };
 
-        // Show captured debug output only for unexpected results
-        if needs_detailed_output {
-            if !result.p_ata.captured_output.is_empty() {
-                println!("      P-ATA Debug Output:");
-                for line in result.p_ata.captured_output.lines() {
-                    println!("        {}", line);
-                }
-            }
-            if !result.spl_ata.captured_output.is_empty() {
-                println!("      SPL ATA Debug Output:");
-                for line in result.spl_ata.captured_output.lines() {
-                    println!("        {}", line);
-                }
+        println!(
+            "  {} {:<45} | {}",
+            status_icon, result.test_name, status_text
+        );
+
+        if result.compatibility_status == CompatibilityStatus::IncompatibleFailure {
+            if let (Some(p_err), Some(s_err)) =
+                (&result.p_ata.error_message, &result.spl_ata.error_message)
+            {
+                println!("    - P-ATA Error: {}", p_err);
+                println!("    - SPL ATA Error: {}", s_err);
             }
         }
     }
+
     /// Run a failure test with configuration against both implementations and compare results
     fn run_failure_comparison_test_with_config(
         config: &FailureTestConfig,
@@ -996,7 +933,7 @@ impl FailureTestRunner {
             std::collections::HashMap::new();
 
         for config in FAILURE_TESTS {
-            let category_name = config.category.display_name().to_string();
+            let category_name = config.category.to_string();
             tests_by_category
                 .entry(category_name)
                 .or_insert_with(Vec::new)
@@ -1014,7 +951,7 @@ impl FailureTestRunner {
                     original_impl,
                     token_program_id,
                 );
-                Self::print_failure_test_result_summary(&comparison);
+                Self::print_single_failure_result(&comparison);
                 results.push(comparison);
             }
         }
@@ -1108,9 +1045,35 @@ impl FailureTestRunner {
 
     /// Print failure test summary with compatibility analysis
     fn print_failure_summary(results: &[ComparisonResult]) {
-        println!("\n=== FAILURE TEST COMPATIBILITY SUMMARY ===");
+        use std::collections::BTreeMap;
 
-        let total_tests = results.len();
+        println!("\n=== FAILURE SCENARIO COMPATIBILITY SUMMARY ===");
+
+        // Use BTreeMap to keep categories in a consistent order
+        let mut categorized_results: BTreeMap<String, Vec<&ComparisonResult>> = BTreeMap::new();
+        let mut all_configs: std::collections::HashMap<String, &FailureTestConfig> = FAILURE_TESTS
+            .iter()
+            .map(|c| (c.name.to_string(), c))
+            .collect();
+
+        for r in results {
+            if let Some(config) = all_configs.remove(&r.test_name) {
+                categorized_results
+                    .entry(config.category.to_string())
+                    .or_default()
+                    .push(r);
+            }
+        }
+
+        for (category, cat_results) in categorized_results {
+            println!("\n--- {} ---", category);
+            for r in cat_results {
+                Self::print_single_failure_result(r);
+            }
+        }
+
+        println!("\n--- OVERALL FAILURE TEST SUMMARY ---");
+        let total = results.len();
         let both_rejected = results
             .iter()
             .filter(|r| matches!(r.compatibility_status, CompatibilityStatus::BothRejected))
@@ -1147,7 +1110,7 @@ impl FailureTestRunner {
             })
             .count();
 
-        println!("Total Failure Tests: {}", total_tests);
+        println!("Total Failure Tests: {}", total);
         println!(
             "Both Implementations Failed as Expected (Same Errors): {}",
             both_rejected,
@@ -1253,7 +1216,7 @@ impl FailureTestRunner {
                     }
                 }
             }
-        } else if both_rejected == total_tests {
+        } else if both_rejected == total {
             println!("\n✅ ALL FAILURE TESTS SHOW IDENTICAL ERRORS");
         }
     }

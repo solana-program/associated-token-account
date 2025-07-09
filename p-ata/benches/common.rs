@@ -7,6 +7,7 @@ use {
     spl_token_2022::extension::ExtensionType,
     spl_token_interface::state::Transmutable,
     std::env,
+    strum::{Display, EnumIter},
 };
 
 pub mod account_templates;
@@ -1007,7 +1008,8 @@ impl BenchmarkRunner {
 
 // ========================== BASE TEST TYPES ============================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, Display)]
+#[strum(serialize_all = "snake_case")]
 #[allow(dead_code)]
 pub enum BaseTestType {
     Create,
@@ -1093,20 +1095,6 @@ impl TestVariant {
 }
 
 impl BaseTestType {
-    #[allow(dead_code)]
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::Create => "create",
-            Self::CreateIdempotent => "create_idempotent",
-            Self::CreateTopup => "create_topup",
-            Self::CreateTopupNoCap => "create_topup_no_cap",
-            Self::CreateToken2022 => "create_token2022",
-            Self::RecoverNested => "recover_nested",
-            Self::RecoverMultisig => "recover_multisig",
-            Self::WorstCase => "worst_case",
-        }
-    }
-
     /// Returns which P-ATA variant this test should use
     #[allow(dead_code)]
     pub fn required_pata_variant(&self) -> AtaVariant {

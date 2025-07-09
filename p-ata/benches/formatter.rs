@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::common::{BaseTestType, ComparisonResult, CompatibilityStatus, TestVariant};
-use serde::Serialize;
 use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
+use serde::Serialize;
 
 #[macro_export]
 macro_rules! print_cell {
@@ -64,7 +64,7 @@ pub fn print_matrix_results(
 
     for (base_test, row) in matrix_results {
         let mut cells = Vec::with_capacity(columns.len() + 1);
-        cells.push(base_test.name().to_string());
+        cells.push(base_test.to_string());
         for (i, variant) in columns.iter().enumerate() {
             let lookup = if *variant == all_opt_variant {
                 get_all_optimizations_variant(*base_test)
@@ -275,7 +275,8 @@ struct VariantData {
 #[derive(Serialize)]
 struct Output {
     timestamp: u64,
-    performance_tests: std::collections::HashMap<String, std::collections::HashMap<String, VariantData>>,
+    performance_tests:
+        std::collections::HashMap<String, std::collections::HashMap<String, VariantData>>,
 }
 
 pub fn output_matrix_data(
@@ -325,7 +326,7 @@ pub fn output_matrix_data(
             }
         }
         if !per_variant.is_empty() {
-            performance_tests.insert(base_test.name().to_string(), per_variant);
+            performance_tests.insert(base_test.to_string(), per_variant);
         }
     }
 

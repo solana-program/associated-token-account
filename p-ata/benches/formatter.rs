@@ -2,6 +2,17 @@ use std::collections::HashMap;
 
 use crate::common::{BaseTestType, ComparisonResult, CompatibilityStatus, TestVariant};
 
+#[macro_export]
+macro_rules! print_cell {
+    ($value:expr) => {
+        if $value > 0 {
+            print!(" | {:>15}", $value);
+        } else {
+            print!(" | {:>15}", "");
+        }
+    };
+}
+
 /// Returns the variant that represents "all optimizations enabled" for a given base test.
 pub fn get_all_optimizations_variant(base_test: BaseTestType) -> Option<TestVariant> {
     match base_test {
@@ -72,16 +83,12 @@ pub fn print_matrix_results(
                             0
                         }
                     };
-                    if cu > 0 {
-                        print!(" | {:>15}", cu);
-                    } else {
-                        print!(" | {:>15}", "");
-                    }
+                    print_cell!(cu);
                 } else {
-                    print!(" | {:>15}", "");
+                    print_cell!(0);
                 }
             } else {
-                print!(" | {:>15}", "");
+                print_cell!(0);
             }
         }
         println!();

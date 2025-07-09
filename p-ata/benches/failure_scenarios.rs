@@ -289,7 +289,6 @@ fn build_base_failure_accounts(
 ) -> (Pubkey, Pubkey, Pubkey) {
     let test_number = common_builders::calculate_failure_test_number(base_test, variant);
 
-    // Use implementation-specific variant for payer
     let payer = crate::common::structured_pk(
         &ata_implementation.variant,
         crate::common::TestBankId::Failures,

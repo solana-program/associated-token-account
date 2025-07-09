@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 //! Account templates for benchmark tests
 
-use crate::constants::account_sizes::MINT_ACCOUNT_SIZE;
 use crate::{constants::lamports::*, AccountBuilder, NATIVE_LOADER_ID, SYSTEM_PROGRAM_ID};
 use {solana_account::Account, solana_pubkey::Pubkey, solana_sysvar::rent};
 

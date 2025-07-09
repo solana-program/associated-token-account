@@ -323,6 +323,48 @@ fn build_base_failure_accounts(
 
 // ================================ FAILURE TEST BUILDERS ================================
 
+/// Holds the set of accounts used in RecoverNested scenarios.
+struct RecoverNestedAccounts {
+    nested_ata: Pubkey,
+    nested_mint: Pubkey,
+    dest_ata: Pubkey,
+    owner_ata: Pubkey,
+    owner_mint: Pubkey,
+    wallet: Pubkey,
+}
+
+impl RecoverNestedAccounts {
+    /// Creates a new set of accounts for RecoverNested tests.
+    fn new(ata_impl: &AtaImplementation) -> Self {
+        let test_number = common_builders::calculate_failure_test_number(
+            BaseTestType::RecoverNested,
+            TestVariant::BASE,
+        );
+        let [nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet] =
+            crate::common::structured_pk_multi(
+                &ata_impl.variant,
+                crate::common::TestBankId::Failures,
+                test_number,
+                [
+                    crate::common::AccountTypeId::NestedAta,
+                    crate::common::AccountTypeId::NestedMint,
+                    crate::common::AccountTypeId::Ata, // dest_ata
+                    crate::common::AccountTypeId::OwnerAta,
+                    crate::common::AccountTypeId::OwnerMint,
+                    crate::common::AccountTypeId::Wallet,
+                ],
+            );
+        Self {
+            nested_ata,
+            nested_mint,
+            dest_ata,
+            owner_ata,
+            owner_mint,
+            wallet,
+        }
+    }
+}
+
 struct FailureTestBuilder;
 
 impl FailureTestBuilder {
@@ -402,51 +444,42 @@ impl FailureTestBuilder {
         )
     }
 
-    /// Custom builder for recover wrong nested ATA address test
-    fn build_fail_recover_wrong_nested_ata_address(
+    /// Generic helper for RecoverNested failure tests
+    fn build_recover_nested_failure<F>(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let test_number = common_builders::calculate_failure_test_number(
-            BaseTestType::RecoverNested,
-            TestVariant::BASE,
-        );
-        let [wrong_nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet] =
-            crate::common::structured_pk_multi(
-                &ata_impl.variant,
-                crate::common::TestBankId::Failures,
-                test_number,
-                [
-                    crate::common::AccountTypeId::NestedAta, // wrong_nested_ata - will be wrong in the test
-                    crate::common::AccountTypeId::NestedMint,
-                    crate::common::AccountTypeId::Ata, // dest_ata
-                    crate::common::AccountTypeId::OwnerAta,
-                    crate::common::AccountTypeId::OwnerMint,
-                    crate::common::AccountTypeId::Wallet,
-                ],
-            );
+        test_name: &'static str,
+        mutator: F,
+    ) -> (Instruction, Vec<(Pubkey, Account)>)
+    where
+        F: FnOnce(&mut RecoverNestedAccounts, &mut Vec<u8>),
+    {
+        let mut accounts_struct = RecoverNestedAccounts::new(ata_impl);
+        let mut instruction_data = vec![2u8]; // Base RecoverNested instruction
 
-        // Log test name for identification
+        // Apply the custom mutation to accounts or instruction data
+        mutator(&mut accounts_struct, &mut instruction_data);
+
         log_test_info(
-            "fail_recover_wrong_nested_ata_address",
+            test_name,
             ata_impl,
             &[
-                ("wrong_nested_ata", &wrong_nested_ata),
-                ("nested_mint", &nested_mint),
-                ("dest_ata", &dest_ata),
-                ("owner_ata", &owner_ata),
-                ("owner_mint", &owner_mint),
-                ("wallet", &wallet),
+                ("nested_ata", &accounts_struct.nested_ata),
+                ("nested_mint", &accounts_struct.nested_mint),
+                ("dest_ata", &accounts_struct.dest_ata),
+                ("owner_ata", &accounts_struct.owner_ata),
+                ("owner_mint", &accounts_struct.owner_mint),
+                ("wallet", &accounts_struct.wallet),
             ],
         );
 
         let accounts = RecoverAccountSet::new(
-            wrong_nested_ata, // Use wrong address as provided
-            nested_mint,
-            dest_ata,
-            owner_ata,
-            owner_mint,
-            wallet,
+            accounts_struct.nested_ata,
+            accounts_struct.nested_mint,
+            accounts_struct.dest_ata,
+            accounts_struct.owner_ata,
+            accounts_struct.owner_mint,
+            accounts_struct.wallet,
             token_program_id,
             100, // token amount
         )
@@ -455,19 +488,44 @@ impl FailureTestBuilder {
         let ix = Instruction {
             program_id: ata_impl.program_id,
             accounts: vec![
-                AccountMeta::new(wrong_nested_ata, false), // Wrong nested ATA
-                AccountMeta::new_readonly(nested_mint, false),
-                AccountMeta::new(dest_ata, false),
-                AccountMeta::new(owner_ata, false),
-                AccountMeta::new_readonly(owner_mint, false),
-                AccountMeta::new(wallet, true),
+                AccountMeta::new(accounts_struct.nested_ata, false),
+                AccountMeta::new_readonly(accounts_struct.nested_mint, false),
+                AccountMeta::new(accounts_struct.dest_ata, false),
+                AccountMeta::new(accounts_struct.owner_ata, false),
+                AccountMeta::new_readonly(accounts_struct.owner_mint, false),
+                AccountMeta::new(accounts_struct.wallet, true),
                 AccountMeta::new_readonly(*token_program_id, false),
                 AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
             ],
-            data: vec![2u8],
+            data: instruction_data,
         };
 
         (ix, accounts)
+    }
+
+    /// Custom builder for recover wrong nested ATA address test
+    fn build_fail_recover_wrong_nested_ata_address(
+        ata_impl: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        Self::build_recover_nested_failure(
+            ata_impl,
+            token_program_id,
+            "fail_recover_wrong_nested_ata_address",
+            |accs, _data| {
+                let test_number = common_builders::calculate_failure_test_number(
+                    BaseTestType::RecoverNested,
+                    TestVariant::BASE,
+                );
+                // Overwrite the nested_ata with a new, different key to force a mismatch.
+                accs.nested_ata = crate::common::structured_pk(
+                    &ata_impl.variant,
+                    crate::common::TestBankId::Failures,
+                    test_number.wrapping_add(10), // Use a distinct offset to guarantee a different address
+                    crate::common::AccountTypeId::NestedAta,
+                );
+            },
+        )
     }
 
     /// Custom builder for recover wrong destination address test
@@ -475,67 +533,24 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let test_number = common_builders::calculate_failure_test_number(
-            BaseTestType::RecoverNested,
-            TestVariant::BASE,
-        );
-        let [nested_ata, nested_mint, wrong_dest_ata, owner_ata, owner_mint, wallet] =
-            crate::common::structured_pk_multi(
-                &ata_impl.variant,
-                crate::common::TestBankId::Failures,
-                test_number,
-                [
-                    crate::common::AccountTypeId::NestedAta,
-                    crate::common::AccountTypeId::NestedMint,
-                    crate::common::AccountTypeId::Ata, // wrong_dest_ata
-                    crate::common::AccountTypeId::OwnerAta,
-                    crate::common::AccountTypeId::OwnerMint,
-                    crate::common::AccountTypeId::Wallet,
-                ],
-            );
-
-        // Log test name for identification
-        log_test_info(
-            "fail_recover_wrong_destination_address",
+        Self::build_recover_nested_failure(
             ata_impl,
-            &[
-                ("nested_ata", &nested_ata),
-                ("nested_mint", &nested_mint),
-                ("wrong_dest_ata", &wrong_dest_ata),
-                ("owner_ata", &owner_ata),
-                ("owner_mint", &owner_mint),
-                ("wallet", &wallet),
-            ],
-        );
-
-        let accounts = RecoverAccountSet::new(
-            nested_ata,
-            nested_mint,
-            wrong_dest_ata, // Use wrong destination address as provided
-            owner_ata,
-            owner_mint,
-            wallet,
             token_program_id,
-            100, // token amount
+            "fail_recover_wrong_destination_address",
+            |accs, _data| {
+                let test_number = common_builders::calculate_failure_test_number(
+                    BaseTestType::RecoverNested,
+                    TestVariant::BASE,
+                );
+                // Overwrite the dest_ata with a new, different key to force a mismatch.
+                accs.dest_ata = crate::common::structured_pk(
+                    &ata_impl.variant,
+                    crate::common::TestBankId::Failures,
+                    test_number.wrapping_add(11), // Use a distinct offset to guarantee a different address
+                    crate::common::AccountTypeId::Ata,
+                );
+            },
         )
-        .to_vec();
-
-        let ix = Instruction {
-            program_id: ata_impl.program_id,
-            accounts: vec![
-                AccountMeta::new(nested_ata, false),
-                AccountMeta::new_readonly(nested_mint, false),
-                AccountMeta::new(wrong_dest_ata, false), // Wrong destination
-                AccountMeta::new(owner_ata, false),
-                AccountMeta::new_readonly(owner_mint, false),
-                AccountMeta::new(wallet, true),
-                AccountMeta::new_readonly(*token_program_id, false),
-                AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
-            ],
-            data: vec![2u8],
-        };
-
-        (ix, accounts)
     }
 
     /// Custom builder for recover invalid bump value test
@@ -543,67 +558,15 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let test_number = common_builders::calculate_failure_test_number(
-            BaseTestType::RecoverNested,
-            TestVariant::BASE,
-        );
-        let [nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet] =
-            crate::common::structured_pk_multi(
-                &ata_impl.variant,
-                crate::common::TestBankId::Failures,
-                test_number,
-                [
-                    crate::common::AccountTypeId::NestedAta,
-                    crate::common::AccountTypeId::NestedMint,
-                    crate::common::AccountTypeId::Ata, // dest_ata
-                    crate::common::AccountTypeId::OwnerAta,
-                    crate::common::AccountTypeId::OwnerMint,
-                    crate::common::AccountTypeId::Wallet,
-                ],
-            );
-
-        // Log test name for identification
-        log_test_info(
-            "fail_recover_invalid_bump_value",
+        Self::build_recover_nested_failure(
             ata_impl,
-            &[
-                ("nested_ata", &nested_ata),
-                ("nested_mint", &nested_mint),
-                ("dest_ata", &dest_ata),
-                ("owner_ata", &owner_ata),
-                ("owner_mint", &owner_mint),
-                ("wallet", &wallet),
-            ],
-        );
-
-        let accounts = RecoverAccountSet::new(
-            nested_ata,
-            nested_mint,
-            dest_ata,
-            owner_ata,
-            owner_mint,
-            wallet,
             token_program_id,
-            100, // token amount
+            "fail_recover_invalid_bump_value",
+            |_accs, data| {
+                // Append an invalid bump to the instruction data
+                data.push(99u8);
+            },
         )
-        .to_vec();
-
-        let ix = Instruction {
-            program_id: ata_impl.program_id,
-            accounts: vec![
-                AccountMeta::new(nested_ata, false),
-                AccountMeta::new_readonly(nested_mint, false),
-                AccountMeta::new(dest_ata, false),
-                AccountMeta::new(owner_ata, false),
-                AccountMeta::new_readonly(owner_mint, false),
-                AccountMeta::new(wallet, true),
-                AccountMeta::new_readonly(*token_program_id, false),
-                AccountMeta::new_readonly(Pubkey::from(spl_token_interface::program::ID), false),
-            ],
-            data: vec![2u8, 99u8], // RecoverNested with invalid bump
-        };
-
-        (ix, accounts)
     }
 
     /// Generic helper for CreateIdempotent failure tests that have an existing ATA
@@ -696,7 +659,7 @@ impl FailureTestBuilder {
                 let wrong_mint = crate::common::structured_pk(
                     &ata_impl.variant,
                     crate::common::TestBankId::Failures,
-                    test_number + 1,
+                    test_number.wrapping_add(10),
                     crate::common::AccountTypeId::Mint,
                 );
 
@@ -732,7 +695,7 @@ impl FailureTestBuilder {
                 let wrong_owner = crate::common::structured_pk(
                     &ata_impl.variant,
                     crate::common::TestBankId::Failures,
-                    test_number + 1,
+                    test_number.wrapping_add(11),
                     crate::common::AccountTypeId::Wallet,
                 );
 

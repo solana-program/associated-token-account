@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use crate::common::{BaseTestType, ComparisonResult, CompatibilityStatus, TestVariant};
+use serde::Serialize;
+use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
 
 #[macro_export]
 macro_rules! print_cell {
@@ -27,72 +29,70 @@ pub fn get_all_optimizations_variant(base_test: BaseTestType) -> Option<TestVari
 }
 
 /// Nicely print the CU matrix for all test results.
+// REPLACE the implementation with comfy-table for brevity
 pub fn print_matrix_results(
     matrix_results: &HashMap<BaseTestType, HashMap<TestVariant, ComparisonResult>>,
     display_variants: &[TestVariant],
 ) {
-    println!("\n=== PERFORMANCE MATRIX RESULTS ===");
-
-    // Build the column set: SPL-ATA (base), each requested P-ATA variant, plus an "all opt" variant
+    // Build column set: SPL-ATA (base), requested P-ATA variants, plus an "all opt" column
     let all_opt_variant = TestVariant {
         rent_arg: true,
         bump_arg: true,
         token_account_len_arg: true,
     };
+
     let mut columns = vec![TestVariant::BASE];
     columns.extend_from_slice(display_variants);
     columns.push(all_opt_variant);
 
-    // Header
-    print!("{:<20}", "Test");
-    for (i, v) in columns.iter().enumerate() {
-        let name = if i == 0 { "SPL ATA" } else { v.column_name() };
-        print!(" | {:>15}", name);
-    }
-    println!();
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::Dynamic);
 
-    // Separator
-    print!("{:-<20}", "");
-    for _ in &columns {
-        print!("-+-{:-<15}", "");
-    }
-    println!();
+    // Header row
+    let header: Vec<String> = std::iter::once("Test".to_string())
+        .chain(columns.iter().enumerate().map(|(i, v)| {
+            if i == 0 {
+                "SPL ATA".to_string()
+            } else {
+                v.column_name().to_string()
+            }
+        }))
+        .collect();
+    table.set_header(header);
 
-    // Rows
     for (base_test, row) in matrix_results {
-        print!("{:<20}", base_test.name());
+        let mut cells = Vec::with_capacity(columns.len() + 1);
+        cells.push(base_test.name().to_string());
         for (i, variant) in columns.iter().enumerate() {
             let lookup = if *variant == all_opt_variant {
                 get_all_optimizations_variant(*base_test)
             } else {
                 Some(*variant)
             };
-
-            if let Some(actual) = lookup {
-                if let Some(result) = row.get(&actual) {
-                    let cu = if i == 0 {
-                        if result.spl_ata.success && result.spl_ata.compute_units > 0 {
-                            result.spl_ata.compute_units
-                        } else {
-                            0
-                        }
+            let cu = lookup.and_then(|actual| row.get(&actual)).map(|result| {
+                if i == 0 {
+                    if result.spl_ata.success && result.spl_ata.compute_units > 0 {
+                        result.spl_ata.compute_units
                     } else {
-                        if result.p_ata.success && result.p_ata.compute_units > 0 {
-                            result.p_ata.compute_units
-                        } else {
-                            0
-                        }
-                    };
-                    print_cell!(cu);
+                        0
+                    }
                 } else {
-                    print_cell!(0);
+                    if result.p_ata.success && result.p_ata.compute_units > 0 {
+                        result.p_ata.compute_units
+                    } else {
+                        0
+                    }
                 }
-            } else {
-                print_cell!(0);
-            }
+            });
+            cells.push(cu.map(|v| v.to_string()).unwrap_or_default());
         }
-        println!();
+        table.add_row(cells);
     }
+
+    println!("\n=== PERFORMANCE MATRIX RESULTS ===");
+    println!("{}", table);
 }
 
 /// Print detailed per-test comparison output.
@@ -262,97 +262,89 @@ pub fn print_compatibility_summary(all_results: &[ComparisonResult]) {
     }
 }
 
-/// Emit machine-readable JSON of the performance matrix so that other tools (eg. CI dashboards)
-/// can consume the results.
+/// Emit machine-readable JSON of the performance matrix using serde_json.
+#[derive(Serialize)]
+struct VariantData {
+    p_ata_cu: Option<u64>,
+    spl_ata_cu: Option<u64>,
+    compatibility: String,
+    #[serde(rename = "type")]
+    record_type: &'static str,
+}
+
+#[derive(Serialize)]
+struct Output {
+    timestamp: u64,
+    performance_tests: std::collections::HashMap<String, std::collections::HashMap<String, VariantData>>,
+}
+
 pub fn output_matrix_data(
     matrix_results: &HashMap<BaseTestType, HashMap<TestVariant, ComparisonResult>>,
     display_variants: &[TestVariant],
 ) {
-    let mut json_tests = HashMap::new();
+    use std::collections::HashMap;
 
-    // Column list: requested variants + all-optimisations variant
     let all_opt_variant = TestVariant {
         rent_arg: true,
         bump_arg: true,
         token_account_len_arg: true,
     };
+
     let mut columns = display_variants.to_vec();
     columns.push(all_opt_variant);
 
-    for (base_test, row) in matrix_results {
-        let mut variant_map = HashMap::new();
-        for variant in &columns {
-            if let Some(result) = row.get(variant) {
-                if result.p_ata.success && result.p_ata.compute_units > 0 {
-                    let spl_ata_cu = if result.spl_ata.success {
-                        result.spl_ata.compute_units
-                    } else {
-                        0
-                    };
+    let mut performance_tests: HashMap<String, HashMap<String, VariantData>> = HashMap::new();
 
-                    let compatibility = match result.compatibility_status {
+    for (base_test, row) in matrix_results {
+        let mut per_variant: HashMap<String, VariantData> = HashMap::new();
+        for variant in &columns {
+            if let Some(res) = row.get(variant) {
+                if res.p_ata.success && res.p_ata.compute_units > 0 {
+                    let spl_cu = if res.spl_ata.success {
+                        Some(res.spl_ata.compute_units)
+                    } else {
+                        None
+                    };
+                    let compatibility = match res.compatibility_status {
                         CompatibilityStatus::Identical => "identical",
                         CompatibilityStatus::OptimizedBehavior => "optimized",
                         _ => "other",
-                    };
+                    }
+                    .to_string();
 
-                    let spl_ata_cu_str = if spl_ata_cu > 0 {
-                        spl_ata_cu.to_string()
-                    } else {
-                        "null".to_string()
-                    };
-
-                    variant_map.insert(
-                        variant.column_name().replace(" ", "_"),
-                        format!(
-                            r#"{{"p_ata_cu": {}, "spl_ata_cu": {}, "compatibility": "{}", "type": "performance_test"}}"#,
-                            result.p_ata.compute_units,
-                            spl_ata_cu_str,
-                            compatibility
-                        ),
+                    per_variant.insert(
+                        variant.column_name().replace(' ', "_"),
+                        VariantData {
+                            p_ata_cu: Some(res.p_ata.compute_units),
+                            spl_ata_cu: spl_cu,
+                            compatibility,
+                            record_type: "performance_test",
+                        },
                     );
                 }
             }
         }
-        if !variant_map.is_empty() {
-            json_tests.insert(base_test.name(), variant_map);
+        if !per_variant.is_empty() {
+            performance_tests.insert(base_test.name().to_string(), per_variant);
         }
     }
 
-    // Build JSON string manually (avoid pulling in serde just for this)
-    let mut json_entries = Vec::new();
-    for (test_name, variants) in json_tests {
-        let mut variant_entries = Vec::new();
-        for (variant_name, data) in variants {
-            variant_entries.push(format!("    \"{}\": {}", variant_name, data));
-        }
-        json_entries.push(format!(
-            r#"  \"{}\": {{
-{}
-  }}"#,
-            test_name,
-            variant_entries.join(",\n")
-        ));
-    }
-
-    let output = format!(
-        r#"{{
-  \"timestamp\": {},
-  \"performance_tests\": {{
-{}
-  }}
-}}"#,
-        std::time::SystemTime::now()
+    let output = Output {
+        timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
-        json_entries.join(",\n")
-    );
+        performance_tests,
+    };
 
-    std::fs::create_dir_all("benchmark_results").ok();
-    if let Err(e) = std::fs::write("benchmark_results/performance_results.json", output) {
-        eprintln!("Failed to write performance results: {}", e);
+    if let Ok(json) = serde_json::to_string_pretty(&output) {
+        std::fs::create_dir_all("benchmark_results").ok();
+        if std::fs::write("benchmark_results/performance_results.json", &json).is_ok() {
+            println!("\n📊 Matrix results written to benchmark_results/performance_results.json");
+        } else {
+            eprintln!("Failed to write performance results");
+        }
     } else {
-        println!("\n📊 Matrix results written to benchmark_results/performance_results.json");
+        eprintln!("Failed to serialise performance results");
     }
 }

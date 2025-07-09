@@ -1,8 +1,3 @@
-//! Constants used throughout the benchmark code
-//!
-//! This module centralizes all magic numbers to improve readability and maintainability.
-//! Each constant is documented with its purpose and why that specific value is used.
-
 /// Lamport amounts used in tests
 pub mod lamports {
     /// Standard payer account balance for tests

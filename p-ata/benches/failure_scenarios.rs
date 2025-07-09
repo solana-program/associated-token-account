@@ -240,6 +240,16 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
         failure_mode: FailureMode::AtaNotWritable,
         builder_type: TestBuilderType::Simple,
     },
+    // Additional Validation: Using Token-v1 program with an extended (Token-2022 style) mint
+    FailureTestConfig {
+        name: "fail_create_extended_mint_v1",
+        category: TestCategory::AdditionalValidation,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        // failure_mode placeholder – actual mutation done in custom builder
+        failure_mode: FailureMode::InvalidMintStructure(98),
+        builder_type: TestBuilderType::Custom,
+    },
 ];
 
 // ================================ FAILURE TEST HELPERS ================================
@@ -361,6 +371,9 @@ impl FailureTestBuilder {
                     }
                     "fail_token_account_wrong_owner" => {
                         Self::build_fail_token_account_wrong_owner(ata_impl, token_program_id)
+                    }
+                    "fail_create_extended_mint_v1" => {
+                        Self::build_fail_create_extended_mint_v1(ata_impl, token_program_id)
                     }
                     _ => panic!("Unknown custom test: {}", config.name),
                 }
@@ -762,6 +775,41 @@ impl FailureTestBuilder {
             data: vec![1u8], // CreateIdempotent instruction
         };
 
+        (ix, accounts)
+    }
+
+    /// Custom builder: use original Token program but provide an extended (Token-2022 style) mint
+    fn build_fail_create_extended_mint_v1(
+        ata_impl: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Start from a standard, passing create test case
+        let (ix, mut accounts) = CommonTestCaseBuilder::build_test_case(
+            BaseTestType::Create,
+            TestVariant::BASE,
+            ata_impl,
+            token_program_id,
+        );
+
+        // Mutate the existing mint account into an "extended" mint by
+        // appending an ImmutableOwner TLV header (4-byte discriminator + padding).
+        if let Some((_key, mint_acct)) = accounts.get_mut(3) {
+            let mut new_data = mint_acct.data.clone();
+
+            // Ensure starting from the canonical 82-byte layout.
+            if new_data.len() != crate::constants::account_sizes::MINT_ACCOUNT_SIZE {
+                new_data.truncate(crate::constants::account_sizes::MINT_ACCOUNT_SIZE);
+            }
+
+            // Increase length to 98 bytes and write the 4-byte TLV header (ImmutableOwner = 7).
+            let required_len = crate::constants::account_sizes::MINT_ACCOUNT_SIZE + 16; // header + padding
+            new_data.resize(required_len, 0u8);
+            new_data[crate::constants::account_sizes::MINT_ACCOUNT_SIZE
+                ..crate::constants::account_sizes::MINT_ACCOUNT_SIZE + 4]
+                .copy_from_slice(&[7u8, 0u8, 0u8, 0u8]);
+
+            mint_acct.data = new_data;
+        }
         (ix, accounts)
     }
 }

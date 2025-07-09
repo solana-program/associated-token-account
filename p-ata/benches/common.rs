@@ -140,7 +140,6 @@ impl AccountBuilder {
     }
 
     pub fn token_2022_mint_data(decimals: u8) -> Vec<u8> {
-        let mut data = [0u8; MINT_ACCOUNT_SIZE];
         let mint_authority = structured_pk(
             &AtaVariant::SplAta,
             TestBankId::Benchmarks,
@@ -148,13 +147,7 @@ impl AccountBuilder {
             AccountTypeId::Mint,
         );
 
-        data[0..4].copy_from_slice(&1u32.to_le_bytes());
-        data[4..36].copy_from_slice(mint_authority.as_ref());
-        data[44] = decimals;
-        data[45] = 1;
-        data[46..50].copy_from_slice(&0u32.to_le_bytes());
-
-        data.to_vec()
+        base_mint_data(1, &mint_authority, decimals).to_vec()
     }
 }
 
@@ -328,12 +321,22 @@ pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> 
 
 #[inline(always)]
 fn build_mint_data_core(decimals: u8) -> [u8; MINT_ACCOUNT_SIZE] {
-    let mut data = [0u8; MINT_ACCOUNT_SIZE];
-    data[0..4].copy_from_slice(&0u32.to_le_bytes());
-    data[44] = decimals;
-    data[45] = 1;
-    data[46..50].copy_from_slice(&0u32.to_le_bytes());
+    base_mint_data(0, &Pubkey::default(), decimals)
+}
 
+/// Generic helper to create the 82-byte SPL mint layout.
+///
+/// * `state` – 0 = Uninitialized, 1 = Initialized (matches SPL/Token-2022 enum).
+/// * `mint_authority` – 32-byte pubkey (all zeros if none).
+/// * `decimals` – mint decimals.
+#[inline(always)]
+fn base_mint_data(state: u32, mint_authority: &Pubkey, decimals: u8) -> [u8; MINT_ACCOUNT_SIZE] {
+    let mut data = [0u8; MINT_ACCOUNT_SIZE];
+    data[0..4].copy_from_slice(&state.to_le_bytes());
+    data[4..36].copy_from_slice(mint_authority.as_ref());
+    data[44] = decimals;
+    data[45] = 1; // is_initialized flag mirrors the state field
+                  // supply (bytes 46..50) already zeroed
     data
 }
 
@@ -570,6 +573,7 @@ pub struct AtaImplementation {
     pub name: &'static str,
     pub program_id: Pubkey,
     pub binary_name: &'static str,
+    #[allow(dead_code)]
     pub variant: AtaVariant,
 }
 
@@ -657,7 +661,7 @@ pub enum CompatibilityStatus {
     ///
     /// **DOES NOT GUARANTEE:**
     /// - Identical compute unit consumption (tracked separately)
-    /// - Identical instruction data in the case of new p-ATA optimizations)
+    /// - Identical instruction data in the case of new p-ATA optimizations (bump and/or len)
     /// - Read-only account equality (not relevant for result validation)
     Identical,
     BothRejected,        // Both failed with same error types
@@ -1020,7 +1024,7 @@ pub enum BaseTestType {
 pub struct TestVariant {
     pub rent_arg: bool,
     pub bump_arg: bool,
-    pub len_arg: bool,
+    pub token_account_len_arg: bool,
 }
 
 #[allow(dead_code)]
@@ -1028,49 +1032,44 @@ impl TestVariant {
     pub const BASE: Self = Self {
         rent_arg: false,
         bump_arg: false,
-        len_arg: false,
+        token_account_len_arg: false,
     };
     pub const RENT: Self = Self {
         rent_arg: true,
         bump_arg: false,
-        len_arg: false,
+        token_account_len_arg: false,
     };
     pub const BUMP: Self = Self {
         rent_arg: false,
         bump_arg: true,
-        len_arg: false,
-    };
-    pub const LEN: Self = Self {
-        rent_arg: false,
-        bump_arg: false,
-        len_arg: true,
+        token_account_len_arg: false,
     };
     pub const RENT_BUMP: Self = Self {
         rent_arg: true,
         bump_arg: true,
-        len_arg: false,
+        token_account_len_arg: false,
     };
     pub const BUMP_LEN: Self = Self {
-        rent_arg: true,
-        bump_arg: false,
-        len_arg: true,
+        rent_arg: false,
+        bump_arg: true,
+        token_account_len_arg: true,
     };
     pub const RENT_BUMP_LEN: Self = Self {
         rent_arg: true,
         bump_arg: true,
-        len_arg: true,
+        token_account_len_arg: true,
     };
 
     pub fn column_name(&self) -> &'static str {
-        match (self.rent_arg, self.bump_arg, self.len_arg) {
+        match (self.rent_arg, self.bump_arg, self.token_account_len_arg) {
             (false, false, false) => "p-ata",
             (true, false, false) => "rent arg",
             (false, true, false) => "bump arg",
-            (false, false, true) => "bump+len arg", // len cannot be passed without bump
+            (false, false, true) => panic!("token_account_len arg without bump arg"),
+            (false, true, true) => "bump+token_account_len arg",
             (true, true, false) => "rent+bump arg",
-            (true, false, true) => "rent+bump+len arg", // len cannot be passed without bump
+            (true, false, true) => panic!("token_account_len arg without bump arg"),
             (true, true, true) => "all optimizations",
-            _ => "unknown",
         }
     }
 
@@ -1079,11 +1078,11 @@ impl TestVariant {
         if self.rent_arg {
             parts.push("rent");
         }
-        if self.bump_arg || self.len_arg {
+        if self.bump_arg || self.token_account_len_arg {
             parts.push("bump");
         }
-        if self.len_arg {
-            parts.push("len");
+        if self.token_account_len_arg {
+            parts.push("token_account_len");
         }
         if parts.is_empty() {
             String::new()

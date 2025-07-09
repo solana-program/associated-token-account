@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-// Reuse shared types from the existing benchmark framework
 use crate::common::{BaseTestType, ComparisonResult, CompatibilityStatus, TestVariant};
 
 /// Returns the variant that represents "all optimizations enabled" for a given base test.
@@ -27,7 +26,7 @@ pub fn print_matrix_results(
     let all_opt_variant = TestVariant {
         rent_arg: true,
         bump_arg: true,
-        len_arg: true,
+        token_account_len_arg: true,
     };
     let mut columns = vec![TestVariant::BASE];
     columns.extend_from_slice(display_variants);
@@ -268,7 +267,7 @@ pub fn output_matrix_data(
     let all_opt_variant = TestVariant {
         rent_arg: true,
         bump_arg: true,
-        len_arg: true,
+        token_account_len_arg: true,
     };
     let mut columns = display_variants.to_vec();
     columns.push(all_opt_variant);

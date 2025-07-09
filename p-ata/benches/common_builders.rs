@@ -21,7 +21,7 @@ pub struct TestCaseConfig {
     pub base_test: BaseTestType,
     pub token_program: Pubkey,
     pub instruction_discriminator: u8,
-    pub use_extended_mint: bool,
+    pub use_extended_invalid_mint: bool,
     pub setup_topup: bool,
     pub setup_existing_ata: bool,
     pub use_fixed_mint_owner_payer: bool,
@@ -159,7 +159,7 @@ impl CommonTestCaseBuilder {
                 base_test,
                 token_program: *token_program_id,
                 instruction_discriminator: 0,
-                use_extended_mint: false,
+                use_extended_invalid_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
@@ -170,7 +170,7 @@ impl CommonTestCaseBuilder {
                 base_test,
                 token_program: *token_program_id,
                 instruction_discriminator: 1,
-                use_extended_mint: false,
+                use_extended_invalid_mint: false,
                 setup_topup: false,
                 setup_existing_ata: true, // Idempotent
                 use_fixed_mint_owner_payer: true,
@@ -181,7 +181,7 @@ impl CommonTestCaseBuilder {
                 base_test,
                 token_program: *token_program_id,
                 instruction_discriminator: 0,
-                use_extended_mint: false,
+                use_extended_invalid_mint: false,
                 setup_topup: true,
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
@@ -192,7 +192,7 @@ impl CommonTestCaseBuilder {
                 base_test,
                 token_program: *token_program_id,
                 instruction_discriminator: 0,
-                use_extended_mint: false,
+                use_extended_invalid_mint: false,
                 setup_topup: true,
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
@@ -205,7 +205,7 @@ impl CommonTestCaseBuilder {
                     "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
                 )),
                 instruction_discriminator: 0,
-                use_extended_mint: true,
+                use_extended_invalid_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
@@ -216,7 +216,7 @@ impl CommonTestCaseBuilder {
                 base_test,
                 token_program: *token_program_id,
                 instruction_discriminator: 2,
-                use_extended_mint: false,
+                use_extended_invalid_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
@@ -242,7 +242,7 @@ impl CommonTestCaseBuilder {
                 base_test,
                 token_program: *token_program_id,
                 instruction_discriminator: 2,
-                use_extended_mint: false,
+                use_extended_invalid_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
@@ -293,7 +293,7 @@ impl CommonTestCaseBuilder {
                 base_test,
                 token_program: *token_program_id,
                 instruction_discriminator: 0,
-                use_extended_mint: false,
+                use_extended_invalid_mint: false,
                 setup_topup: false,
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
@@ -555,11 +555,7 @@ impl CommonTestCaseBuilder {
             account_set = account_set.with_topup_ata();
         }
 
-        if config.use_extended_mint {
-            account_set = account_set.with_extended_mint(0, &config.token_program);
-        }
-
-        // Handle Token-2022 special case
+        // For real Token-2022 program, use Token-2022 mint layout
         if config.token_program
             == Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
                 "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
@@ -701,7 +697,7 @@ impl CommonTestCaseBuilder {
         bump: u8,
     ) -> Instruction {
         let metas = Self::build_metas(config, variant, accounts);
-        let data = Self::build_instruction_data(config, variant, ata_implementation, bump);
+        let data = Self::build_instruction_data(config, variant, bump);
 
         Instruction {
             program_id: ata_implementation.program_id,
@@ -785,31 +781,23 @@ impl CommonTestCaseBuilder {
     }
 
     /// Build instruction data
-    fn build_instruction_data(
-        config: &TestCaseConfig,
-        variant: TestVariant,
-        ata_implementation: &AtaImplementation,
-        bump: u8,
-    ) -> Vec<u8> {
+    fn build_instruction_data(config: &TestCaseConfig, variant: TestVariant, bump: u8) -> Vec<u8> {
         let mut data = vec![config.instruction_discriminator];
 
-        // If len_arg is specified, we MUST also include bump (P-ATA requirement)
-        if variant.bump_arg || variant.len_arg {
+        // If token_account_len_arg is specified, we MUST also include bump (P-ATA requirement)
+        if variant.bump_arg || variant.token_account_len_arg {
             data.push(bump);
         }
 
-        if variant.len_arg {
+        if variant.token_account_len_arg {
             let account_len: u16 = if config.token_program
                 == Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
                     "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
                 )) {
-                // For Token-2022, calculate the actual required length with extensions
                 ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&[
                     ExtensionType::ImmutableOwner,
                 ])
                 .expect("failed to calculate Token-2022 account length") as u16
-            } else if config.use_extended_mint {
-                170 // with immutable owner extension
             } else {
                 165 // Standard token account size
             };
@@ -1087,13 +1075,18 @@ pub fn calculate_test_number(
         BaseTestType::WorstCase => 80,
     };
 
-    let variant_offset = match (variant.rent_arg, variant.bump_arg, variant.len_arg) {
+    // Currently len cannot be true if bump is false. Those should be unreachable.
+    let variant_offset = match (
+        variant.rent_arg,
+        variant.bump_arg,
+        variant.token_account_len_arg,
+    ) {
         (false, false, false) => 0,
         (true, false, false) => 1,
         (false, true, false) => 2,
-        (false, false, true) => 3,
+        (false, false, true) => panic!("token_account_len cannot be true if bump is false"),
         (true, true, false) => 4,
-        (true, false, true) => 5,
+        (true, false, true) => panic!("token_account_len cannot be true if bump is false"),
         (true, true, true) => 6,
         _ => 7,
     };
@@ -1120,18 +1113,21 @@ pub fn calculate_failure_test_number(base_test: BaseTestType, variant: TestVaria
             BaseTestType::WorstCase => 70,
         };
 
-    let variant_offset = match (variant.rent_arg, variant.bump_arg, variant.len_arg) {
+    let variant_offset = match (
+        variant.rent_arg,
+        variant.bump_arg,
+        variant.token_account_len_arg,
+    ) {
         (false, false, false) => 0,
         (true, false, false) => 1,
         (false, true, false) => 2,
-        (false, false, true) => 3,
+        (false, false, true) => panic!("token_account_len arg without bump arg"),
         (true, true, false) => 4,
-        (true, false, true) => 5,
+        (true, false, true) => panic!("token_account_len arg without bump arg"),
         (true, true, true) => 6,
         _ => 7,
     };
 
-    // Auto-increment failure counter to ensure uniqueness
     let failure_id = FAILURE_COUNTER.fetch_add(1, Ordering::SeqCst);
     base + variant_offset + (failure_id % 8)
 }

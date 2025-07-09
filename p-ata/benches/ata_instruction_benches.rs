@@ -64,7 +64,6 @@ static TEST_CONFIGS: &[TestConfiguration] = &[
             TestVariant::BASE,
             TestVariant::RENT,
             TestVariant::BUMP,
-            TestVariant::LEN,
             TestVariant::RENT_BUMP,
             TestVariant::BUMP_LEN,
             TestVariant::RENT_BUMP_LEN,
@@ -91,7 +90,7 @@ impl BenchmarkSetup {
         let test_variant = TestVariant {
             rent_arg: false,
             bump_arg: false,
-            len_arg: false,
+            token_account_len_arg: false,
         };
         let (test_ix, test_accounts) = CommonTestCaseBuilder::build_test_case(
             BaseTestType::Create,
@@ -167,12 +166,7 @@ impl PerformanceTestOrchestrator {
         spl_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> Vec<ComparisonResult> {
-        let display_variants = [
-            TestVariant::BASE,
-            TestVariant::RENT,
-            TestVariant::BUMP,
-            TestVariant::LEN,
-        ];
+        let display_variants = [TestVariant::BASE, TestVariant::RENT, TestVariant::BUMP];
 
         let mut matrix_results = std::collections::HashMap::new();
         let mut all_results = Vec::new();
@@ -237,12 +231,8 @@ impl PerformanceTestOrchestrator {
         );
 
         // For address generation consistency, use the same variant as P-ATA
-        let (original_ix, original_accounts) = CommonTestCaseBuilder::build_test_case(
-            base_test,
-            variant, // Use same variant for consistent address generation
-            spl_impl,
-            token_program_id,
-        );
+        let (original_ix, original_accounts) =
+            CommonTestCaseBuilder::build_test_case(base_test, variant, spl_impl, token_program_id);
 
         // Handle special cases where original ATA doesn't support the feature
         let mut original_result = if Self::original_supports_test(base_test) {
@@ -371,10 +361,10 @@ impl PerformanceTestOrchestrator {
         let all_opt_variant = TestVariant {
             rent_arg: true,
             bump_arg: true,
-            len_arg: true,
+            token_account_len_arg: true,
         };
         let mut columns = vec![TestVariant::BASE]; // This will be used for SPL ATA data
-        columns.extend_from_slice(display_variants); // This includes BASE for p-ata, plus rent, bump, len
+        columns.extend_from_slice(display_variants); // This includes BASE for p-ata, plus rent, bump, token_account_len
         columns.push(all_opt_variant);
 
         // Print header with proper column names
@@ -705,7 +695,7 @@ impl PerformanceTestOrchestrator {
         let all_opt_variant = TestVariant {
             rent_arg: true,
             bump_arg: true,
-            len_arg: true,
+            token_account_len_arg: true,
         };
         let mut columns = display_variants.to_vec();
         columns.push(all_opt_variant);

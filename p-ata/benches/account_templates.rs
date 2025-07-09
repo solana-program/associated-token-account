@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 //! Account templates for benchmark tests
 
-use {solana_account::Account, solana_pubkey::Pubkey, solana_sysvar::rent};
-
+use crate::constants::account_sizes::MINT_ACCOUNT_SIZE;
 use crate::{constants::lamports::*, AccountBuilder, NATIVE_LOADER_ID, SYSTEM_PROGRAM_ID};
+use {solana_account::Account, solana_pubkey::Pubkey, solana_sysvar::rent};
 
 /// Standard account set for most ATA benchmark tests
 ///
@@ -58,23 +58,54 @@ impl StandardAccountSet {
         }
     }
 
-    /// Configure the ATA as an existing token account
+    /// Configure the ATA as an existing token account.
     ///
-    /// Used for CreateIdempotent tests where the ATA already exists
+    /// Used for CreateIdempotent tests where the ATA already exists.
+    ///
+    /// **Call-order requirement**: invoke this *before* any other `with_*` helper that also
+    /// mutates the ATA (e.g. `with_topup_ata`).
+    ///
+    /// # Panics
+    /// Panics if the ATA has already been initialised – i.e. when its owner is no longer the
+    /// system program or its data buffer is non-empty – which would indicate that another
+    /// mutator has been applied out of order.
     pub fn with_existing_ata(
         mut self,
         mint: &Pubkey,
         wallet: &Pubkey,
         token_program_id: &Pubkey,
     ) -> Self {
+        // Protect against accidental re-initialisation when helpers are chained in the wrong order.
+        assert_eq!(
+            self.ata.1.owner, SYSTEM_PROGRAM_ID,
+            "with_existing_ata() called after ATA owner was already set – check builder call order"
+        );
+        assert!(
+            self.ata.1.data.is_empty(),
+            "with_existing_ata() expects ATA data to be empty"
+        );
         self.ata.1 = AccountBuilder::token_account(mint, wallet, 0, token_program_id);
         self
     }
 
-    /// Configure the ATA as a topup account (has some lamports but not rent-exempt)
+    /// Configure the ATA as a top-up account (has some lamports but not rent-exempt).
     ///
-    /// Used for create-account-prefunded tests
+    /// Used for create-account-prefunded tests.
+    ///
+    /// **Call-order requirement**: must be invoked before any helper that converts the ATA into a
+    /// fully-initialised token account (e.g. `with_existing_ata`).
+    ///
+    /// # Panics
+    /// Panics if the ATA has already been initialised or given a non-zero balance.
     pub fn with_topup_ata(mut self) -> Self {
+        assert_eq!(
+            self.ata.1.owner, SYSTEM_PROGRAM_ID,
+            "with_topup_ata() called after ATA owner was already set – check builder call order"
+        );
+        assert_eq!(
+            self.ata.1.lamports, 0,
+            "with_topup_ata() expects ATA lamports to be zero before top-up"
+        );
         self.ata.1.lamports = 1_000_000; // Below rent-exempt threshold
         self.ata.1.data = vec![]; // No data allocated yet
         self.ata.1.owner = SYSTEM_PROGRAM_ID; // Still system-owned
@@ -91,19 +122,9 @@ impl StandardAccountSet {
         }
     }
 
-    /// Use Token-2022 mint instead of standard mint
-    ///
-    /// Used for Token-2022 specific tests
+    /// Use Token-2022 mint instead of standard mint.
     pub fn with_token_2022_mint(mut self, decimals: u8) -> Self {
         self.mint.1 = AccountBuilder::token_2022_mint_account(decimals, &self.token_program.0);
-        self
-    }
-
-    /// Use extended mint format (with ImmutableOwner extension)
-    ///
-    /// Used for tests that require extended mint accounts
-    pub fn with_extended_mint(mut self, decimals: u8, token_program_id: &Pubkey) -> Self {
-        self.mint.1 = AccountBuilder::mint_account(decimals, token_program_id, true);
         self
     }
 

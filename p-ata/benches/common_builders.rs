@@ -358,7 +358,6 @@ impl CommonTestCaseBuilder {
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
-            // `wallet` is now the optimally-engineered pubkey from get_structured_addresses.
             let actual_wallet = wallet;
 
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {

@@ -635,21 +635,6 @@ impl AtaImplementation {
             variant: AtaVariant::SplAta,
         }
     }
-
-    /// Adapt instruction data for this implementation
-    pub fn adapt_instruction_data(&self, data: Vec<u8>) -> Vec<u8> {
-        match self.variant {
-            AtaVariant::PAtaLegacy | AtaVariant::PAtaPrefunded => data, // P-ATA supports bump optimizations
-            AtaVariant::SplAta => {
-                // SPL ATA doesn't support bump optimizations, strip them
-                match data.as_slice() {
-                    [0, _bump] => vec![0],
-                    [2, _bump] => vec![2],
-                    _ => data,
-                }
-            }
-        }
-    }
 }
 
 #[allow(dead_code)]

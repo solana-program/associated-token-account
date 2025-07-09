@@ -237,7 +237,6 @@ impl PerformanceTestOrchestrator {
         );
 
         // For address generation consistency, use the same variant as P-ATA
-        // SPL ATA will strip variant-specific instruction data in adapt_instruction_data()
         let (original_ix, original_accounts) = CommonTestCaseBuilder::build_test_case(
             base_test,
             variant, // Use same variant for consistent address generation

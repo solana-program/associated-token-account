@@ -62,6 +62,7 @@ serde_json = "1.0"
 test-case = "3.3.1"
 bs58 = "0.4.0"
 colored = "2.0"
+itertools = "0.12"
 
 [[bench]]
 name = "ata_instruction_benches"

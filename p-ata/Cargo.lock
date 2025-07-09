@@ -3089,6 +3089,7 @@ dependencies = [
  "colored",
  "criterion",
  "indicatif",
+ "itertools 0.12.1",
  "mollusk-svm",
  "mollusk-svm-bencher",
  "num-traits",

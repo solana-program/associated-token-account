@@ -1065,7 +1065,7 @@ impl TestVariant {
         bump_arg: true,
         len_arg: false,
     };
-    pub const RENT_LEN: Self = Self {
+    pub const BUMP_LEN: Self = Self {
         rent_arg: true,
         bump_arg: false,
         len_arg: true,
@@ -1130,43 +1130,6 @@ impl BaseTestType {
             Self::CreateTopup => AtaVariant::PAtaPrefunded, // Uses create-account-prefunded feature
             Self::CreateTopupNoCap => AtaVariant::PAtaLegacy, // Uses standard P-ATA without the feature
             _ => AtaVariant::PAtaLegacy,                      // All other tests use standard P-ATA
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn supported_variants(&self) -> Vec<TestVariant> {
-        match self {
-            Self::Create => vec![
-                TestVariant::BASE,
-                TestVariant::RENT,
-                TestVariant::BUMP,
-                TestVariant::RENT_BUMP,
-            ],
-            Self::CreateIdempotent => vec![TestVariant::BASE, TestVariant::RENT],
-            Self::CreateTopup => vec![
-                TestVariant::BASE,
-                TestVariant::RENT,
-                TestVariant::BUMP,
-                TestVariant::RENT_BUMP,
-            ],
-            Self::CreateTopupNoCap => vec![
-                TestVariant::BASE,
-                TestVariant::RENT,
-                TestVariant::BUMP,
-                TestVariant::RENT_BUMP,
-            ],
-            Self::CreateToken2022 => vec![
-                TestVariant::BASE,
-                TestVariant::RENT,
-                TestVariant::BUMP,
-                TestVariant::LEN,
-                TestVariant::RENT_BUMP,
-                TestVariant::RENT_LEN,
-                TestVariant::RENT_BUMP_LEN,
-            ],
-            Self::RecoverNested => vec![TestVariant::BASE, TestVariant::BUMP],
-            Self::RecoverMultisig => vec![TestVariant::BASE, TestVariant::BUMP],
-            Self::WorstCase => vec![TestVariant::BASE, TestVariant::BUMP],
         }
     }
 }

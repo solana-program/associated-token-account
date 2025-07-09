@@ -13,6 +13,73 @@ use common_builders::CommonTestCaseBuilder;
 mod account_comparison;
 use account_comparison::{AccountComparisonService, ComparisonFormatter};
 
+mod formatter;
+
+struct TestConfiguration {
+    base_test: BaseTestType,
+    variants: &'static [TestVariant],
+}
+
+/// Master list of base tests and the P-ATA variants we actually run/display.
+static TEST_CONFIGS: &[TestConfiguration] = &[
+    TestConfiguration {
+        base_test: BaseTestType::CreateIdempotent,
+        variants: &[
+            TestVariant::BASE,
+            TestVariant::RENT,
+            TestVariant::BUMP,
+            TestVariant::RENT_BUMP,
+        ],
+    },
+    TestConfiguration {
+        base_test: BaseTestType::Create,
+        variants: &[
+            TestVariant::BASE,
+            TestVariant::RENT,
+            TestVariant::BUMP,
+            TestVariant::RENT_BUMP,
+        ],
+    },
+    TestConfiguration {
+        base_test: BaseTestType::CreateTopup,
+        variants: &[
+            TestVariant::BASE,
+            TestVariant::RENT,
+            TestVariant::BUMP,
+            TestVariant::RENT_BUMP,
+        ],
+    },
+    TestConfiguration {
+        base_test: BaseTestType::CreateTopupNoCap,
+        variants: &[
+            TestVariant::BASE,
+            TestVariant::RENT,
+            TestVariant::BUMP,
+            TestVariant::RENT_BUMP,
+        ],
+    },
+    TestConfiguration {
+        base_test: BaseTestType::CreateToken2022,
+        variants: &[
+            TestVariant::BASE,
+            TestVariant::RENT,
+            TestVariant::BUMP,
+            TestVariant::LEN,
+            TestVariant::RENT_BUMP,
+            TestVariant::BUMP_LEN,
+            TestVariant::RENT_BUMP_LEN,
+        ],
+    },
+    TestConfiguration {
+        base_test: BaseTestType::RecoverNested,
+        variants: &[TestVariant::BASE, TestVariant::RENT, TestVariant::BUMP],
+    },
+    TestConfiguration {
+        base_test: BaseTestType::RecoverMultisig,
+        variants: &[TestVariant::BASE, TestVariant::RENT, TestVariant::BUMP],
+    },
+];
+
 // ============================ SETUP AND CONFIGURATION =============================
 
 impl BenchmarkSetup {
@@ -100,68 +167,34 @@ impl PerformanceTestOrchestrator {
         spl_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> Vec<ComparisonResult> {
-        let base_tests = [
-            BaseTestType::CreateIdempotent,
-            BaseTestType::Create,
-            BaseTestType::CreateTopup,
-            BaseTestType::CreateTopupNoCap,
-            BaseTestType::CreateToken2022,
-            BaseTestType::RecoverNested,
-            BaseTestType::RecoverMultisig,
-        ];
-
         let display_variants = [
-            TestVariant::BASE, // p-ata base
-            TestVariant::RENT, // rent arg
-            TestVariant::BUMP, // bump arg
-            TestVariant::LEN,  // len arg
+            TestVariant::BASE,
+            TestVariant::RENT,
+            TestVariant::BUMP,
+            TestVariant::LEN,
         ];
 
         let mut matrix_results = std::collections::HashMap::new();
         let mut all_results = Vec::new();
 
-        // Run all test combinations
-        for base_test in base_tests {
+        // Run all test configurations
+        for config in TEST_CONFIGS {
+            let base_test = config.base_test;
             println!("\n--- Testing variant {} ---", base_test.name());
 
             // Select appropriate P-ATA implementation for this test
             let pata_impl =
                 Self::select_pata_implementation(base_test, pata_legacy_impl, pata_prefunded_impl);
 
-            let supported_variants = base_test.supported_variants();
             let mut test_row = std::collections::HashMap::new();
 
-            // Run all supported variants for display
-            for variant in &supported_variants {
-                if display_variants.contains(variant) {
-                    let test_name = format!("{}_{}", base_test.name(), variant.test_suffix());
-                    let comparison = Self::run_single_test_comparison(
-                        &test_name,
-                        base_test,
-                        *variant,
-                        pata_impl,
-                        spl_impl,
-                        token_program_id,
-                        &pata_legacy_impl.program_id,
-                    );
-
-                    // Print immediate detailed results for debugging
-                    Self::print_test_results(&comparison, false);
-
-                    all_results.push(comparison.clone());
-                    test_row.insert(*variant, comparison);
-                }
-            }
-
-            // Run actual "all optimizations" test - combine all applicable optimizations
-            let all_optimizations_variant = Self::get_all_optimizations_variant(base_test);
-            if let Some(all_opt_variant) = all_optimizations_variant {
-                let test_name = format!("{}_all_optimizations", base_test.name());
-                println!("  Running {} (all applicable optimizations)", test_name);
+            // Run all configured variants for this test row
+            for &variant in config.variants {
+                let test_name = format!("{}_{}", base_test.name(), variant.test_suffix());
                 let comparison = Self::run_single_test_comparison(
                     &test_name,
                     base_test,
-                    all_opt_variant,
+                    variant,
                     pata_impl,
                     spl_impl,
                     token_program_id,
@@ -169,25 +202,21 @@ impl PerformanceTestOrchestrator {
                 );
 
                 // Print immediate detailed results for debugging
-                Self::print_test_results(&comparison, false);
+                formatter::print_test_results(&comparison, false);
 
                 all_results.push(comparison.clone());
-
-                // Add to matrix with special marker
-                let all_opt_marker = TestVariant {
-                    rent_arg: true,
-                    bump_arg: true,
-                    len_arg: true,
-                }; // Special marker for display
-                test_row.insert(all_opt_marker, comparison);
+                test_row.insert(variant, comparison);
             }
 
             matrix_results.insert(base_test, test_row);
         }
 
-        Self::print_matrix_results(&matrix_results, &display_variants);
-        Self::print_compatibility_summary(&all_results);
-        Self::output_matrix_data(&matrix_results, &display_variants);
+        // Derive the unique set of displayed variants (first config is enough as they share ordering)
+        let displayed_variants = TEST_CONFIGS[0].variants;
+
+        formatter::print_matrix_results(&matrix_results, &display_variants);
+        formatter::print_compatibility_summary(&all_results);
+        formatter::output_matrix_data(&matrix_results, &display_variants);
         all_results
     }
 
@@ -317,17 +346,15 @@ impl PerformanceTestOrchestrator {
         }
     }
 
-    /// Determine the actual "all optimizations" variant for each test type
-    /// This combines all meaningful optimizations for the specific test, not just everything
+    /// Determine which variant represents "all applicable optimizations" for a given base test
     fn get_all_optimizations_variant(base_test: BaseTestType) -> Option<TestVariant> {
         match base_test {
-            BaseTestType::Create => Some(TestVariant::RENT_BUMP), // rent + bump
-            BaseTestType::CreateIdempotent => Some(TestVariant::RENT), // only rent makes sense
-            BaseTestType::CreateTopup => Some(TestVariant::RENT_BUMP), // rent + bump
-            BaseTestType::CreateTopupNoCap => Some(TestVariant::RENT_BUMP), // rent + bump
-            BaseTestType::CreateToken2022 => Some(TestVariant::RENT_BUMP_LEN), // rent + bump + len
-            BaseTestType::RecoverNested => Some(TestVariant::BUMP), // only bump makes sense
-            BaseTestType::RecoverMultisig => Some(TestVariant::BUMP), // only bump makes sense
+            BaseTestType::Create | BaseTestType::CreateTopup | BaseTestType::CreateTopupNoCap => {
+                Some(TestVariant::RENT_BUMP)
+            }
+            BaseTestType::CreateIdempotent => Some(TestVariant::BASE),
+            BaseTestType::CreateToken2022 => Some(TestVariant::RENT_BUMP_LEN),
+            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig => Some(TestVariant::BUMP),
             _ => None,
         }
     }
@@ -374,29 +401,43 @@ impl PerformanceTestOrchestrator {
         for (base_test, test_row) in matrix_results {
             print!("{:<20}", base_test.name());
             for (i, variant) in columns.iter().enumerate() {
-                if let Some(result) = test_row.get(variant) {
-                    let compute_units = if i == 0 {
-                        // First column: show SPL ATA numbers (SPL ATA)
-                        if result.spl_ata.success && result.spl_ata.compute_units > 0 {
-                            result.spl_ata.compute_units
-                        } else {
-                            0
-                        }
-                    } else {
-                        // All other columns: show P-ATA numbers for the specific variant
-                        if result.p_ata.success && result.p_ata.compute_units > 0 {
-                            result.p_ata.compute_units
-                        } else {
-                            0
-                        }
-                    };
+                // Determine which variant's result we should display
+                let lookup_variant = if *variant == all_opt_variant {
+                    // Use dynamic all-optimizations variant for this base_test
+                    Self::get_all_optimizations_variant(*base_test)
+                } else {
+                    Some(*variant)
+                };
 
-                    if compute_units > 0 {
-                        print!(" | {:>15}", compute_units);
+                if let Some(actual_variant) = lookup_variant {
+                    if let Some(result) = test_row.get(&actual_variant) {
+                        let compute_units = if i == 0 {
+                            // First column: show SPL ATA numbers (SPL ATA)
+                            if result.spl_ata.success && result.spl_ata.compute_units > 0 {
+                                result.spl_ata.compute_units
+                            } else {
+                                0
+                            }
+                        } else {
+                            // All other columns: show P-ATA numbers for the specific variant
+                            if result.p_ata.success && result.p_ata.compute_units > 0 {
+                                result.p_ata.compute_units
+                            } else {
+                                0
+                            }
+                        };
+
+                        if compute_units > 0 {
+                            print!(" | {:>15}", compute_units);
+                        } else {
+                            print!(" | {:>15}", "");
+                        }
                     } else {
+                        // Result not found (shouldn't happen but leave blank)
                         print!(" | {:>15}", "");
                     }
                 } else {
+                    // No applicable variant (e.g., unsupported all_opt for this test)
                     print!(" | {:>15}", "");
                 }
             }

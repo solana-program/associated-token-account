@@ -680,7 +680,7 @@ impl FailureTestBuilder {
         let wrong_mint = crate::common::structured_pk(
             &ata_impl.variant,
             crate::common::TestBankId::Failures,
-            test_number + 1, // offset for different account
+            test_number + 1,
             crate::common::AccountTypeId::Mint,
         );
         let (ata, _bump) = Pubkey::find_program_address(

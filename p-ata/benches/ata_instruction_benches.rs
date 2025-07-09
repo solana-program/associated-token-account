@@ -850,7 +850,6 @@ fn main() {
     }
 
     // Validate legacy P-ATA (without prefunded) setup
-    // TODO: fix
     println!(
         "Validating legacy P-ATA setup with token program {}",
         program_ids.token_program_id

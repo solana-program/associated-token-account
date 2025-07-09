@@ -183,9 +183,9 @@ pub enum AccountTypeId {
 /// Convert AtaVariant to byte value
 fn variant_to_byte(variant: &AtaVariant) -> u8 {
     match variant {
-        AtaVariant::PAtaLegacy => 1, // Changed from 0 to avoid system program ID
-        AtaVariant::PAtaPrefunded => 2, // Changed from 1 to 2
-        AtaVariant::SplAta => 3,     // Changed from 2 to 3
+        AtaVariant::PAtaLegacy => 1, // avoid system program ID
+        AtaVariant::PAtaPrefunded => 2,
+        AtaVariant::SplAta => 3,
     }
 }
 

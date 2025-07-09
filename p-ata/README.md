@@ -24,7 +24,7 @@ Expanded Functionality:
 
 Mollusk's extensive debug logs are filtered out unless a test has an unexpected result. To show all of them, run `cargo bench --features full-debug-logs`.
 
-*as of 2025-07-08, a6cc353*
+*as of 2025-07-09, 3747f8d*
 
 "optimum args" are:
 - `bump`
@@ -34,13 +34,13 @@ Mollusk's extensive debug logs are filtered out unless a test has an unexpected 
 | Test                   |    SPL ATA     | p-ata, no new args   | p-ata w/ bump | p-ata w/ optimum args | Notes                                                 |
 |------------------------|----------|---------|----------|------------------|--------------------------------------------------------|
 | create_idemp           |   3,669  |    241  |       --      |       --        |                                 |
-| create_base            |  12,364  |  5,117  |  3,204 | 3,108        |                                   |
-| create_topup           |  15,817  |  4,714  | 3,193 |    3,096        | create-account-prefunded      |
-| create_topup_no_cap    |  15,817  |  7,207  |    5,686 |  5,590        | no create-account-prefunded   |
-| create_token2022       |  14,692  |  7,472  |     5,951  | 5,828        |                                                |
-| recover_nested             |  14,356  |  4,429  |    2,905 | 2,905        |                                            |
-| recover_multisig       |    --   |  4,472  |      3,145 | 3,145        |                                         |
-| worst_case_create      |  19,864  | 15,187  |     3,204 | 3,108        | Hard-to-find bump   |
+| create_base            |  12,364  |  4,715  |  3,195 | 3,098        |                                   |
+| create_topup           |  15,817  |  4,718  | 3,198 |    3,101        | create-account-prefunded      |
+| create_topup_no_cap    |  15,817  |  7,205  |    5,685 |  5,588        | no create-account-prefunded   |
+| create_token2022       |  14,692  |  7,461  |     5,941  | 5,817        |                                                |
+| recover_nested             |  14,356  |  4,428  |    2,904 | 2,904        |                                            |
+| recover_multisig       |    --   |  4,668  |      3,144 | 3,144        |                                         |
+| worst_case_create      |  19,864  | 15,187  |     3,195 | 3,098        | Hard-to-find bump   |
 
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.
 

@@ -8,12 +8,16 @@ use {
     },
 };
 
-program_entrypoint!(entry);
+program_entrypoint!(process_instruction);
 no_allocator!();
 nostd_panic_handler!();
 
 #[inline(always)]
-pub fn entry(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> ProgramResult {
+pub fn process_instruction(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    data: &[u8],
+) -> ProgramResult {
     match data {
         // Empty data defaults to Create (discriminator 0) - preserving backward compatibility
         [] => process_create(program_id, accounts, false, None, None),

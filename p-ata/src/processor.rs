@@ -312,6 +312,7 @@ pub fn process_recover(
     accounts: &[AccountInfo],
     bump_opt: Option<u8>,
 ) -> ProgramResult {
+    // SAFETY: Accounts bounded by runtime
     let (nested_ata, dest_ata, owner_ata, owner_mint_account, wallet, token_prog) = unsafe {
         (
             accounts.get_unchecked(0),

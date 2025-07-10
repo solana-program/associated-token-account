@@ -30,6 +30,9 @@ pub fn process_instruction(
                 [bump] => process_create(program_id, accounts, false, Some(*bump), None),
                 // Bump + account_len provided (for Token-2022 optimization)
                 [bump, account_len_bytes @ ..] => {
+                    // SAFETY: runtime-bounded, and account_len is last.
+                    // TODO: examine whether this could be exploited by creating a huge account
+                    // for some user.
                     let account_len = unsafe {
                         u16::from_le_bytes(*(account_len_bytes.as_ptr() as *const [u8; 2]))
                     };

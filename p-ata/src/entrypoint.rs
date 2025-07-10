@@ -26,9 +26,16 @@ pub fn entry(program_id: &Pubkey, accounts: &[AccountInfo], data: &[u8]) -> Prog
                 [bump] => process_create(program_id, accounts, false, Some(*bump), None),
                 // Bump + account_len provided (for Token-2022 optimization)
                 [bump, account_len_bytes @ ..] => {
-                    let account_len =
-                        u16::from_le_bytes([account_len_bytes[0], account_len_bytes[1]]) as usize;
-                    process_create(program_id, accounts, false, Some(*bump), Some(account_len))
+                    let account_len = unsafe {
+                        u16::from_le_bytes(*(account_len_bytes.as_ptr() as *const [u8; 2]))
+                    };
+                    process_create(
+                        program_id,
+                        accounts,
+                        false,
+                        Some(*bump),
+                        Some(account_len as usize),
+                    )
                 }
             },
             // 1 - CreateIdempotent

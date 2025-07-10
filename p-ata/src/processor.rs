@@ -308,23 +308,16 @@ pub fn process_recover(
     accounts: &[AccountInfo],
     bump_opt: Option<u8>,
 ) -> ProgramResult {
-    let (
-        nested_ata,
-        _nested_mint_account,
-        dest_ata,
-        owner_ata,
-        owner_mint_account,
-        wallet,
-        token_prog,
-    ) = (
-        &accounts[0],
-        &accounts[1],
-        &accounts[2],
-        &accounts[3],
-        &accounts[4],
-        &accounts[5],
-        &accounts[6],
-    );
+    let (nested_ata, dest_ata, owner_ata, owner_mint_account, wallet, token_prog) = unsafe {
+        (
+            accounts.get_unchecked(0),
+            accounts.get_unchecked(2),
+            accounts.get_unchecked(3),
+            accounts.get_unchecked(4),
+            accounts.get_unchecked(5),
+            accounts.get_unchecked(6),
+        )
+    };
 
     let bump = match bump_opt {
         Some(provided_bump) => provided_bump,

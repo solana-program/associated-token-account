@@ -2,6 +2,7 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         instruction::{Seed, Signer},
+        program_error::ProgramError,
         pubkey::Pubkey,
         sysvars::rent::Rent,
         ProgramResult,

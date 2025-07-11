@@ -985,7 +985,7 @@ impl FailureTestBuilder {
         let ix = Instruction {
             program_id: ata_impl.program_id,
             accounts: vec![
-                AccountMeta::new(victim_ata, true), // payer within ATA instruction (has lamports, not a signer)
+                AccountMeta::new(victim_ata, false), // payer within ATA instruction (has lamports, not a signer)
                 AccountMeta::new(attacker_ata, false), // associated_token_account (attacker's legitimate ATA)
                 AccountMeta::new_readonly(attacker_wallet, false), // wallet = seed for derivation
                 AccountMeta::new_readonly(victim_mint, false), // attacker's chosen mint

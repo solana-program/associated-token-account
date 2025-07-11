@@ -334,6 +334,10 @@ pub fn process_create(
         return Ok(());
     }
 
+    if !create_accounts.payer.is_signer() {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
     let bump = match maybe_bump {
         Some(provided_bump) => provided_bump,
         None => {

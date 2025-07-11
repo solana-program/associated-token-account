@@ -17,16 +17,28 @@ pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
 pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
 pub const TRANSFER_DISCM: u8 = 3;
 
-/// Parsed ATA accounts: (payer, ata, wallet, mint, system_program, token_program, rent_sysvar?)
-type AtaAccounts<'a> = (
-    &'a AccountInfo,
-    &'a AccountInfo,
-    &'a AccountInfo,
-    &'a AccountInfo,
-    &'a AccountInfo,
-    &'a AccountInfo,
-    Option<&'a AccountInfo>,
-);
+/// Parsed ATA accounts for create operations
+pub struct CreateAccounts<'a> {
+    pub payer: &'a AccountInfo,
+    pub ata: &'a AccountInfo,
+    pub wallet: &'a AccountInfo,
+    pub mint: &'a AccountInfo,
+    pub system_program: &'a AccountInfo,
+    pub token_program: &'a AccountInfo,
+    pub rent_sysvar: Option<&'a AccountInfo>,
+}
+
+/// Parsed Recover accounts for recover operations
+pub struct RecoverAccounts<'a> {
+    pub nested_ata: &'a AccountInfo,
+    #[allow(dead_code)] // TBD on use
+    pub nested_mint: &'a AccountInfo,
+    pub dest_ata: &'a AccountInfo,
+    pub owner_ata: &'a AccountInfo,
+    pub owner_mint: &'a AccountInfo,
+    pub wallet: &'a AccountInfo,
+    pub token_prog: &'a AccountInfo,
+}
 
 /// Derive ATA PDA from wallet, token program, and mint
 #[inline(always)]
@@ -130,9 +142,30 @@ fn resolve_rent(rent_info_opt: Option<&AccountInfo>) -> Result<Rent, ProgramErro
     }
 }
 
-/// Parse and validate the standard ATA account layout.
+/// Parse and validate the standard Recover account layout.
 #[inline(always)]
-fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramError> {
+fn parse_recover_accounts(accounts: &[AccountInfo]) -> Result<RecoverAccounts, ProgramError> {
+    if accounts.len() < 7 {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    // SAFETY: account len already checked
+    unsafe {
+        Ok(RecoverAccounts {
+            nested_ata: accounts.get_unchecked(0),
+            nested_mint: accounts.get_unchecked(1),
+            dest_ata: accounts.get_unchecked(2),
+            owner_ata: accounts.get_unchecked(3),
+            owner_mint: accounts.get_unchecked(4),
+            wallet: accounts.get_unchecked(5),
+            token_prog: accounts.get_unchecked(6),
+        })
+    }
+}
+
+/// Parse and validate the standard Create account layout.
+#[inline(always)]
+fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts, ProgramError> {
     let rent_info = match accounts.len() {
         len if len >= 7 => Some(unsafe { accounts.get_unchecked(6) }),
         6 => None,
@@ -141,15 +174,15 @@ fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramEr
 
     // SAFETY: account info already checked
     unsafe {
-        Ok((
-            accounts.get_unchecked(0),
-            accounts.get_unchecked(1),
-            accounts.get_unchecked(2),
-            accounts.get_unchecked(3),
-            accounts.get_unchecked(4),
-            accounts.get_unchecked(5),
-            rent_info,
-        ))
+        Ok(CreateAccounts {
+            payer: accounts.get_unchecked(0),
+            ata: accounts.get_unchecked(1),
+            wallet: accounts.get_unchecked(2),
+            mint: accounts.get_unchecked(3),
+            system_program: accounts.get_unchecked(4),
+            token_program: accounts.get_unchecked(5),
+            rent_sysvar: rent_info,
+        })
     }
 }
 
@@ -270,11 +303,16 @@ pub fn process_create(
     bump_opt: Option<u8>,
     account_len_opt: Option<usize>,
 ) -> ProgramResult {
-    let (payer, ata_acc, wallet, mint_account, system_prog, token_prog, rent_info_opt) =
-        parse_ata_accounts(accounts)?;
+    let create_accounts = parse_create_accounts(accounts)?;
 
     // Check if account already exists (idempotent path)
-    if check_idempotent_account(ata_acc, wallet, mint_account, token_prog, idempotent)? {
+    if check_idempotent_account(
+        create_accounts.ata,
+        create_accounts.wallet,
+        create_accounts.mint,
+        create_accounts.token_program,
+        idempotent,
+    )? {
         return Ok(());
     }
 
@@ -282,9 +320,9 @@ pub fn process_create(
         Some(provided_bump) => provided_bump,
         None => {
             let (_, computed_bump) = derive_ata_pda(
-                wallet.key(),
-                token_prog.key(),
-                mint_account.key(),
+                create_accounts.wallet.key(),
+                create_accounts.token_program.key(),
+                create_accounts.mint.key(),
                 program_id,
             );
             computed_bump
@@ -292,13 +330,13 @@ pub fn process_create(
     };
 
     create_and_initialize_ata(
-        payer,
-        ata_acc,
-        wallet,
-        mint_account,
-        system_prog,
-        token_prog,
-        rent_info_opt,
+        create_accounts.payer,
+        create_accounts.ata,
+        create_accounts.wallet,
+        create_accounts.mint,
+        create_accounts.system_program,
+        create_accounts.token_program,
+        create_accounts.rent_sysvar,
         bump,
         account_len_opt,
     )
@@ -311,33 +349,24 @@ pub fn process_recover(
     bump_opt: Option<u8>,
 ) -> ProgramResult {
     // SAFETY: Accounts bounded by runtime
-    let (nested_ata, dest_ata, owner_ata, owner_mint_account, wallet, token_prog) = unsafe {
-        (
-            accounts.get_unchecked(0),
-            accounts.get_unchecked(2),
-            accounts.get_unchecked(3),
-            accounts.get_unchecked(4),
-            accounts.get_unchecked(5),
-            accounts.get_unchecked(6),
-        )
-    };
+    let recover_accounts = parse_recover_accounts(accounts)?;
 
     let bump = match bump_opt {
         Some(provided_bump) => provided_bump,
         None => {
             let (_, computed_bump) = derive_ata_pda(
-                wallet.key(),
-                token_prog.key(),
-                owner_mint_account.key(),
+                recover_accounts.wallet.key(),
+                recover_accounts.token_prog.key(),
+                recover_accounts.owner_mint.key(),
                 program_id,
             );
             computed_bump
         }
     };
 
-    if !wallet.is_signer() {
+    if !recover_accounts.wallet.is_signer() {
         // Check if this is a token-program multisig owner
-        if unsafe { wallet.owner() } != token_prog.key() {
+        if unsafe { recover_accounts.wallet.owner() } != recover_accounts.token_prog.key() {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
@@ -345,7 +374,7 @@ pub fn process_recover(
         use spl_token_interface::state::{multisig::Multisig, Initializable, Transmutable};
 
         // Load and validate multisig state
-        let wallet_data_slice = unsafe { wallet.borrow_data_unchecked() };
+        let wallet_data_slice = unsafe { recover_accounts.wallet.borrow_data_unchecked() };
         let multisig_state: &Multisig =
             unsafe { spl_token_interface::state::load::<Multisig>(wallet_data_slice)? };
 
@@ -376,38 +405,38 @@ pub fn process_recover(
     }
 
     // Owner_ata and nested_ata validation no longer performed here.
-    let amount_to_recover = get_token_account_unchecked(nested_ata).amount();
+    let amount_to_recover = get_token_account_unchecked(recover_accounts.nested_ata).amount();
 
     let transfer_data = build_transfer_data(amount_to_recover);
 
     let transfer_metas = &[
         AccountMeta {
-            pubkey: nested_ata.key(),
+            pubkey: recover_accounts.nested_ata.key(),
             is_writable: true,
             is_signer: false,
         },
         AccountMeta {
-            pubkey: dest_ata.key(),
+            pubkey: recover_accounts.dest_ata.key(),
             is_writable: true,
             is_signer: false,
         },
         AccountMeta {
-            pubkey: owner_ata.key(),
+            pubkey: recover_accounts.owner_ata.key(),
             is_writable: false,
             is_signer: true,
         },
     ];
 
     let ix_transfer = Instruction {
-        program_id: token_prog.key(),
+        program_id: recover_accounts.token_prog.key(),
         accounts: transfer_metas,
         data: &transfer_data,
     };
 
     let pda_seeds_raw: &[&[u8]] = &[
-        wallet.key().as_ref(),
-        token_prog.key().as_ref(),
-        owner_mint_account.key().as_ref(),
+        recover_accounts.wallet.key().as_ref(),
+        recover_accounts.token_prog.key().as_ref(),
+        recover_accounts.owner_mint.key().as_ref(),
         &[bump],
     ];
     let pda_seed_array: [Seed<'_>; 4] = [
@@ -420,7 +449,11 @@ pub fn process_recover(
 
     invoke_signed(
         &ix_transfer,
-        &[nested_ata, dest_ata, owner_ata],
+        &[
+            recover_accounts.nested_ata,
+            recover_accounts.dest_ata,
+            recover_accounts.owner_ata,
+        ],
         &[pda_signer.clone()],
     )?;
 
@@ -428,36 +461,41 @@ pub fn process_recover(
 
     let close_metas = &[
         AccountMeta {
-            pubkey: nested_ata.key(),
+            pubkey: recover_accounts.nested_ata.key(),
             is_writable: true,
             is_signer: false,
         },
         AccountMeta {
-            pubkey: wallet.key(),
+            pubkey: recover_accounts.wallet.key(),
             is_writable: true,
             is_signer: false,
         },
         AccountMeta {
-            pubkey: owner_ata.key(),
+            pubkey: recover_accounts.owner_ata.key(),
             is_writable: false,
             is_signer: true,
         },
         AccountMeta {
-            pubkey: token_prog.key(),
+            pubkey: recover_accounts.token_prog.key(),
             is_writable: false,
             is_signer: false,
         },
     ];
 
     let ix_close = Instruction {
-        program_id: token_prog.key(),
+        program_id: recover_accounts.token_prog.key(),
         accounts: close_metas,
         data: &close_data,
     };
 
     invoke_signed(
         &ix_close,
-        &[nested_ata, wallet, owner_ata, token_prog],
+        &[
+            recover_accounts.nested_ata,
+            recover_accounts.wallet,
+            recover_accounts.owner_ata,
+            recover_accounts.token_prog,
+        ],
         &[pda_signer],
     )?;
     Ok(())

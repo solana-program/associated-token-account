@@ -96,6 +96,8 @@ pub enum FailureMode {
     RecoverMultisigDuplicateSigners,
     /// Recover: multisig account passed but not marked as signer
     RecoverMultisigNonSignerAccount,
+    /// Recover: multisig wallet owned by wrong program
+    RecoverMultisigWrongWalletOwner(Pubkey),
     /// Recover: wrong nested ATA address
     RecoverWrongNestedAta(Pubkey),
     /// Recover: wrong destination address
@@ -947,6 +949,10 @@ impl CommonTestCaseBuilder {
             FailureMode::RecoverMultisigNonSignerAccount => {
                 // Handled by the custom builder in failure_scenarios.rs
                 // The custom builder passes a multisig account but does not mark it as a signer
+            }
+            FailureMode::RecoverMultisigWrongWalletOwner(wrong_owner) => {
+                // Set the multisig wallet to be owned by the wrong program
+                FailureAccountBuilder::set_wrong_owner(accounts, wallet, *wrong_owner);
             }
 
             // Address replacement (both instruction and accounts)

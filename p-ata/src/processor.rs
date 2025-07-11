@@ -35,6 +35,7 @@ pub struct CreateAccounts<'a> {
 /// Parsed Recover accounts for recover operations
 pub struct RecoverNestedAccounts<'a> {
     pub nested_associated_token_account: &'a AccountInfo,
+    #[allow(dead_code)] // pending use in transfer_checked and verification
     pub nested_mint: &'a AccountInfo,
     pub destination_associated_token_account: &'a AccountInfo,
     pub owner_associated_token_account: &'a AccountInfo,
@@ -198,7 +199,7 @@ fn check_idempotent_account(
     token_program: &AccountInfo,
     idempotent: bool,
 ) -> Result<bool, ProgramError> {
-    if idempotent && unsafe { associated_token_account.owner() } == token_program.key() {
+    if idempotent && associated_token_account.is_owned_by(token_program.key()) {
         let ata_state = get_token_account_unchecked(associated_token_account);
         // validation is more or less the point of CreateIdempotent,
         // so TBD on these staying or going
@@ -390,8 +391,11 @@ pub fn process_recover_nested(
     };
 
     if !recover_accounts.wallet.is_signer() {
-        // Must verify as token-program owned
-        if unsafe { recover_accounts.wallet.owner() } != recover_accounts.token_program.key() {
+        // Must be token-program owned
+        if !recover_accounts
+            .wallet
+            .is_owned_by(recover_accounts.token_program.key())
+        {
             return Err(ProgramError::MissingRequiredSignature);
         }
 

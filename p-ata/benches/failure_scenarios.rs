@@ -185,6 +185,14 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
         builder_type: TestBuilderType::Custom,
     },
     FailureTestConfig {
+        name: "fail_recover_multisig_wrong_wallet_owner",
+        category: TestCategory::RecoveryOperations,
+        base_test: BaseTestType::RecoverMultisig,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::RecoverMultisigWrongWalletOwner(SYSTEM_PROGRAM_ID),
+        builder_type: TestBuilderType::Simple,
+    },
+    FailureTestConfig {
         name: "fail_recover_wrong_nested_ata_address",
         category: TestCategory::RecoveryOperations,
         base_test: BaseTestType::RecoverNested,

@@ -1,7 +1,7 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::processor::{process_create, process_recover},
+    crate::processor::{process_create, process_recover_nested},
     pinocchio::{
         account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
         pubkey::Pubkey, ProgramResult,
@@ -50,9 +50,9 @@ pub fn process_instruction(
             // 2 - RecoverNested (with optional bump)
             2 => match instruction_data {
                 // No additional data - compute bump on-chain (original behavior)
-                [] => process_recover(program_id, accounts, None),
+                [] => process_recover_nested(program_id, accounts, None),
                 // Only bump provided
-                [bump] => process_recover(program_id, accounts, Some(*bump)),
+                [bump] => process_recover_nested(program_id, accounts, Some(*bump)),
                 _ => Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
             },
             _ => Err(pinocchio::program_error::ProgramError::InvalidInstructionData),

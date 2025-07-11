@@ -24,7 +24,7 @@ pub const TRANSFER_DISCM: u8 = 3;
 /// Parsed ATA accounts for create operations
 pub struct CreateAccounts<'a> {
     pub payer: &'a AccountInfo,
-    pub ata: &'a AccountInfo,
+    pub associated_token_account_to_create: &'a AccountInfo,
     pub wallet: &'a AccountInfo,
     pub mint: &'a AccountInfo,
     pub system_program: &'a AccountInfo,
@@ -33,27 +33,26 @@ pub struct CreateAccounts<'a> {
 }
 
 /// Parsed Recover accounts for recover operations
-pub struct RecoverAccounts<'a> {
-    pub nested_ata: &'a AccountInfo,
-    #[allow(dead_code)] // TBD on use
+pub struct RecoverNestedAccounts<'a> {
+    pub nested_associated_token_account: &'a AccountInfo,
     pub nested_mint: &'a AccountInfo,
-    pub dest_ata: &'a AccountInfo,
-    pub owner_ata: &'a AccountInfo,
+    pub destination_associated_token_account: &'a AccountInfo,
+    pub owner_associated_token_account: &'a AccountInfo,
     pub owner_mint: &'a AccountInfo,
     pub wallet: &'a AccountInfo,
-    pub token_prog: &'a AccountInfo,
+    pub token_program: &'a AccountInfo,
 }
 
 /// Derive ATA PDA from wallet, token program, and mint
 #[inline(always)]
 fn derive_ata_pda(
     wallet: &Pubkey,
-    token_prog: &Pubkey,
+    token_program: &Pubkey,
     mint: &Pubkey,
     program_id: &Pubkey,
 ) -> (Pubkey, u8) {
     find_program_address(
-        &[wallet.as_ref(), token_prog.as_ref(), mint.as_ref()],
+        &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
         program_id,
     )
 }
@@ -139,30 +138,30 @@ fn build_close_account_data() -> [u8; 1] {
 
 /// Resolve rent from sysvar account or syscall
 #[inline(always)]
-fn resolve_rent(rent_info_opt: Option<&AccountInfo>) -> Result<Rent, ProgramError> {
-    match rent_info_opt {
-        Some(rent_acc) => unsafe { Rent::from_account_info_unchecked(rent_acc) }.cloned(),
+fn resolve_rent(maybe_rent_info: Option<&AccountInfo>) -> Result<Rent, ProgramError> {
+    match maybe_rent_info {
+        Some(rent_account) => unsafe { Rent::from_account_info_unchecked(rent_account) }.cloned(),
         None => Rent::get(),
     }
 }
 
 /// Parse and validate the standard Recover account layout.
 #[inline(always)]
-fn parse_recover_accounts(accounts: &[AccountInfo]) -> Result<RecoverAccounts, ProgramError> {
+fn parse_recover_accounts(accounts: &[AccountInfo]) -> Result<RecoverNestedAccounts, ProgramError> {
     if accounts.len() < 7 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
     // SAFETY: account len already checked
     unsafe {
-        Ok(RecoverAccounts {
-            nested_ata: accounts.get_unchecked(0),
+        Ok(RecoverNestedAccounts {
+            nested_associated_token_account: accounts.get_unchecked(0),
             nested_mint: accounts.get_unchecked(1),
-            dest_ata: accounts.get_unchecked(2),
-            owner_ata: accounts.get_unchecked(3),
+            destination_associated_token_account: accounts.get_unchecked(2),
+            owner_associated_token_account: accounts.get_unchecked(3),
             owner_mint: accounts.get_unchecked(4),
             wallet: accounts.get_unchecked(5),
-            token_prog: accounts.get_unchecked(6),
+            token_program: accounts.get_unchecked(6),
         })
     }
 }
@@ -180,7 +179,7 @@ fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts, Pro
     unsafe {
         Ok(CreateAccounts {
             payer: accounts.get_unchecked(0),
-            ata: accounts.get_unchecked(1),
+            associated_token_account_to_create: accounts.get_unchecked(1),
             wallet: accounts.get_unchecked(2),
             mint: accounts.get_unchecked(3),
             system_program: accounts.get_unchecked(4),
@@ -193,14 +192,14 @@ fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts, Pro
 /// Check if account already exists and is properly configured (idempotent check).
 #[inline(always)]
 fn check_idempotent_account(
-    ata_acc: &AccountInfo,
+    associated_token_account: &AccountInfo,
     wallet: &AccountInfo,
     mint_account: &AccountInfo,
-    token_prog: &AccountInfo,
+    token_program: &AccountInfo,
     idempotent: bool,
 ) -> Result<bool, ProgramError> {
-    if idempotent && unsafe { ata_acc.owner() } == token_prog.key() {
-        let ata_state = get_token_account_unchecked(ata_acc);
+    if idempotent && unsafe { associated_token_account.owner() } == token_program.key() {
+        let ata_state = get_token_account_unchecked(associated_token_account);
         // validation is more or less the point of CreateIdempotent,
         // so TBD on these staying or going
         validate_token_account_owner(ata_state, wallet.key())?;
@@ -215,23 +214,23 @@ fn check_idempotent_account(
 #[inline(always)]
 fn create_and_initialize_ata(
     payer: &AccountInfo,
-    ata_acc: &AccountInfo,
+    associated_token_account: &AccountInfo,
     wallet: &AccountInfo,
     mint_account: &AccountInfo,
     // if an account isn't owned by the system program,
     // the create_pda_account call will fail anyway when trying to allocate/assign
-    _system_prog: &AccountInfo,
-    token_prog: &AccountInfo,
-    rent_info_opt: Option<&AccountInfo>,
+    _system_program: &AccountInfo,
+    token_program: &AccountInfo,
+    maybe_rent_info: Option<&AccountInfo>,
     bump: u8,
-    account_len_opt: Option<usize>,
+    maybe_token_account_len: Option<usize>,
 ) -> ProgramResult {
     // Use provided account length if available, otherwise calculate based on token program
-    let space = match account_len_opt {
+    let space = match maybe_token_account_len {
         Some(len) => len,
         None => {
             // Calculate correct space: 165 for base TokenAccount, +5 for ImmutableOwner extension
-            if is_token_2022_program(token_prog.key()) {
+            if is_token_2022_program(token_program.key()) {
                 TokenAccount::LEN + 5 // 170 bytes total for Token-2022 with ImmutableOwner
             } else {
                 TokenAccount::LEN // 165 bytes for regular Token
@@ -241,32 +240,39 @@ fn create_and_initialize_ata(
 
     let seeds: &[&[u8]] = &[
         wallet.key().as_ref(),
-        token_prog.key().as_ref(),
+        token_program.key().as_ref(),
         mint_account.key().as_ref(),
         &[bump],
     ];
 
     // Use Rent passed in accounts if supplied to avoid syscall
-    let rent = resolve_rent(rent_info_opt)?;
-    create_pda_account(payer, &rent, space, token_prog.key(), ata_acc, seeds)?;
+    let rent = resolve_rent(maybe_rent_info)?;
+    create_pda_account(
+        payer,
+        &rent,
+        space,
+        token_program.key(),
+        associated_token_account,
+        seeds,
+    )?;
 
     // For Token-2022, initialize ImmutableOwner extension first
-    if is_token_2022_program(token_prog.key()) {
+    if is_token_2022_program(token_program.key()) {
         let initialize_immutable_owner_data = build_initialize_immutable_owner_data();
 
         let initialize_immutable_owner_metas = &[AccountMeta {
-            pubkey: ata_acc.key(),
+            pubkey: associated_token_account.key(),
             is_writable: true,
             is_signer: false,
         }];
 
         let init_immutable_owner_ix = Instruction {
-            program_id: token_prog.key(),
+            program_id: token_program.key(),
             accounts: initialize_immutable_owner_metas,
             data: &initialize_immutable_owner_data,
         };
 
-        invoke(&init_immutable_owner_ix, &[ata_acc])?;
+        invoke(&init_immutable_owner_ix, &[associated_token_account])?;
     }
 
     // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
@@ -274,7 +280,7 @@ fn create_and_initialize_ata(
 
     let initialize_account_metas = &[
         AccountMeta {
-            pubkey: ata_acc.key(),
+            pubkey: associated_token_account.key(),
             is_writable: true,
             is_signer: false,
         },
@@ -286,32 +292,39 @@ fn create_and_initialize_ata(
     ];
 
     let init_ix = Instruction {
-        program_id: token_prog.key(),
+        program_id: token_program.key(),
         accounts: initialize_account_metas,
         data: &initialize_account_instr_data,
     };
 
-    invoke(&init_ix, &[ata_acc, mint_account])?;
+    invoke(&init_ix, &[associated_token_account, mint_account])?;
 
     Ok(())
 }
 
-/// Accounts: payer, ata, wallet, mint, system_program, token_program, [rent_sysvar]
+/// Accounts:
+/// [0] payer
+/// [1] associated_token_account_to_create
+/// [2] wallet
+/// [3] mint
+/// [4] system_program
+/// [5] token_program
+/// [6] rent_sysvar
 ///
-/// For Token-2022 accounts, we create the account with the correct size (170 bytes)
+/// For Token-2022 accounts, create the account with the correct size (170 bytes)
 /// and call InitializeImmutableOwner followed by InitializeAccount3.
 pub fn process_create(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     idempotent: bool,
-    bump_opt: Option<u8>,
-    account_len_opt: Option<usize>,
+    maybe_bump: Option<u8>,
+    maybe_token_account_len: Option<usize>,
 ) -> ProgramResult {
     let create_accounts = parse_create_accounts(accounts)?;
 
     // Check if account already exists (idempotent path)
     if check_idempotent_account(
-        create_accounts.ata,
+        create_accounts.associated_token_account_to_create,
         create_accounts.wallet,
         create_accounts.mint,
         create_accounts.token_program,
@@ -320,7 +333,7 @@ pub fn process_create(
         return Ok(());
     }
 
-    let bump = match bump_opt {
+    let bump = match maybe_bump {
         Some(provided_bump) => provided_bump,
         None => {
             let (_, computed_bump) = derive_ata_pda(
@@ -335,32 +348,40 @@ pub fn process_create(
 
     create_and_initialize_ata(
         create_accounts.payer,
-        create_accounts.ata,
+        create_accounts.associated_token_account_to_create,
         create_accounts.wallet,
         create_accounts.mint,
         create_accounts.system_program,
         create_accounts.token_program,
         create_accounts.rent_sysvar,
         bump,
-        account_len_opt,
+        maybe_token_account_len,
     )
 }
 
-/// Accounts: nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet, token_prog, [..multisig signer accounts]
-pub fn process_recover(
+/// Accounts:
+/// [0] nested_associated_token_account
+/// [1] nested_mint
+/// [2] destination_associated_token_account
+/// [3] owner_associated_token_account
+/// [4] owner_mint
+/// [5] wallet
+/// [6] token_program
+/// [7..] multisig signer accounts
+pub fn process_recover_nested(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    bump_opt: Option<u8>,
+    maybe_bump: Option<u8>,
 ) -> ProgramResult {
     // SAFETY: Accounts bounded by runtime
     let recover_accounts = parse_recover_accounts(accounts)?;
 
-    let bump = match bump_opt {
+    let bump = match maybe_bump {
         Some(provided_bump) => provided_bump,
         None => {
             let (_, computed_bump) = derive_ata_pda(
                 recover_accounts.wallet.key(),
-                recover_accounts.token_prog.key(),
+                recover_accounts.token_program.key(),
                 recover_accounts.owner_mint.key(),
                 program_id,
             );
@@ -370,7 +391,7 @@ pub fn process_recover(
 
     if !recover_accounts.wallet.is_signer() {
         // Must verify as token-program owned
-        if unsafe { recover_accounts.wallet.owner() } != recover_accounts.token_prog.key() {
+        if unsafe { recover_accounts.wallet.owner() } != recover_accounts.token_program.key() {
             return Err(ProgramError::MissingRequiredSignature);
         }
 
@@ -405,37 +426,38 @@ pub fn process_recover(
     }
 
     // Owner_ata and nested_ata validation no longer performed here.
-    let amount_to_recover = get_token_account_unchecked(recover_accounts.nested_ata).amount();
+    let amount_to_recover =
+        get_token_account_unchecked(recover_accounts.nested_associated_token_account).amount();
 
     let transfer_data = build_transfer_data(amount_to_recover);
 
     let transfer_metas = &[
         AccountMeta {
-            pubkey: recover_accounts.nested_ata.key(),
+            pubkey: recover_accounts.nested_associated_token_account.key(),
             is_writable: true,
             is_signer: false,
         },
         AccountMeta {
-            pubkey: recover_accounts.dest_ata.key(),
+            pubkey: recover_accounts.destination_associated_token_account.key(),
             is_writable: true,
             is_signer: false,
         },
         AccountMeta {
-            pubkey: recover_accounts.owner_ata.key(),
+            pubkey: recover_accounts.owner_associated_token_account.key(),
             is_writable: false,
             is_signer: true,
         },
     ];
 
     let ix_transfer = Instruction {
-        program_id: recover_accounts.token_prog.key(),
+        program_id: recover_accounts.token_program.key(),
         accounts: transfer_metas,
         data: &transfer_data,
     };
 
     let pda_seeds_raw: &[&[u8]] = &[
         recover_accounts.wallet.key().as_ref(),
-        recover_accounts.token_prog.key().as_ref(),
+        recover_accounts.token_program.key().as_ref(),
         recover_accounts.owner_mint.key().as_ref(),
         &[bump],
     ];
@@ -450,9 +472,9 @@ pub fn process_recover(
     invoke_signed(
         &ix_transfer,
         &[
-            recover_accounts.nested_ata,
-            recover_accounts.dest_ata,
-            recover_accounts.owner_ata,
+            recover_accounts.nested_associated_token_account,
+            recover_accounts.destination_associated_token_account,
+            recover_accounts.owner_associated_token_account,
         ],
         &[pda_signer.clone()],
     )?;
@@ -461,7 +483,7 @@ pub fn process_recover(
 
     let close_metas = &[
         AccountMeta {
-            pubkey: recover_accounts.nested_ata.key(),
+            pubkey: recover_accounts.nested_associated_token_account.key(),
             is_writable: true,
             is_signer: false,
         },
@@ -471,19 +493,19 @@ pub fn process_recover(
             is_signer: false,
         },
         AccountMeta {
-            pubkey: recover_accounts.owner_ata.key(),
+            pubkey: recover_accounts.owner_associated_token_account.key(),
             is_writable: false,
             is_signer: true,
         },
         AccountMeta {
-            pubkey: recover_accounts.token_prog.key(),
+            pubkey: recover_accounts.token_program.key(),
             is_writable: false,
             is_signer: false,
         },
     ];
 
     let ix_close = Instruction {
-        program_id: recover_accounts.token_prog.key(),
+        program_id: recover_accounts.token_program.key(),
         accounts: close_metas,
         data: &close_data,
     };
@@ -491,10 +513,10 @@ pub fn process_recover(
     invoke_signed(
         &ix_close,
         &[
-            recover_accounts.nested_ata,
+            recover_accounts.nested_associated_token_account,
             recover_accounts.wallet,
-            recover_accounts.owner_ata,
-            recover_accounts.token_prog,
+            recover_accounts.owner_associated_token_account,
+            recover_accounts.token_program,
         ],
         &[pda_signer],
     )?;

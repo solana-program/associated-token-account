@@ -694,6 +694,13 @@ pub struct ComparisonResult {
 
 // ========================== SHARED COMPARISON RUNNER ============================
 
+/// Post-execution verification function type
+/// Takes pre-execution accounts, post-execution accounts, and instruction
+/// Returns a verification message to be added to the benchmark result
+pub type PostExecutionVerificationFn = Box<
+    dyn Fn(&[(Pubkey, Account)], &[(Pubkey, Account)], &solana_instruction::Instruction) -> String,
+>;
+
 pub struct BenchmarkRunner;
 
 impl BenchmarkRunner {
@@ -750,6 +757,48 @@ impl BenchmarkRunner {
             error_message,
             captured_output: String::new(), // Will be populated if we need to re-run with debug
         }
+    }
+
+    /// Run a single benchmark with optional post-execution verification
+    /// If verification_fn is provided and the instruction succeeds, it will capture
+    /// post-execution state and call the verification function
+    pub fn run_single_benchmark_with_post_account_inspection(
+        test_name: &str,
+        ix: &solana_instruction::Instruction,
+        accounts: &[(Pubkey, Account)],
+        implementation: &AtaImplementation,
+        token_program_id: &Pubkey,
+        verification_fn: Option<PostExecutionVerificationFn>,
+    ) -> BenchmarkResult {
+        // First run the benchmark normally
+        let mut result =
+            Self::run_single_benchmark(test_name, ix, accounts, implementation, token_program_id);
+
+        // If verification function is provided and instruction succeeded, add verification
+        if let Some(verify_fn) = verification_fn {
+            if result.success {
+                let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
+                let execution_result = mollusk.process_instruction(ix, accounts);
+
+                if matches!(
+                    execution_result.program_result,
+                    mollusk_svm::result::ProgramResult::Success
+                ) {
+                    // Convert InstructionResult to post-execution accounts vector
+                    let mut post_execution_accounts = Vec::new();
+                    for (pubkey, _) in accounts {
+                        if let Some(account) = execution_result.get_account(pubkey) {
+                            post_execution_accounts.push((*pubkey, account.clone()));
+                        }
+                    }
+
+                    let verification_message = verify_fn(accounts, &post_execution_accounts, ix);
+                    result.captured_output.push_str(&verification_message);
+                }
+            }
+        }
+
+        result
     }
 
     /// Run a benchmark with verbose debug logging enabled - used for problematic results

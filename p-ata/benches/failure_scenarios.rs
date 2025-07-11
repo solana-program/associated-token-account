@@ -454,7 +454,7 @@ impl FailureTestBuilder {
                         )
                     }
                     "fail_drain_lamports_from_uninitialized_ata" => {
-                        Self::build_fail_fail_drain_lamports_from_uninitialized_ata(
+                        Self::build_fail_drain_lamports_from_uninitialized_ata(
                             ata_impl,
                             token_program_id,
                         )
@@ -860,9 +860,26 @@ impl FailureTestBuilder {
     }
 
     /// Exploit test: Drain lamports from a valid PDA that was never initialized.
-    /// If ATA derivation of the first account is not checked if that account
-    /// is derived from the ATA program, this will succeed.
-    fn build_fail_fail_drain_lamports_from_uninitialized_ata(
+    ///
+    /// This test attempts to exploit a potential vulnerability where an attacker could:
+    /// 1. Find a valid ATA address (victim_ata) that has lamports but was never initialized
+    /// 2. Use that ATA as the "payer" in a CreateAssociatedTokenAccount instruction
+    /// 3. Create their own legitimate ATA (attacker_ata) using the victim's lamports
+    ///
+    /// The attack works by:
+    /// - victim_ata: A valid PDA with lamports but owned by System Program (uninitialized)
+    /// - attacker_ata: Attacker's legitimate ATA derived from their wallet + mint
+    /// - The instruction uses victim_ata as payer, but creates attacker_ata as the target
+    ///
+    /// EXPECTED BEHAVIOR (if exploit succeeds):
+    /// - victim_ata: 5_000_000 lamports → 3_000_000 lamports (loses 2_000_000 for rent-exempt balance)
+    /// - attacker_ata: 0 lamports → 2_000_000 lamports (gains rent-exempt balance)
+    ///
+    /// SECURE BEHAVIOR (exploit should fail):
+    /// - The ATA program should verify that the payer is properly derived from the instruction parameters
+    /// - The instruction should fail with an error about invalid payer or address derivation
+    /// - No lamports should be transferred
+    fn build_fail_drain_lamports_from_uninitialized_ata(
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
@@ -885,8 +902,7 @@ impl FailureTestBuilder {
             crate::common::AccountTypeId::Wallet,
         );
 
-        // Attacker chooses their own mint
-        let attacker_mint = crate::common::structured_pk(
+        let victim_mint = crate::common::structured_pk(
             &ata_impl.variant,
             crate::common::TestBankId::Failures,
             test_number.wrapping_add(1),
@@ -898,17 +914,17 @@ impl FailureTestBuilder {
             &[
                 victim_wallet.as_ref(),
                 token_program_id.as_ref(),
-                attacker_mint.as_ref(),
+                victim_mint.as_ref(),
             ],
             &ata_impl.program_id,
         );
 
-        // Attacker's legitimate ATA (properly derived from attacker's wallet and mint)
+        // Attacker's ATA (properly derived from attacker's wallet and the mint)
         let (attacker_ata, attacker_bump) = Pubkey::find_program_address(
             &[
                 attacker_wallet.as_ref(),
                 token_program_id.as_ref(),
-                attacker_mint.as_ref(),
+                victim_mint.as_ref(),
             ],
             &ata_impl.program_id,
         );
@@ -921,7 +937,7 @@ impl FailureTestBuilder {
                 ("victim_wallet", &victim_wallet),
                 ("victim_ata (instruction payer)", &victim_ata),
                 ("attacker_ata (target)", &attacker_ata),
-                ("attacker_mint", &attacker_mint),
+                ("attacker_mint", &victim_mint),
             ],
         );
 
@@ -932,10 +948,11 @@ impl FailureTestBuilder {
                 AccountBuilder::system_account(1_000_000_000),
             ),
             // Victim's ATA with lamports but uninitialized
+            // Should lose TOKEN_ACCOUNT_RENT_EXEMPT_BALANCE if exploit succeeds
             (
                 victim_ata,
                 Account {
-                    lamports: 5_000_000, // Enough to be drained
+                    lamports: 5_000_000, // Initial balance - should go to 3_000_000 if exploit succeeds
                     data: vec![],
                     owner: SYSTEM_PROGRAM_ID,
                     executable: false,
@@ -943,12 +960,13 @@ impl FailureTestBuilder {
                 },
             ),
             // Attacker's legitimate ATA (doesn't exist yet)
-            (attacker_ata, AccountBuilder::system_account(0)),
+            // Should gain TOKEN_ACCOUNT_RENT_EXEMPT_BALANCE if exploit succeeds
+            (attacker_ata, AccountBuilder::system_account(0)), // Should go to 2_000_000 if exploit succeeds
             // The victim's wallet (used as seed in instruction but not for derivation)
             (victim_wallet, AccountBuilder::system_account(0)),
             // Attacker mint
             (
-                attacker_mint,
+                victim_mint,
                 AccountBuilder::mint_account(0, token_program_id, false),
             ),
             // System program
@@ -970,7 +988,7 @@ impl FailureTestBuilder {
                 AccountMeta::new(victim_ata, true), // payer within ATA instruction (has lamports, not a signer)
                 AccountMeta::new(attacker_ata, false), // associated_token_account (attacker's legitimate ATA)
                 AccountMeta::new_readonly(attacker_wallet, false), // wallet = seed for derivation
-                AccountMeta::new_readonly(attacker_mint, false), // attacker's chosen mint
+                AccountMeta::new_readonly(victim_mint, false), // attacker's chosen mint
                 AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
                 AccountMeta::new_readonly(*token_program_id, false),
             ],
@@ -978,6 +996,72 @@ impl FailureTestBuilder {
         };
 
         (ix, accounts)
+    }
+
+    /// Verify the post-execution state for the drain lamports exploit test.
+    /// This function should be called after the instruction is executed to verify
+    /// that the lamport transfer occurred as expected (if the exploit succeeded).
+    ///
+    /// Returns (victim_final_balance, attacker_final_balance, transfer_occurred)
+    #[allow(dead_code)]
+    fn verify_drain_lamports_exploit_result(
+        pre_execution_accounts: &[(Pubkey, Account)],
+        post_execution_accounts: &[(Pubkey, Account)],
+        victim_ata: &Pubkey,
+        attacker_ata: &Pubkey,
+    ) -> (u64, u64, bool) {
+        // Expected rent-exempt balance for token account
+        const TOKEN_ACCOUNT_RENT_EXEMPT_BALANCE: u64 = 2_000_000;
+        const INITIAL_VICTIM_BALANCE: u64 = 5_000_000;
+        const EXPECTED_VICTIM_FINAL_BALANCE: u64 = 3_000_000;
+
+        // Find initial balances
+        let initial_victim_balance = pre_execution_accounts
+            .iter()
+            .find(|(pubkey, _)| pubkey == victim_ata)
+            .map(|(_, account)| account.lamports)
+            .unwrap_or(0);
+
+        let initial_attacker_balance = pre_execution_accounts
+            .iter()
+            .find(|(pubkey, _)| pubkey == attacker_ata)
+            .map(|(_, account)| account.lamports)
+            .unwrap_or(0);
+
+        // Find final balances
+        let final_victim_balance = post_execution_accounts
+            .iter()
+            .find(|(pubkey, _)| pubkey == victim_ata)
+            .map(|(_, account)| account.lamports)
+            .unwrap_or(0);
+
+        let final_attacker_balance = post_execution_accounts
+            .iter()
+            .find(|(pubkey, _)| pubkey == attacker_ata)
+            .map(|(_, account)| account.lamports)
+            .unwrap_or(0);
+
+        // Check if the expected transfer occurred
+        let expected_transfer = initial_victim_balance == INITIAL_VICTIM_BALANCE
+            && final_victim_balance < INITIAL_VICTIM_BALANCE
+            && initial_attacker_balance == 0
+            && final_attacker_balance > 0;
+
+        // Always print the verification details
+        println!("🔍 Drain Lamports Exploit Verification:");
+        println!("  Victim ATA ({}):", victim_ata);
+        println!("    Initial: {} lamports", initial_victim_balance);
+        println!("    Final: {} lamports", final_victim_balance);
+        println!("  Attacker ATA ({}):", attacker_ata);
+        println!("    Initial: {} lamports", initial_attacker_balance);
+        println!("    Final: {} lamports", final_attacker_balance);
+        println!("  Transfer occurred as expected: {}", expected_transfer);
+
+        (
+            final_victim_balance,
+            final_attacker_balance,
+            expected_transfer,
+        )
     }
 }
 
@@ -1027,6 +1111,19 @@ impl FailureTestRunner {
                 println!("    - SPL ATA Error: {}", s_err);
             }
         }
+
+        if !result.p_ata.captured_output.is_empty() {
+            println!("    P-ATA Verification:");
+            for line in result.p_ata.captured_output.lines() {
+                println!("    {}", line);
+            }
+        }
+        if !result.spl_ata.captured_output.is_empty() {
+            println!("    SPL ATA Verification:");
+            for line in result.spl_ata.captured_output.lines() {
+                println!("    {}", line);
+            }
+        }
     }
 
     /// Run a failure test with configuration against both implementations and compare results
@@ -1064,14 +1161,49 @@ impl FailureTestRunner {
         let is_p_ata_only =
             name == "fail_invalid_bump_value" || name == "fail_recover_invalid_bump_value";
 
+        // Create verification function for P-ATA if needed
+        let p_ata_verification = if name == "fail_drain_lamports_from_uninitialized_ata" {
+            println!("🔍 Creating P-ATA verification function for drain lamports test");
+            Some(Box::new(
+                |pre_accounts: &[(Pubkey, Account)],
+                 post_accounts: &[(Pubkey, Account)],
+                 ix: &Instruction|
+                 -> String {
+                    println!("🔍 P-ATA Verification function called for drain lamports test");
+                    let victim_ata = ix.accounts[0].pubkey;
+                    let attacker_ata = ix.accounts[1].pubkey;
+
+                    let (victim_final, attacker_final, transfer_occurred) =
+                        FailureTestBuilder::verify_drain_lamports_exploit_result(
+                            pre_accounts,
+                            post_accounts,
+                            &victim_ata,
+                            &attacker_ata,
+                        );
+
+                    let result_msg = if transfer_occurred {
+                        format!("🚨 EXPLOIT SUCCEEDED: Lamports transferred from victim to attacker!\n  Victim: 5,000,000 → {} lamports\n  Attacker: 0 → {} lamports", victim_final, attacker_final)
+                    } else {
+                        format!("✅ Exploit failed: No unexpected lamport transfer\n  Victim: {} lamports\n  Attacker: {} lamports", victim_final, attacker_final)
+                    };
+
+                    println!("🔍 P-ATA Verification result: {}", result_msg);
+                    result_msg
+                },
+            ) as common::PostExecutionVerificationFn)
+        } else {
+            None
+        };
+
         // Build P-ATA test case
         let (p_ata_ix, p_ata_accounts) = test_builder(p_ata_impl, token_program_id);
-        let mut p_ata_result = BenchmarkRunner::run_single_benchmark(
+        let mut p_ata_result = BenchmarkRunner::run_single_benchmark_with_post_account_inspection(
             name,
             &p_ata_ix,
             &p_ata_accounts,
             p_ata_impl,
             token_program_id,
+            p_ata_verification,
         );
 
         // Build comparison result
@@ -1099,13 +1231,50 @@ impl FailureTestRunner {
         } else {
             // Build Original ATA test case
             let (original_ix, original_accounts) = test_builder(original_impl, token_program_id);
-            let original_result = BenchmarkRunner::run_single_benchmark(
-                name,
-                &original_ix,
-                &original_accounts,
-                original_impl,
-                token_program_id,
-            );
+
+            // Create verification function for Original ATA if needed
+            let original_verification = if name == "fail_drain_lamports_from_uninitialized_ata" {
+                println!("🔍 Creating SPL ATA verification function for drain lamports test");
+                Some(Box::new(
+                    |pre_accounts: &[(Pubkey, Account)],
+                     post_accounts: &[(Pubkey, Account)],
+                     ix: &Instruction|
+                     -> String {
+                        println!("🔍 SPL ATA Verification function called for drain lamports test");
+                        let victim_ata = ix.accounts[0].pubkey;
+                        let attacker_ata = ix.accounts[1].pubkey;
+
+                        let (victim_final, attacker_final, transfer_occurred) =
+                            FailureTestBuilder::verify_drain_lamports_exploit_result(
+                                pre_accounts,
+                                post_accounts,
+                                &victim_ata,
+                                &attacker_ata,
+                            );
+
+                        let result_msg = if transfer_occurred {
+                            format!("🚨 EXPLOIT SUCCEEDED: Lamports transferred from victim to attacker!\n  Victim: 5,000,000 → {} lamports\n  Attacker: 0 → {} lamports", victim_final, attacker_final)
+                        } else {
+                            format!("✅ Exploit failed: No unexpected lamport transfer\n  Victim: {} lamports\n  Attacker: {} lamports", victim_final, attacker_final)
+                        };
+
+                        println!("🔍 SPL ATA Verification result: {}", result_msg);
+                        result_msg
+                    },
+                ) as common::PostExecutionVerificationFn)
+            } else {
+                None
+            };
+
+            let original_result =
+                BenchmarkRunner::run_single_benchmark_with_post_account_inspection(
+                    name,
+                    &original_ix,
+                    &original_accounts,
+                    original_impl,
+                    token_program_id,
+                    original_verification,
+                );
 
             // Create comparison result
             BenchmarkRunner::create_comparison_result(name, p_ata_result.clone(), original_result)

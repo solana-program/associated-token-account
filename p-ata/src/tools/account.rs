@@ -2,7 +2,6 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         instruction::{Seed, Signer},
-        program_error::ProgramError,
         pubkey::Pubkey,
         sysvars::rent::Rent,
         ProgramResult,
@@ -63,32 +62,22 @@ pub fn create_pda_account(
                 Transfer {
                     from: payer,
                     to: pda,
-                    lamports: required_lamports.saturating_sub(current_lamports),
+                    lamports: required_lamports - current_lamports,
                 }
                 .invoke()?;
             }
 
-            let current_data_len = pda.data_len();
-            let current_owner = unsafe { pda.owner() };
-
-            if current_data_len != space {
-                Allocate {
-                    account: pda,
-                    space: space as u64,
-                }
-                .invoke_signed(&[signer.clone()])?;
-            } else if current_data_len > 0 {
-                // Allocate ensures account is empty
-                return Err(ProgramError::AccountAlreadyInitialized);
+            Allocate {
+                account: pda,
+                space: space as u64,
             }
+            .invoke_signed(&[signer.clone()])?;
 
-            if current_owner != target_program_owner {
-                Assign {
-                    account: pda,
-                    owner: target_program_owner,
-                }
-                .invoke_signed(&[signer.clone()])?;
+            Assign {
+                account: pda,
+                owner: target_program_owner,
             }
+            .invoke_signed(&[signer.clone()])?;
         }
     } else {
         CreateAccount {

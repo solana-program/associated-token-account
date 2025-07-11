@@ -92,6 +92,8 @@ pub enum FailureMode {
     RecoverWalletNotSigner,
     /// Recover: multisig insufficient signers
     RecoverMultisigInsufficientSigners,
+    /// Recover: multisig duplicate signers (vulnerability test)
+    RecoverMultisigDuplicateSigners,
     /// Recover: wrong nested ATA address
     RecoverWrongNestedAta(Pubkey),
     /// Recover: wrong destination address
@@ -938,6 +940,10 @@ impl CommonTestCaseBuilder {
                         );
                     }
                 }
+            }
+            FailureMode::RecoverMultisigDuplicateSigners => {
+                // This will be handled by the custom builder in failure_scenarios.rs
+                // The custom builder will duplicate a signer account to exploit the vulnerability
             }
 
             // Address replacement (both instruction and accounts)

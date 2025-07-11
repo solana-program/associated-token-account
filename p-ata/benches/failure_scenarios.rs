@@ -169,6 +169,14 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
         builder_type: TestBuilderType::Simple,
     },
     FailureTestConfig {
+        name: "fail_recover_multisig_duplicate_signers",
+        category: TestCategory::RecoveryOperations,
+        base_test: BaseTestType::RecoverMultisig,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::RecoverMultisigDuplicateSigners,
+        builder_type: TestBuilderType::Custom,
+    },
+    FailureTestConfig {
         name: "fail_recover_wrong_nested_ata_address",
         category: TestCategory::RecoveryOperations,
         base_test: BaseTestType::RecoverNested,
@@ -408,6 +416,12 @@ impl FailureTestBuilder {
                     }
                     "fail_create_extended_mint_v1" => {
                         Self::build_fail_create_extended_mint_v1(ata_impl, token_program_id)
+                    }
+                    "fail_recover_multisig_duplicate_signers" => {
+                        Self::build_fail_recover_multisig_duplicate_signers(
+                            ata_impl,
+                            token_program_id,
+                        )
                     }
                     _ => panic!("Unknown custom test: {}", config.name),
                 }
@@ -733,6 +747,43 @@ impl FailureTestBuilder {
 
             mint_acct.data = new_data;
         }
+        (ix, accounts)
+    }
+
+    /// Custom builder for multisig duplicate signers vulnerability test
+    /// This test exploits the vulnerability where the same signer can be counted multiple times
+    fn build_fail_recover_multisig_duplicate_signers(
+        ata_impl: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Start with a standard RecoverMultisig test case
+        let (mut ix, mut accounts) = CommonTestCaseBuilder::build_test_case(
+            BaseTestType::RecoverMultisig,
+            TestVariant::BASE,
+            ata_impl,
+            token_program_id,
+        );
+
+        log_test_info(
+            "fail_recover_multisig_duplicate_signers",
+            ata_impl,
+            &[("wallet", &ix.accounts[5].pubkey)],
+        );
+
+        // The standard RecoverMultisig test creates a 2-of-3 multisig
+        // We'll exploit the vulnerability by providing the same signer twice
+        // This should allow us to bypass the 2-of-3 requirement with only 1 actual signer
+
+        // Find the first signer account (should be at index 7 in the instruction accounts)
+        if ix.accounts.len() > 7 {
+            let first_signer = ix.accounts[7].pubkey;
+            ix.accounts
+                .push(AccountMeta::new_readonly(first_signer, true));
+            if let Some(existing_meta) = ix.accounts.get_mut(7) {
+                existing_meta.is_signer = true;
+            }
+        }
+
         (ix, accounts)
     }
 }

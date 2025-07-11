@@ -172,7 +172,7 @@ fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts, Pro
         _ => return Err(ProgramError::NotEnoughAccountKeys),
     };
 
-    // SAFETY: account info already checked
+    // SAFETY: account len already checked
     unsafe {
         Ok(CreateAccounts {
             payer: accounts.get_unchecked(0),

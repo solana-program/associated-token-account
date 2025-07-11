@@ -133,13 +133,13 @@ fn resolve_rent(rent_info_opt: Option<&AccountInfo>) -> Result<Rent, ProgramErro
 /// Parse and validate the standard ATA account layout.
 #[inline(always)]
 fn parse_ata_accounts(accounts: &[AccountInfo]) -> Result<AtaAccounts, ProgramError> {
-    let rent_info = if accounts.len() >= 7 {
-        Some(unsafe { accounts.get_unchecked(6) })
-    } else {
-        None
+    let rent_info = match accounts.len() {
+        len if len >= 7 => Some(unsafe { accounts.get_unchecked(6) }),
+        6 => None,
+        _ => return Err(ProgramError::NotEnoughAccountKeys),
     };
 
-    // SAFETY: account info bounded by runtime
+    // SAFETY: account info already checked
     unsafe {
         Ok((
             accounts.get_unchecked(0),

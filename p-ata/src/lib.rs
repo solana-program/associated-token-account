@@ -3,6 +3,6 @@
 #[cfg(test)]
 extern crate alloc;
 
+mod account;
 mod entrypoint;
 mod processor;
-mod tools;

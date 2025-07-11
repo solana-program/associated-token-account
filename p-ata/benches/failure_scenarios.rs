@@ -177,6 +177,14 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
         builder_type: TestBuilderType::Custom,
     },
     FailureTestConfig {
+        name: "fail_recover_multisig_non_signer_account",
+        category: TestCategory::RecoveryOperations,
+        base_test: BaseTestType::RecoverMultisig,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::RecoverMultisigNonSignerAccount,
+        builder_type: TestBuilderType::Custom,
+    },
+    FailureTestConfig {
         name: "fail_recover_wrong_nested_ata_address",
         category: TestCategory::RecoveryOperations,
         base_test: BaseTestType::RecoverNested,
@@ -419,6 +427,12 @@ impl FailureTestBuilder {
                     }
                     "fail_recover_multisig_duplicate_signers" => {
                         Self::build_fail_recover_multisig_duplicate_signers(
+                            ata_impl,
+                            token_program_id,
+                        )
+                    }
+                    "fail_recover_multisig_non_signer_account" => {
+                        Self::build_fail_recover_multisig_non_signer_account(
                             ata_impl,
                             token_program_id,
                         )
@@ -757,7 +771,7 @@ impl FailureTestBuilder {
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         // Start with a standard RecoverMultisig test case
-        let (mut ix, mut accounts) = CommonTestCaseBuilder::build_test_case(
+        let (mut ix, accounts) = CommonTestCaseBuilder::build_test_case(
             BaseTestType::RecoverMultisig,
             TestVariant::BASE,
             ata_impl,
@@ -770,17 +784,53 @@ impl FailureTestBuilder {
             &[("wallet", &ix.accounts[5].pubkey)],
         );
 
-        // The standard RecoverMultisig test creates a 2-of-3 multisig
-        // We'll exploit the vulnerability by providing the same signer twice
-        // This should allow us to bypass the 2-of-3 requirement with only 1 actual signer
+        // The standard RecoverMultisig test creates a 2-of-3 multisig with 2 signers
+        // Correct instruction layout:
+        // 0: nested_ata, 1: nested_mint, 2: dest_ata, 3: owner_ata, 4: owner_mint,
+        // 5: wallet, 6: token_program, 7: signer1, 8: signer2
 
-        // Find the first signer account (should be at index 7 in the instruction accounts)
-        if ix.accounts.len() > 7 {
+        // We'll exploit the vulnerability by replacing the second signer with the first signer
+        // This should allow us to bypass the 2-of-3 requirement with only 1 actual signer
+        if ix.accounts.len() >= 9 {
             let first_signer = ix.accounts[7].pubkey;
-            ix.accounts
-                .push(AccountMeta::new_readonly(first_signer, true));
-            if let Some(existing_meta) = ix.accounts.get_mut(7) {
-                existing_meta.is_signer = true;
+            // Replace the second signer with the first signer (duplicate)
+            ix.accounts[8].pubkey = first_signer;
+            // Make sure both are marked as signers
+            ix.accounts[7].is_signer = true;
+            ix.accounts[8].is_signer = true;
+        }
+
+        (ix, accounts)
+    }
+
+    /// Custom builder for multisig non-signer account test
+    /// This test passes a multisig account but doesn't mark it as a signer
+    fn build_fail_recover_multisig_non_signer_account(
+        ata_impl: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Start with a standard RecoverMultisig test case
+        let (mut ix, accounts) = CommonTestCaseBuilder::build_test_case(
+            BaseTestType::RecoverMultisig,
+            TestVariant::BASE,
+            ata_impl,
+            token_program_id,
+        );
+
+        log_test_info(
+            "fail_recover_multisig_non_signer_account",
+            ata_impl,
+            &[("wallet", &ix.accounts[5].pubkey)],
+        );
+
+        // The standard RecoverMultisig test creates a 2-of-3 multisig with 2 signers
+        // We'll modify it so that one of the required signers is not marked as a signer
+        // This should fail because we don't have enough valid signers
+
+        // Find the second signer account and mark it as NOT a signer
+        if ix.accounts.len() > 8 {
+            if let Some(second_signer_meta) = ix.accounts.get_mut(8) {
+                second_signer_meta.is_signer = false; // This should cause the test to fail
             }
         }
 

@@ -94,6 +94,8 @@ pub enum FailureMode {
     RecoverMultisigInsufficientSigners,
     /// Recover: multisig duplicate signers (vulnerability test)
     RecoverMultisigDuplicateSigners,
+    /// Recover: multisig account passed but not marked as signer
+    RecoverMultisigNonSignerAccount,
     /// Recover: wrong nested ATA address
     RecoverWrongNestedAta(Pubkey),
     /// Recover: wrong destination address
@@ -734,17 +736,14 @@ impl CommonTestCaseBuilder {
 
         // Add multisig signers if present
         if matches!(config.base_test, BaseTestType::RecoverMultisig) {
-            // Add signer accounts (last 3 accounts)
+            // For 2-of-3 multisig, only pass in the 2 accounts that are actually signing
             let signer_start = accounts.len() - 3;
             metas.push(AccountMeta::new_readonly(accounts[signer_start].0, true));
             metas.push(AccountMeta::new_readonly(
                 accounts[signer_start + 1].0,
                 true,
             ));
-            metas.push(AccountMeta::new_readonly(
-                accounts[signer_start + 2].0,
-                false,
-            ));
+            // Don't include the third signer since it's not signing
         }
 
         metas
@@ -942,8 +941,12 @@ impl CommonTestCaseBuilder {
                 }
             }
             FailureMode::RecoverMultisigDuplicateSigners => {
-                // This will be handled by the custom builder in failure_scenarios.rs
-                // The custom builder will duplicate a signer account to exploit the vulnerability
+                // Handled by the custom builder in failure_scenarios.rs
+                // The custom builder duplicates a signer account to exploit the vulnerability
+            }
+            FailureMode::RecoverMultisigNonSignerAccount => {
+                // Handled by the custom builder in failure_scenarios.rs
+                // The custom builder passes a multisig account but does not mark it as a signer
             }
 
             // Address replacement (both instruction and accounts)

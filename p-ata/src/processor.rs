@@ -1,5 +1,5 @@
 use {
-    crate::tools::account::create_pda_account,
+    crate::account::create_pda_account,
     pinocchio::{
         account_info::AccountInfo,
         instruction::{AccountMeta, Instruction, Seed, Signer},
@@ -9,7 +9,11 @@ use {
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
-    spl_token_interface::state::{account::Account as TokenAccount, Transmutable},
+    spl_token_interface::state::{
+        account::Account as TokenAccount,
+        multisig::{Multisig, MAX_SIGNERS},
+        Transmutable,
+    },
 };
 
 pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
@@ -365,13 +369,10 @@ pub fn process_recover(
     };
 
     if !recover_accounts.wallet.is_signer() {
-        // Check if this is a token-program multisig owner
+        // Must verify as token-program owned
         if unsafe { recover_accounts.wallet.owner() } != recover_accounts.token_prog.key() {
             return Err(ProgramError::MissingRequiredSignature);
         }
-
-        #[allow(unused_imports)]
-        use spl_token_interface::state::{multisig::Multisig, Initializable, Transmutable};
 
         // Load and validate multisig state
         let wallet_data_slice = unsafe { recover_accounts.wallet.borrow_data_unchecked() };
@@ -380,26 +381,25 @@ pub fn process_recover(
 
         let signer_infos = &accounts[7..];
 
-        // Count how many of the provided signer accounts are both marked as
-        // signer on this instruction *and* appear in the multisig signer list.
-        let mut signer_count: u8 = 0;
-        'outer: for signer_acc in signer_infos {
-            if !signer_acc.is_signer() {
-                continue;
-            }
-            for ms_pk in multisig_state.signers[..multisig_state.n as usize].iter() {
-                if ms_pk == signer_acc.key() {
-                    signer_count = signer_count.saturating_add(1);
+        let mut num_signers = 0;
+        let mut matched = [false; MAX_SIGNERS as usize];
 
-                    if signer_count >= multisig_state.m {
-                        break 'outer;
+        for signer in signer_infos.iter() {
+            for (position, key) in multisig_state.signers[0..multisig_state.n as usize]
+                .iter()
+                .enumerate()
+            {
+                if key == signer.key() && !matched[position] {
+                    if !signer.is_signer() {
+                        return Err(ProgramError::MissingRequiredSignature);
                     }
-                    continue 'outer;
+                    matched[position] = true;
+                    num_signers += 1;
                 }
             }
         }
 
-        if signer_count < multisig_state.m {
+        if num_signers < multisig_state.m {
             return Err(ProgramError::MissingRequiredSignature);
         }
     }

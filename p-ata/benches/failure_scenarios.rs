@@ -257,6 +257,14 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
         failure_mode: FailureMode::AtaNotWritable,
         builder_type: TestBuilderType::Simple,
     },
+    FailureTestConfig {
+        name: "fail_drain_lamports_from_uninitialized_ata",
+        category: TestCategory::AdditionalValidation,
+        base_test: BaseTestType::Create,
+        variant: TestVariant::BASE,
+        failure_mode: FailureMode::AtaAddressMismatchLamportDrain,
+        builder_type: TestBuilderType::Custom,
+    },
     // Additional Validation: Using Token-v1 program with an extended (Token-2022 style) mint
     FailureTestConfig {
         name: "fail_create_extended_mint_v1",
@@ -441,6 +449,12 @@ impl FailureTestBuilder {
                     }
                     "fail_recover_multisig_non_signer_account" => {
                         Self::build_fail_recover_multisig_non_signer_account(
+                            ata_impl,
+                            token_program_id,
+                        )
+                    }
+                    "fail_drain_lamports_from_uninitialized_ata" => {
+                        Self::build_fail_fail_drain_lamports_from_uninitialized_ata(
                             ata_impl,
                             token_program_id,
                         )
@@ -841,6 +855,127 @@ impl FailureTestBuilder {
                 second_signer_meta.is_signer = false; // This should cause the test to fail
             }
         }
+
+        (ix, accounts)
+    }
+
+    /// Exploit test: Drain lamports from a valid PDA that was never initialized.
+    /// If ATA derivation of the first account is not checked if that account
+    /// is derived from the ATA program, this will succeed.
+    fn build_fail_fail_drain_lamports_from_uninitialized_ata(
+        ata_impl: &AtaImplementation,
+        token_program_id: &Pubkey,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        let test_number =
+            common_builders::calculate_failure_test_number(BaseTestType::Create, TestVariant::BASE);
+
+        // Transaction payer (attacker's wallet that can sign)
+        let attacker_wallet = crate::common::structured_pk(
+            &ata_impl.variant,
+            crate::common::TestBankId::Failures,
+            test_number,
+            crate::common::AccountTypeId::Payer,
+        );
+
+        // Simulate victim's wallet (we don't control this)
+        let victim_wallet = crate::common::structured_pk(
+            &ata_impl.variant,
+            crate::common::TestBankId::Failures,
+            test_number.wrapping_add(10),
+            crate::common::AccountTypeId::Wallet,
+        );
+
+        // Attacker chooses their own mint
+        let attacker_mint = crate::common::structured_pk(
+            &ata_impl.variant,
+            crate::common::TestBankId::Failures,
+            test_number.wrapping_add(1),
+            crate::common::AccountTypeId::Mint,
+        );
+
+        // Victim's ATA - properly derived PDA from victim's wallet and mint
+        let (victim_ata, _victim_bump) = Pubkey::find_program_address(
+            &[
+                victim_wallet.as_ref(),
+                token_program_id.as_ref(),
+                attacker_mint.as_ref(),
+            ],
+            &ata_impl.program_id,
+        );
+
+        // Attacker's legitimate ATA (properly derived from attacker's wallet and mint)
+        let (attacker_ata, attacker_bump) = Pubkey::find_program_address(
+            &[
+                attacker_wallet.as_ref(),
+                token_program_id.as_ref(),
+                attacker_mint.as_ref(),
+            ],
+            &ata_impl.program_id,
+        );
+
+        log_test_info(
+            "fail_drain_lamports_from_uninitialized_ata",
+            ata_impl,
+            &[
+                ("attacker_wallet (tx payer)", &attacker_wallet),
+                ("victim_wallet", &victim_wallet),
+                ("victim_ata (instruction payer)", &victim_ata),
+                ("attacker_ata (target)", &attacker_ata),
+                ("attacker_mint", &attacker_mint),
+            ],
+        );
+
+        let accounts = vec![
+            // Transaction payer (attacker)
+            (
+                attacker_wallet,
+                AccountBuilder::system_account(1_000_000_000),
+            ),
+            // Victim's ATA with lamports but uninitialized
+            (
+                victim_ata,
+                Account {
+                    lamports: 5_000_000, // Enough to be drained
+                    data: vec![],
+                    owner: SYSTEM_PROGRAM_ID,
+                    executable: false,
+                    rent_epoch: 0,
+                },
+            ),
+            // Attacker's legitimate ATA (doesn't exist yet)
+            (attacker_ata, AccountBuilder::system_account(0)),
+            // The victim's wallet (used as seed in instruction but not for derivation)
+            (victim_wallet, AccountBuilder::system_account(0)),
+            // Attacker mint
+            (
+                attacker_mint,
+                AccountBuilder::mint_account(0, token_program_id, false),
+            ),
+            // System program
+            (
+                SYSTEM_PROGRAM_ID,
+                AccountBuilder::executable_program(crate::common::NATIVE_LOADER_ID),
+            ),
+            // Token program
+            (
+                *token_program_id,
+                AccountBuilder::executable_program(mollusk_svm::program::loader_keys::LOADER_V3),
+            ),
+        ];
+
+        // The exploit: victim_ata pays for attacker_ata's creation
+        let ix = Instruction {
+            program_id: ata_impl.program_id,
+            accounts: vec![
+                AccountMeta::new(victim_ata, true), // payer within ATA instruction (has lamports, not a signer)
+                AccountMeta::new(attacker_ata, false), // associated_token_account (attacker's legitimate ATA)
+                AccountMeta::new_readonly(attacker_wallet, false), // wallet = seed for derivation
+                AccountMeta::new_readonly(attacker_mint, false), // attacker's chosen mint
+                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
+                AccountMeta::new_readonly(*token_program_id, false),
+            ],
+            data: vec![0u8, attacker_bump], // Create with bump for attacker's ATA
+        };
 
         (ix, accounts)
     }

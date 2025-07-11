@@ -76,6 +76,8 @@ pub enum FailureMode {
     AtaWrongOwner(Pubkey),
     /// ATA marked as non-writable
     AtaNotWritable,
+    /// ATA address mismatch allowing lamport drain from uninitialized ATA
+    AtaAddressMismatchLamportDrain,
     /// Token account wrong size
     TokenAccountWrongSize(usize),
     /// Token account points to wrong mint
@@ -341,7 +343,8 @@ impl CommonTestCaseBuilder {
 
         #[cfg(feature = "full-debug-logs")]
         {
-            let display_test_name = _test_name.unwrap_or(&config.base_test.to_string());
+            let base_test_name = config.base_test.to_string();
+            let display_test_name = _test_name.unwrap_or(&base_test_name);
             println!(
                 "🔍 Test: {} | Implementation: {} | Mint: {} | Owner: {} | Payer: {}",
                 display_test_name,
@@ -920,6 +923,10 @@ impl CommonTestCaseBuilder {
             }
             FailureMode::AtaNotWritable => {
                 FailureInstructionBuilder::set_account_writable_status(ix, ata, false);
+            }
+            FailureMode::AtaAddressMismatchLamportDrain => {
+                // Handled by the custom builder in failure_scenarios.rs
+                // This complex scenario requires custom instruction and account setup
             }
             FailureMode::RecoverWalletNotSigner => {
                 if matches!(

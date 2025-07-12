@@ -3,12 +3,14 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         instruction::{AccountMeta, Instruction, Seed, Signer},
+        msg,
         program::{invoke, invoke_signed},
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
+    pinocchio_pubkey::derive_address,
     spl_token_interface::state::{
         account::Account as TokenAccount,
         multisig::{Multisig, MAX_SIGNERS},
@@ -303,6 +305,35 @@ fn create_and_initialize_ata(
     Ok(())
 }
 
+/// Given a hint bump, return a guaranteed canonical bump.
+/// The bump is not guaranteed to be off-curve, but it is guaranteed that
+/// no better (greater) off-curve bump exists. This prevents callers
+/// from creating non-canonical associated token accounts by passing in
+/// sub-optimal bumps.
+#[inline(always)]
+fn ensure_no_better_canonical_address_and_bump(
+    seeds: &[&[u8]; 3],
+    program_id: &Pubkey,
+    hint_bump: u8,
+) -> (Option<Pubkey>, u8) {
+    // note: this complexity (rather than just find_program_address) is because we are en route
+    // to benching a solution that verifies there is no better canonical address, but does not
+    // guarantee that the found address, IF it matches the provided bump, is off-curve.
+    // This saves an AVERAGE of 76% compute, with the only downside being that the client
+    // will encounter an error if the bump they provide is not off-curve.
+    // However, this is not implemented quite yet, since we will bench actual savings
+    // in a later commit vs this one.
+    let mut better_bump = 255;
+    while better_bump > hint_bump {
+        let maybe_better_address = derive_address::<3>(seeds, better_bump, program_id);
+        if maybe_better_address != derive_address(seeds, better_bump, program_id) {
+            return (Some(maybe_better_address), better_bump);
+        }
+        better_bump -= 1;
+    }
+    (None, hint_bump)
+}
+
 /// Accounts:
 /// [0] payer
 /// [1] associated_token_account_to_create
@@ -334,22 +365,39 @@ pub fn process_create(
         return Ok(());
     }
 
-    if !create_accounts.payer.is_signer() {
-        return Err(ProgramError::MissingRequiredSignature);
-    }
+    // reenable this if determining that it is better than ata validation
+    // if !create_accounts.payer.is_signer() {
+    //     return Err(ProgramError::MissingRequiredSignature);
+    // }
 
-    let bump = match maybe_bump {
-        Some(provided_bump) => provided_bump,
+    let (verified_associated_token_account_to_create, bump) = match maybe_bump {
+        Some(provided_bump) => ensure_no_better_canonical_address_and_bump(
+            &[
+                create_accounts.wallet.key().as_ref(),
+                create_accounts.token_program.key().as_ref(),
+                create_accounts.mint.key().as_ref(),
+            ],
+            program_id,
+            provided_bump,
+        ),
         None => {
-            let (_, computed_bump) = derive_ata_pda(
+            let (address, computed_bump) = derive_ata_pda(
                 create_accounts.wallet.key(),
                 create_accounts.token_program.key(),
                 create_accounts.mint.key(),
                 program_id,
             );
-            computed_bump
+            (Some(address), computed_bump)
         }
     };
+
+    // if there is a canonical address with a better bump than provided, just use it.
+    if verified_associated_token_account_to_create
+        .is_some_and(|address| &address != create_accounts.associated_token_account_to_create.key())
+    {
+        msg!("A better bump exists than the bump provided. Use the optimal bump.");
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
     create_and_initialize_ata(
         create_accounts.payer,

@@ -29,11 +29,12 @@ solana-pubkey = "2.2.1"
 [patch.crates-io]
 pinocchio = { version = "0.8.4", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded", default-features = false }
 pinocchio-system = { version = "0.2.3", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded" }
+indicatif = { git = "https://github.com/mitsuhiko/indicatif", tag = "0.18.0" }
 
 [dependencies]
 pinocchio = { version = "0.8.4", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded", default-features = false }
 pinocchio-log = { version = "0.4", default-features = false }
-pinocchio-pubkey = "0.2.4"
+pinocchio-pubkey = { verison = "0.2.4", git = "https://github.com/anza-xyz/pinocchio.git" }
 pinocchio-system = { version = "0.2.3", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded" }
 pinocchio-token = "0.3.0"
 spl-token-interface = { version = "^0", git = "https://github.com/solana-program/token.git" }
@@ -41,7 +42,6 @@ spl-token-interface = { version = "^0", git = "https://github.com/solana-program
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 assert_matches = "1.5.0"
-indicatif = { version = "0.17.12" }
 num-traits = "0.2"
 solana-account = "2.2.1"
 solana-instruction = "2.3.0"

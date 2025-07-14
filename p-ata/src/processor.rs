@@ -345,7 +345,7 @@ fn ensure_no_better_canonical_address_and_bump(
 ///
 /// For Token-2022 accounts, create the account with the correct size (170 bytes)
 /// and call InitializeImmutableOwner followed by InitializeAccount3.
-pub fn process_create(
+pub fn process_create_associated_token_account(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     idempotent: bool,
@@ -391,11 +391,11 @@ pub fn process_create(
         }
     };
 
-    // if there is a canonical address with a better bump than provided, just use it.
+    // Error if there is a canonical address with a better bump than provided
     if verified_associated_token_account_to_create
         .is_some_and(|address| &address != create_accounts.associated_token_account_to_create.key())
     {
-        msg!("A better bump exists than the bump provided. Use the optimal bump.");
+        msg!("Canonical address does not match provided address. Use correct owner and optimal bump.");
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -421,29 +421,55 @@ pub fn process_create(
 /// [5] wallet
 /// [6] token_program
 /// [7..] multisig signer accounts
-pub fn process_recover_nested(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    maybe_bump: Option<u8>,
-) -> ProgramResult {
-    // SAFETY: Accounts bounded by runtime
+pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let recover_accounts = parse_recover_accounts(accounts)?;
 
-    let bump = match maybe_bump {
-        Some(provided_bump) => provided_bump,
-        None => {
-            let (_, computed_bump) = derive_ata_pda(
-                recover_accounts.wallet.key(),
-                recover_accounts.token_program.key(),
-                recover_accounts.owner_mint.key(),
-                program_id,
-            );
-            computed_bump
-        }
-    };
+    msg!("Verifying owner address derivation");
+    // Verify owner address derivation
+    let (owner_associated_token_address, bump) = derive_ata_pda(
+        recover_accounts.wallet.key(),
+        recover_accounts.token_program.key(),
+        recover_accounts.owner_mint.key(),
+        program_id,
+    );
 
+    if owner_associated_token_address != *recover_accounts.owner_associated_token_account.key() {
+        msg!("Error: Owner associated address does not match seed derivation");
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    msg!("Verifying nested address derivation");
+    // Verify nested address derivation
+    let (nested_associated_token_address, _) = derive_ata_pda(
+        recover_accounts.owner_associated_token_account.key(),
+        recover_accounts.token_program.key(),
+        recover_accounts.nested_mint.key(),
+        program_id,
+    );
+    if nested_associated_token_address != *recover_accounts.nested_associated_token_account.key() {
+        msg!("Error: Nested associated address does not match seed derivation");
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    msg!("Verifying destination address derivation");
+    // Verify destination address derivation
+    let (destination_associated_token_address, _) = derive_ata_pda(
+        recover_accounts.wallet.key(),
+        recover_accounts.token_program.key(),
+        recover_accounts.nested_mint.key(),
+        program_id,
+    );
+    if destination_associated_token_address
+        != *recover_accounts.destination_associated_token_account.key()
+    {
+        msg!("Error: Destination associated address does not match seed derivation");
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    msg!("Verifying multisig case");
+    // Handle multisig case
     if !recover_accounts.wallet.is_signer() {
-        // Must be token-program owned
+        // Multisig case: must be token-program owned
         if !recover_accounts
             .wallet
             .is_owned_by(recover_accounts.token_program.key())
@@ -481,7 +507,6 @@ pub fn process_recover_nested(
         }
     }
 
-    // Owner_ata and nested_ata validation no longer performed here.
     let amount_to_recover =
         get_token_account_unchecked(recover_accounts.nested_associated_token_account).amount();
 

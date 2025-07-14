@@ -78,7 +78,6 @@ fn is_token_2022_program(program_id: &Pubkey) -> bool {
 }
 
 /// Get zero-copy token account reference from account info
-/// SAFETY:
 #[inline(always)]
 unsafe fn get_token_account_unchecked(account: &AccountInfo) -> &TokenAccount {
     let ata_data_slice = account.borrow_data_unchecked();

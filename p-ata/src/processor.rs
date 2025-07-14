@@ -425,7 +425,6 @@ pub fn process_create_associated_token_account(
 pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let recover_accounts = parse_recover_accounts(accounts)?;
 
-    msg!("Verifying owner address derivation");
     // Verify owner address derivation
     let (owner_associated_token_address, bump) = derive_ata_pda(
         recover_accounts.wallet.key(),
@@ -439,7 +438,6 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         return Err(ProgramError::InvalidSeeds);
     }
 
-    msg!("Verifying nested address derivation");
     // Verify nested address derivation
     let (nested_associated_token_address, _) = derive_ata_pda(
         recover_accounts.owner_associated_token_account.key(),
@@ -452,7 +450,6 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         return Err(ProgramError::InvalidSeeds);
     }
 
-    msg!("Verifying destination address derivation");
     // Verify destination address derivation
     let (destination_associated_token_address, _) = derive_ata_pda(
         recover_accounts.wallet.key(),
@@ -467,7 +464,6 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         return Err(ProgramError::InvalidSeeds);
     }
 
-    msg!("Verifying multisig case");
     // Handle multisig case
     if !recover_accounts.wallet.is_signer() {
         // Multisig case: must be token-program owned

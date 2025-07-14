@@ -18,6 +18,9 @@ use {
     },
 };
 
+#[cfg(test)]
+use solana_program;
+
 pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
 pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
 pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
@@ -54,10 +57,23 @@ fn derive_ata_pda(
     mint: &Pubkey,
     program_id: &Pubkey,
 ) -> (Pubkey, u8) {
-    find_program_address(
-        &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
-        program_id,
-    )
+    #[cfg(test)]
+    {
+        // Use solana_program's find_program_address for tests since pinocchio's only works on target_os = "solana"
+        let solana_program_id = solana_program::pubkey::Pubkey::new_from_array(*program_id);
+        let (address, bump) = solana_program::pubkey::Pubkey::find_program_address(
+            &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
+            &solana_program_id,
+        );
+        (Pubkey::from(address.to_bytes()), bump)
+    }
+    #[cfg(not(test))]
+    {
+        find_program_address(
+            &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
+            program_id,
+        )
+    }
 }
 
 /// Check if the given program ID is Token-2022
@@ -150,7 +166,9 @@ fn resolve_rent(maybe_rent_info: Option<&AccountInfo>) -> Result<Rent, ProgramEr
 
 /// Parse and validate the standard Recover account layout.
 #[inline(always)]
-fn parse_recover_accounts(accounts: &[AccountInfo]) -> Result<RecoverNestedAccounts, ProgramError> {
+pub fn parse_recover_accounts(
+    accounts: &[AccountInfo],
+) -> Result<RecoverNestedAccounts, ProgramError> {
     if accounts.len() < 7 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
@@ -171,7 +189,7 @@ fn parse_recover_accounts(accounts: &[AccountInfo]) -> Result<RecoverNestedAccou
 
 /// Parse and validate the standard Create account layout.
 #[inline(always)]
-fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts, ProgramError> {
+pub fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts, ProgramError> {
     let rent_info = match accounts.len() {
         len if len >= 7 => Some(unsafe { accounts.get_unchecked(6) }),
         6 => None,
@@ -194,12 +212,13 @@ fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts, Pro
 
 /// Check if account already exists and is properly configured (idempotent check).
 #[inline(always)]
-fn check_idempotent_account(
+pub fn check_idempotent_account(
     associated_token_account: &AccountInfo,
     wallet: &AccountInfo,
     mint_account: &AccountInfo,
     token_program: &AccountInfo,
     idempotent: bool,
+    program_id: &Pubkey,
 ) -> Result<bool, ProgramError> {
     if idempotent && associated_token_account.is_owned_by(token_program.key()) {
         let ata_state = unsafe { get_token_account_unchecked(associated_token_account) };
@@ -207,6 +226,20 @@ fn check_idempotent_account(
         // so TBD on these staying or going
         validate_token_account_owner(ata_state, wallet.key())?;
         validate_token_account_mint(ata_state, mint_account.key())?;
+
+        // Also validate that the account is at the canonical ATA address
+        // Prevents idempotent operations from succeeding with non-canonical addresses
+        let (canonical_address, _bump) = derive_ata_pda(
+            wallet.key(),
+            token_program.key(),
+            mint_account.key(),
+            program_id,
+        );
+
+        if canonical_address != *associated_token_account.key() {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
         return Ok(true); // Account exists and is valid
     }
     Ok(false) // Need to create account
@@ -215,7 +248,7 @@ fn check_idempotent_account(
 /// Create and initialize an ATA account with the given bump seed.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-fn create_and_initialize_ata(
+pub fn create_and_initialize_ata(
     payer: &AccountInfo,
     associated_token_account: &AccountInfo,
     wallet: &AccountInfo,
@@ -361,6 +394,7 @@ pub fn process_create_associated_token_account(
         create_accounts.mint,
         create_accounts.token_program,
         idempotent,
+        program_id,
     )? {
         return Ok(());
     }

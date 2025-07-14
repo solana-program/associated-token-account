@@ -18,6 +18,15 @@ pub fn process_instruction(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
+    process_instruction_inner(program_id, accounts, data)
+}
+
+#[inline(always)]
+fn process_instruction_inner(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    data: &[u8],
+) -> ProgramResult {
     match data {
         // Empty data defaults to Create (discriminator 0) - preserving backward compatibility
         [] => process_create_associated_token_account(program_id, accounts, false, None, None),

@@ -78,10 +78,11 @@ fn is_token_2022_program(program_id: &Pubkey) -> bool {
 }
 
 /// Get zero-copy token account reference from account info
+/// SAFETY:
 #[inline(always)]
-fn get_token_account_unchecked(account: &AccountInfo) -> &TokenAccount {
-    let ata_data_slice = unsafe { account.borrow_data_unchecked() };
-    unsafe { &*(ata_data_slice.as_ptr() as *const TokenAccount) }
+unsafe fn get_token_account_unchecked(account: &AccountInfo) -> &TokenAccount {
+    let ata_data_slice = account.borrow_data_unchecked();
+    &*(ata_data_slice.as_ptr() as *const TokenAccount)
 }
 
 /// Validate token account owner matches expected owner
@@ -202,7 +203,7 @@ fn check_idempotent_account(
     idempotent: bool,
 ) -> Result<bool, ProgramError> {
     if idempotent && associated_token_account.is_owned_by(token_program.key()) {
-        let ata_state = get_token_account_unchecked(associated_token_account);
+        let ata_state = unsafe { get_token_account_unchecked(associated_token_account) };
         // validation is more or less the point of CreateIdempotent,
         // so TBD on these staying or going
         validate_token_account_owner(ata_state, wallet.key())?;
@@ -507,8 +508,9 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         }
     }
 
-    let amount_to_recover =
-        get_token_account_unchecked(recover_accounts.nested_associated_token_account).amount();
+    let amount_to_recover = unsafe {
+        get_token_account_unchecked(recover_accounts.nested_associated_token_account).amount()
+    };
 
     let transfer_data = build_transfer_data(amount_to_recover);
 

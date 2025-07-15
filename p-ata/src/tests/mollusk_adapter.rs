@@ -296,7 +296,7 @@ impl MolluskBanksClient {
 
         // Deserialize mint to inspect extension types
         let mint_state = match spl_token_2022::extension::StateWithExtensionsOwned::<
-            spl_token_2022::state::Mint,
+            Mint,
         >::unpack(mint_account.data)
         {
             Ok(state) => state,

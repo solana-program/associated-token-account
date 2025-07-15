@@ -21,7 +21,6 @@ fn generate_test_files() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("generated_tests.rs");
 
-    // List of test files to process
     let test_files = [
         "create_idempotent.rs",
         "extended_mint.rs",

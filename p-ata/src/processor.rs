@@ -6,7 +6,7 @@ use {
         msg,
         program::{invoke, invoke_signed},
         program_error::ProgramError,
-        pubkey::{find_program_address, Pubkey},
+        pubkey::Pubkey,
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
@@ -18,6 +18,8 @@ use {
     },
 };
 
+#[cfg(not(test))]
+use pinocchio::pubkey::find_program_address;
 #[cfg(test)]
 use solana_program;
 
@@ -265,9 +267,10 @@ pub fn create_and_initialize_ata(
     let space = match maybe_token_account_len {
         Some(len) => len,
         None => {
-            // Calculate correct space: 165 for base TokenAccount, +5 for ImmutableOwner extension
             if is_token_2022_program(token_program.key()) {
-                TokenAccount::LEN + 5 // 170 bytes total for Token-2022 with ImmutableOwner
+                // For Token-2022, default to base account (165 bytes) + ImmutableOwner (5 bytes) = 170 bytes.
+                // Tests can supply a larger `account_len` when required via instruction data.
+                TokenAccount::LEN + 5 // 170 bytes fallback for Token-2022
             } else {
                 TokenAccount::LEN // 165 bytes for regular Token
             }

@@ -5,30 +5,30 @@ use std::path::Path;
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("generated_tests.rs");
-    
+
     // List of test files to process
     let test_files = [
         "create_idempotent.rs",
-        "extended_mint.rs", 
+        "extended_mint.rs",
         "process_create_associated_token_account.rs",
         "recover_nested.rs",
         "spl_token_create.rs",
     ];
-    
+
     let mut generated_content = String::new();
-    
+
     for test_file in &test_files {
         let original_path = format!("../program/tests/{}", test_file);
-        
+
         // Read the original test file
         if let Ok(content) = fs::read_to_string(&original_path) {
             // Extract module name from filename
             let module_name = test_file.strip_suffix(".rs").unwrap();
-            
+
             // Generate a wrapper module that provides the program_test module
             // and includes the original test content with modified imports
             let modified_content = modify_test_imports(&content);
-            
+
             generated_content.push_str(&format!(
                 r#"
 pub mod {} {{
@@ -56,16 +56,18 @@ pub mod {} {{
             ));
         }
     }
-    
+
     // Add fixtures module
-    generated_content.push_str(r#"
+    generated_content.push_str(
+        r#"
 pub mod fixtures {
     pub const TOKEN_MINT_DATA_BIN: &str = "../program/tests/fixtures/token-mint-data.bin";
 }
-"#);
-    
+"#,
+    );
+
     fs::write(&dest_path, generated_content).unwrap();
-    
+
     // Tell Cargo to rerun this build script if the original test files change
     for test_file in &test_files {
         println!("cargo:rerun-if-changed=../program/tests/{}", test_file);

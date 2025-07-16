@@ -8,8 +8,8 @@ use {
         program_error::ProgramError,
         pubkey::Pubkey,
         rent::Rent,
-        system_instruction,
     },
+    solana_system_interface::instruction as system_instruction,
     spl_token_2022::extension::ExtensionType,
     std::convert::TryInto,
 };

@@ -2,7 +2,7 @@ mod program_test;
 
 use {
     program_test::{program_test, program_test_2022},
-    solana_program::{pubkey::Pubkey, system_instruction},
+    solana_program::pubkey::Pubkey,
     solana_program_test::*,
     solana_sdk::{
         instruction::{AccountMeta, InstructionError},
@@ -10,6 +10,7 @@ use {
         signer::keypair::Keypair,
         transaction::{Transaction, TransactionError},
     },
+    solana_system_interface::instruction as system_instruction,
     spl_associated_token_account::instruction,
     spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
     spl_token_2022::{

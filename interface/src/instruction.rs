@@ -107,7 +107,7 @@ pub fn recover_nested(
 
 #[cfg(test)]
 mod tests {
-    use {super::*, solana_program::system_program};
+    use {super::*, solana_sdk_ids::system_program};
 
     #[test]
     fn system_program_id() {

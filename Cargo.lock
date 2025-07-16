@@ -6871,6 +6871,7 @@ dependencies = [
  "solana-program",
  "solana-program-test",
  "solana-sdk",
+ "solana-system-interface",
  "spl-associated-token-account-client",
  "spl-token",
  "spl-token-2022",
@@ -6882,8 +6883,8 @@ name = "spl-associated-token-account-client"
 version = "2.0.0"
 dependencies = [
  "solana-instruction",
- "solana-program",
  "solana-pubkey",
+ "solana-sdk-ids",
 ]
 
 [[package]]

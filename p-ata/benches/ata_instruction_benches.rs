@@ -21,6 +21,33 @@ struct TestConfiguration {
     variants: &'static [TestVariant],
 }
 
+/// Get the number of benchmark iterations from environment variable or default to 100
+fn get_iterations() -> usize {
+    // Check environment variable first
+    if let Ok(iterations_str) = std::env::var("BENCH_ITERATIONS") {
+        if let Ok(iterations) = iterations_str.parse::<usize>() {
+            if iterations > 0 {
+                return iterations;
+            }
+        }
+    }
+
+    // Check command line arguments as fallback
+    let args: Vec<String> = std::env::args().collect();
+    for i in 0..args.len() {
+        if (args[i] == "--iterations" || args[i] == "-i") && i + 1 < args.len() {
+            if let Ok(iterations) = args[i + 1].parse::<usize>() {
+                if iterations > 0 {
+                    return iterations;
+                }
+            }
+        }
+    }
+
+    // Default to 100 iterations
+    100
+}
+
 /// Master list of base tests and the P-ATA variants we actually run/display.
 static TEST_CONFIGS: &[TestConfiguration] = &[
     TestConfiguration {
@@ -143,6 +170,8 @@ impl PerformanceTestOrchestrator {
         pata_prefunded_impl: &AtaImplementation,
         spl_impl: &AtaImplementation,
         token_program_id: &Pubkey,
+        iterations: usize,
+        run_entropy: u64,
     ) -> Vec<ComparisonResult> {
         println!("\n=== P-ATA VS SPL ATA MATRIX COMPARISON ===");
         println!("P-ATA Legacy Program ID: {}", pata_legacy_impl.program_id);
@@ -158,6 +187,8 @@ impl PerformanceTestOrchestrator {
             pata_prefunded_impl,
             spl_impl,
             token_program_id,
+            iterations,
+            run_entropy,
         )
     }
 
@@ -166,6 +197,8 @@ impl PerformanceTestOrchestrator {
         pata_prefunded_impl: &AtaImplementation,
         spl_impl: &AtaImplementation,
         token_program_id: &Pubkey,
+        iterations: usize,
+        run_entropy: u64,
     ) -> Vec<ComparisonResult> {
         let display_variants = [TestVariant::BASE, TestVariant::RENT, TestVariant::BUMP];
 
@@ -194,6 +227,8 @@ impl PerformanceTestOrchestrator {
                     spl_impl,
                     token_program_id,
                     &pata_legacy_impl.program_id,
+                    iterations,
+                    run_entropy,
                 );
 
                 // Print immediate detailed results for debugging
@@ -220,26 +255,40 @@ impl PerformanceTestOrchestrator {
         spl_impl: &AtaImplementation,
         token_program_id: &Pubkey,
         _standard_program_id: &Pubkey,
+        iterations: usize,
+        run_entropy: u64,
     ) -> ComparisonResult {
-        let (p_ata_ix, p_ata_accounts) = CommonTestCaseBuilder::build_test_case(
-            base_test,
-            variant,
-            p_ata_impl,
-            token_program_id,
-        );
+        // Create closure to build test cases with iteration-specific wallets
+        let build_p_ata_test_case = |iteration: usize| {
+            CommonTestCaseBuilder::build_test_case_with_iteration(
+                base_test,
+                variant,
+                p_ata_impl,
+                token_program_id,
+                iteration,
+                run_entropy,
+            )
+        };
 
-        // For address generation consistency, use the same variant as P-ATA
-        let (original_ix, original_accounts) =
-            CommonTestCaseBuilder::build_test_case(base_test, variant, spl_impl, token_program_id);
+        let build_spl_test_case = |iteration: usize| {
+            CommonTestCaseBuilder::build_test_case_with_iteration(
+                base_test,
+                variant,
+                spl_impl,
+                token_program_id,
+                iteration,
+                run_entropy,
+            )
+        };
 
         // Handle special cases where original ATA doesn't support the feature
         let mut original_result = if Self::original_supports_test(base_test) {
-            common::BenchmarkRunner::run_single_benchmark(
+            common::BenchmarkRunner::run_single_benchmark_with_builder(
                 test_name,
-                &original_ix,
-                &original_accounts,
+                build_spl_test_case,
                 spl_impl,
                 token_program_id,
+                iterations,
             )
         } else {
             common::BenchmarkResult {
@@ -255,13 +304,17 @@ impl PerformanceTestOrchestrator {
             }
         };
 
-        let mut p_ata_result = common::BenchmarkRunner::run_single_benchmark(
+        let mut p_ata_result = common::BenchmarkRunner::run_single_benchmark_with_builder(
             test_name,
-            &p_ata_ix,
-            &p_ata_accounts,
+            build_p_ata_test_case,
             p_ata_impl,
             token_program_id,
+            iterations,
         );
+
+        // Generate sample test cases for comparison (using iteration 0)
+        let (p_ata_ix, p_ata_accounts) = build_p_ata_test_case(0);
+        let (original_ix, original_accounts) = build_spl_test_case(0);
 
         // Enhanced comparison with account state verification
         let mut comparison = Self::create_enhanced_comparison_result(
@@ -279,24 +332,28 @@ impl PerformanceTestOrchestrator {
         let needs_debug_logging = Self::is_problematic_result(&comparison);
 
         if needs_debug_logging {
-            // Re-run with debug logging to capture verbose output
-            p_ata_result = common::BenchmarkRunner::run_single_benchmark_with_debug(
+            // Capture debug output but preserve averaged compute units
+            let p_ata_debug = common::BenchmarkRunner::run_single_benchmark_with_debug(
                 test_name,
                 &p_ata_ix,
                 &p_ata_accounts,
                 p_ata_impl,
                 token_program_id,
             );
+            // Only update the captured output, preserve averaged compute units
+            p_ata_result.captured_output = p_ata_debug.captured_output;
 
             if Self::original_supports_test(base_test) {
-                // Also re-run original ATA with debug logging
-                original_result = common::BenchmarkRunner::run_single_benchmark_with_debug(
+                // Also capture debug for original ATA but preserve averaged compute units
+                let original_debug = common::BenchmarkRunner::run_single_benchmark_with_debug(
                     test_name,
                     &original_ix,
                     &original_accounts,
                     spl_impl,
                     token_program_id,
                 );
+                // Only update the captured output, preserve averaged compute units
+                original_result.captured_output = original_debug.captured_output;
             }
 
             // Update comparison result with debug output
@@ -417,6 +474,20 @@ impl PerformanceTestOrchestrator {
 // ================================= MAIN =====================================
 
 fn main() {
+    // Get number of iterations from environment or arguments
+    let iterations = get_iterations();
+
+    // Generate run-specific entropy once per benchmark execution
+    // This ensures P-ATA and SPL ATA use the same entropy within each test,
+    // but different runs get different entropy for variation
+    let run_entropy = {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        now.wrapping_add(std::process::id() as u64)
+    };
+
     // Completely suppress debug output from Mollusk and Solana runtime unless full-debug-logs is enabled
     #[cfg(not(feature = "full-debug-logs"))]
     {
@@ -440,6 +511,7 @@ fn main() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     println!("CARGO_MANIFEST_DIR: {}", manifest_dir);
     println!("🔨 P-ATA vs Original ATA Benchmark Suite");
+    println!("📊 Running {} iterations per test", iterations);
 
     BenchmarkSetup::setup_sbf_environment(manifest_dir);
 
@@ -499,6 +571,8 @@ fn main() {
         &impls.pata_prefunded_impl,
         &impls.spl_impl,
         &program_ids.token_program_id,
+        iterations,
+        run_entropy,
     );
 
     println!("\n✅ Comprehensive comparison completed successfully");

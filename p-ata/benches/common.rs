@@ -232,67 +232,54 @@ pub fn structured_pk_multi<const N: usize>(
     account_types.map(|account_type| structured_pk(variant, test_bank, test_number, account_type))
 }
 
-/// Find a pubkey that gives the same lowest bump across multiple ATA program IDs
+/// Generate a random pubkey for benchmark testing
 ///
-/// This function finds a pubkey that produces the lowest common bump value across all
-/// provided ATA program IDs.
-///
-/// Avoids some issues with test cross-contamination by using predictable
-/// but different keys for different tests.
+/// Creates a random wallet address with some deterministic seed for test reproducibility
+/// but without optimal bump hunting. This provides truly random compute unit results.
 ///
 /// # Arguments
-/// * `variant` - The ATA variant to use for base key generation
-/// * `test_bank` - The test bank ID for structuring
-/// * `test_number` - The test number for structuring  
-/// * `account_type` - The account type for structuring
-/// * `ata_program_ids` - Slice of ATA program IDs to find common bump for
-/// * `token_program_id` - The token program ID for PDA derivation
-/// * `mint` - The mint pubkey for PDA derivation
+/// * `variant` - The ATA variant to use for seeding
+/// * `test_bank` - The test bank ID for seeding
+/// * `test_number` - The test number for seeding  
+/// * `account_type` - The account type for seeding
+/// * `iteration` - Current iteration number for additional randomness
+/// * `run_entropy` - A run-specific entropy value to use for seeding
 ///
 /// # Returns
-/// A pubkey that gives the same lowest possible bump across all provided program IDs.
-pub fn structured_pk_with_optimal_common_bump(
+/// A random pubkey seeded by the test parameters and current iteration
+pub fn random_seeded_pk(
     variant: &AtaVariant,
     test_bank: TestBankId,
     test_number: u8,
     account_type: AccountTypeId,
-    ata_program_ids: &[Pubkey], // can be 1; otherwise, finds pk with COMMON optimal bump
-    token_program_id: &Pubkey,
-    mint: &Pubkey,
+    iteration: usize,
+    run_entropy: u64,
 ) -> Pubkey {
-    // Handle empty array case
-    if ata_program_ids.is_empty() {
-        return structured_pk(variant, test_bank, test_number, account_type);
-    }
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
-    // Start with the base structured key
-    let base_key = structured_pk(variant, test_bank, test_number, account_type);
-    let mut key_bytes = base_key.to_bytes();
+    // Create a deterministic but random-looking seed from test parameters
+    let mut hasher = DefaultHasher::new();
+    variant_to_byte(variant).hash(&mut hasher);
+    (test_bank as u8).hash(&mut hasher);
+    test_number.hash(&mut hasher);
+    (account_type as u8).hash(&mut hasher);
+    iteration.hash(&mut hasher);
 
-    // Try different variations until we find one with optimal bump (255) for all program IDs
-    for modifier in 0u32..10000 {
-        // Modify the last 4 bytes with the modifier
-        let modifier_bytes = modifier.to_le_bytes();
-        key_bytes[28..32].copy_from_slice(&modifier_bytes);
+    // Add run-specific entropy so single runs vary between executions
+    // This run_entropy should be the same for P-ATA and SPL ATA within a single test
+    run_entropy.hash(&mut hasher);
 
-        let test_key = Pubkey::new_from_array(key_bytes);
+    let hash = hasher.finish();
 
-        // Check if this key produces bump 255 for all program IDs
-        let all_optimal = ata_program_ids.iter().all(|program_id| {
-            let (_, bump) = Pubkey::find_program_address(
-                &[test_key.as_ref(), token_program_id.as_ref(), mint.as_ref()],
-                program_id,
-            );
-            bump == 255
-        });
+    // Convert hash to 32-byte array for pubkey
+    let mut bytes = [0u8; 32];
+    bytes[0..8].copy_from_slice(&hash.to_le_bytes());
+    bytes[8..16].copy_from_slice(&(hash.wrapping_mul(0x9E3779B9)).to_le_bytes());
+    bytes[16..24].copy_from_slice(&(hash.wrapping_mul(0x85EBCA6B)).to_le_bytes());
+    bytes[24..32].copy_from_slice(&(hash.wrapping_mul(0xC2B2AE35)).to_le_bytes());
 
-        if all_optimal {
-            return test_key;
-        }
-    }
-
-    // If we couldn't find a common optimal bump, return base key
-    base_key
+    Pubkey::new_from_array(bytes)
 }
 
 pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
@@ -704,47 +691,75 @@ pub type PostExecutionVerificationFn = Box<
 pub struct BenchmarkRunner;
 
 impl BenchmarkRunner {
-    /// Run a single benchmark for one implementation
+    /// Run a single benchmark for one implementation, averaging over multiple iterations
     pub fn run_single_benchmark(
         test_name: &str,
         ix: &solana_instruction::Instruction,
         accounts: &[(Pubkey, Account)],
         implementation: &AtaImplementation,
         token_program_id: &Pubkey,
+        iterations: usize,
     ) -> BenchmarkResult {
         let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
 
-        // First run with quiet logging unless full-debug-logs feature is enabled
-        #[cfg(not(feature = "full-debug-logs"))]
-        let result = mollusk.process_instruction(ix, accounts);
+        let mut total_compute_units = 0u64;
+        let mut success_count = 0usize;
+        let mut last_result = None;
+        let mut last_error_message = None;
 
-        #[cfg(feature = "full-debug-logs")]
-        let result = {
-            // Enable debug logging for full-debug-logs feature
-            let _original_rust_log =
-                std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
-            std::env::set_var("RUST_LOG", "debug");
-            let _ = solana_logger::setup_with(
-                "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
-            );
-
+        // Run the benchmark multiple times to get average compute units
+        for _ in 0..iterations {
+            // Run with quiet logging unless full-debug-logs feature is enabled
+            #[cfg(not(feature = "full-debug-logs"))]
             let result = mollusk.process_instruction(ix, accounts);
 
-            // Restore original logging
-            std::env::set_var("RUST_LOG", &_original_rust_log);
-            let _ = solana_logger::setup_with(
-                "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+            #[cfg(feature = "full-debug-logs")]
+            let result = {
+                // Enable debug logging for full-debug-logs feature
+                let _original_rust_log =
+                    std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
+                std::env::set_var("RUST_LOG", "debug");
+                let _ = solana_logger::setup_with(
+                    "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
+                );
+
+                let result = mollusk.process_instruction(ix, accounts);
+
+                // Restore original logging
+                std::env::set_var("RUST_LOG", &_original_rust_log);
+                let _ = solana_logger::setup_with(
+                    "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+                );
+
+                result
+            };
+
+            let iteration_success = matches!(
+                result.program_result,
+                mollusk_svm::result::ProgramResult::Success
             );
 
-            result
+            if iteration_success {
+                total_compute_units += result.compute_units_consumed;
+                success_count += 1;
+            } else {
+                last_error_message = Some(format!("{:?}", result.program_result));
+            }
+
+            last_result = Some(result);
+        }
+
+        // Calculate average compute units (only from successful runs)
+        let avg_compute_units = if success_count > 0 {
+            total_compute_units / success_count as u64
+        } else {
+            0
         };
 
-        let success = matches!(
-            result.program_result,
-            mollusk_svm::result::ProgramResult::Success
-        );
-        let error_message = if !success {
-            Some(format!("{:?}", result.program_result))
+        // Consider the benchmark successful if at least one iteration succeeded
+        let overall_success = success_count > 0;
+        let error_message = if !overall_success {
+            last_error_message
         } else {
             None
         };
@@ -752,8 +767,97 @@ impl BenchmarkRunner {
         BenchmarkResult {
             implementation: implementation.name.to_string(),
             test_name: test_name.to_string(),
-            compute_units: result.compute_units_consumed,
-            success,
+            compute_units: avg_compute_units,
+            success: overall_success,
+            error_message,
+            captured_output: String::new(), // Will be populated if we need to re-run with debug
+        }
+    }
+
+    /// Run a benchmark with a closure that builds test cases for each iteration
+    /// This allows for different random wallets in each iteration
+    pub fn run_single_benchmark_with_builder<F>(
+        test_name: &str,
+        test_case_builder: F,
+        implementation: &AtaImplementation,
+        token_program_id: &Pubkey,
+        iterations: usize,
+    ) -> BenchmarkResult
+    where
+        F: Fn(usize) -> (solana_instruction::Instruction, Vec<(Pubkey, Account)>),
+    {
+        let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
+
+        let mut total_compute_units = 0u64;
+        let mut success_count = 0usize;
+        let mut last_result = None;
+        let mut last_error_message = None;
+
+        // Run the benchmark multiple times with different test cases for each iteration
+        for iteration in 0..iterations {
+            let (ix, accounts) = test_case_builder(iteration);
+            let accounts_slice: Vec<(Pubkey, Account)> = accounts;
+
+            // Run with quiet logging unless full-debug-logs feature is enabled
+            #[cfg(not(feature = "full-debug-logs"))]
+            let result = mollusk.process_instruction(&ix, &accounts_slice);
+
+            #[cfg(feature = "full-debug-logs")]
+            let result = {
+                // Enable debug logging for full-debug-logs feature
+                let _original_rust_log =
+                    std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
+                std::env::set_var("RUST_LOG", "debug");
+                let _ = solana_logger::setup_with(
+                    "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
+                );
+
+                let result = mollusk.process_instruction(&ix, &accounts_slice);
+
+                // Restore original logging
+                std::env::set_var("RUST_LOG", &_original_rust_log);
+                let _ = solana_logger::setup_with(
+                    "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+                );
+
+                result
+            };
+
+            let iteration_success = matches!(
+                result.program_result,
+                mollusk_svm::result::ProgramResult::Success
+            );
+
+            if iteration_success {
+                total_compute_units += result.compute_units_consumed;
+                success_count += 1;
+            } else {
+                last_error_message = Some(format!("{:?}", result.program_result));
+            }
+
+            last_result = Some(result);
+        }
+
+        // Calculate average compute units (only from successful runs)
+        let avg_compute_units = if success_count > 0 {
+            total_compute_units / success_count as u64
+        } else {
+            0
+        };
+
+        // Consider the benchmark successful if at least one iteration succeeded
+        let overall_success = success_count > 0;
+        let error_message = if !overall_success {
+            last_error_message
+        } else {
+            None
+        };
+
+        BenchmarkResult {
+            implementation: implementation.name.to_string(),
+            test_name: test_name.to_string(),
+            compute_units: avg_compute_units,
+            success: overall_success,
             error_message,
             captured_output: String::new(), // Will be populated if we need to re-run with debug
         }
@@ -770,9 +874,15 @@ impl BenchmarkRunner {
         token_program_id: &Pubkey,
         verification_fn: Option<PostExecutionVerificationFn>,
     ) -> BenchmarkResult {
-        // First run the benchmark normally
-        let mut result =
-            Self::run_single_benchmark(test_name, ix, accounts, implementation, token_program_id);
+        // First run the benchmark normally (using 1 iteration for post-inspection)
+        let mut result = Self::run_single_benchmark(
+            test_name,
+            ix,
+            accounts,
+            implementation,
+            token_program_id,
+            1,
+        );
 
         // If verification function is provided and instruction succeeded, add verification
         if let Some(verify_fn) = verification_fn {
@@ -801,7 +911,7 @@ impl BenchmarkRunner {
         result
     }
 
-    /// Run a benchmark with verbose debug logging enabled - used for problematic results
+    /// Run a benchmark with verbose debug logging enabled - used for problematic results (single iteration)
     pub fn run_single_benchmark_with_debug(
         test_name: &str,
         ix: &solana_instruction::Instruction,

@@ -130,6 +130,27 @@ impl CommonTestCaseBuilder {
         Self::build_with_config(config, variant, ata_implementation, None)
     }
 
+    /// Build test case with specific iteration for random wallet generation
+    #[allow(dead_code)]
+    pub fn build_test_case_with_iteration(
+        base_test: BaseTestType,
+        variant: TestVariant,
+        ata_implementation: &AtaImplementation,
+        token_program_id: &Pubkey,
+        iteration: usize,
+        run_entropy: u64,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        let config = Self::get_config_for_test(base_test, token_program_id);
+        Self::build_with_config_and_iteration(
+            config,
+            variant,
+            ata_implementation,
+            None,
+            iteration,
+            run_entropy,
+        )
+    }
+
     /// Build a failure test case with the specified failure mode
     #[allow(dead_code)]
     pub fn build_failure_test_case(
@@ -328,6 +349,30 @@ impl CommonTestCaseBuilder {
         ata_implementation: &AtaImplementation,
         _test_name: Option<&str>,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
+        // Generate simple entropy for this call since we don't have run-specific entropy available
+        let simple_entropy = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+        Self::build_with_config_and_iteration(
+            config,
+            variant,
+            ata_implementation,
+            _test_name,
+            42,
+            simple_entropy,
+        )
+    }
+
+    /// Build test case with given configuration and iteration for random wallet
+    fn build_with_config_and_iteration(
+        config: TestCaseConfig,
+        variant: TestVariant,
+        ata_implementation: &AtaImplementation,
+        _test_name: Option<&str>,
+        iteration: usize,
+        run_entropy: u64,
+    ) -> (Instruction, Vec<(Pubkey, Account)>) {
         // Use structured addressing to prevent cross-contamination
         let test_bank = if config.failure_mode.is_some() {
             crate::common::TestBankId::Failures
@@ -339,7 +384,8 @@ impl CommonTestCaseBuilder {
         // even though SPL ATA strips variant-specific instruction data
         let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
 
-        let (payer, mint, wallet) = Self::get_structured_addresses(&config, test_bank, test_number);
+        let (payer, mint, wallet) =
+            Self::get_structured_addresses(&config, test_bank, test_number, iteration, run_entropy);
 
         #[cfg(feature = "full-debug-logs")]
         {
@@ -382,19 +428,15 @@ impl CommonTestCaseBuilder {
                 panic!("Could not find NestedAta config for recover test");
             };
 
-            // Directly use the optimal bump 255
-            let bump = 255;
-            let owner_ata = Pubkey::create_program_address(
+            // Find the correct bump for the random wallet
+            Pubkey::find_program_address(
                 &[
                     actual_wallet.as_ref(),
                     config.token_program.as_ref(),
                     owner_mint.as_ref(),
-                    &[bump],
                 ],
                 &derivation_program_id,
             )
-            .expect("Failed to create PDA for recover test with optimal bump 255");
-            (owner_ata, bump)
         } else if matches!(config.base_test, BaseTestType::WorstCase) {
             // WorstCase test uses a non-optimal wallet, so find the canonical bump.
             Pubkey::find_program_address(
@@ -406,19 +448,15 @@ impl CommonTestCaseBuilder {
                 &derivation_program_id,
             )
         } else {
-            // Standard tests use an engineered wallet for an optimal bump of 255.
-            let bump = 255;
-            let ata = Pubkey::create_program_address(
+            // Standard tests: find the correct bump for the random wallet
+            Pubkey::find_program_address(
                 &[
                     wallet.as_ref(),
                     config.token_program.as_ref(),
                     mint.as_ref(),
-                    &[bump],
                 ],
                 &derivation_program_id,
             )
-            .expect("Failed to create PDA with optimal bump 255");
-            (ata, bump)
         };
 
         let mut accounts = Self::build_accounts(
@@ -453,6 +491,8 @@ impl CommonTestCaseBuilder {
         config: &TestCaseConfig,
         test_bank: crate::common::TestBankId,
         test_number: u8,
+        iteration: usize,
+        run_entropy: u64,
     ) -> (Pubkey, Pubkey, Pubkey) {
         if config.use_fixed_mint_owner_payer {
             // Use fixed addresses for specific tests
@@ -504,18 +544,15 @@ impl CommonTestCaseBuilder {
                 panic!("Could not find NestedAta config for recover test");
             };
 
-            let all_ata_program_ids: Vec<Pubkey> = crate::common::AtaImplementation::all()
-                .iter()
-                .map(|a| a.program_id)
-                .collect();
-            crate::common::structured_pk_with_optimal_common_bump(
+            // Use random seeded pubkey instead of optimal bump hunting
+            // Iteration-based seed ensures varying wallets across iterations
+            crate::common::random_seeded_pk(
                 consistent_variant,
                 test_bank,
                 test_number,
                 crate::common::AccountTypeId::Wallet,
-                &all_ata_program_ids,
-                &config.token_program,
-                &owner_mint,
+                iteration, // Use iteration for varying wallets
+                run_entropy,
             )
         } else if matches!(config.base_test, BaseTestType::WorstCase) {
             crate::common::structured_pk(
@@ -525,18 +562,15 @@ impl CommonTestCaseBuilder {
                 crate::common::AccountTypeId::Wallet,
             )
         } else {
-            let all_ata_program_ids: Vec<Pubkey> = crate::common::AtaImplementation::all()
-                .iter()
-                .map(|a| a.program_id)
-                .collect();
-            crate::common::structured_pk_with_optimal_common_bump(
+            // Use random seeded pubkey instead of optimal bump hunting
+            // Iteration-based seed ensures varying wallets across iterations
+            crate::common::random_seeded_pk(
                 consistent_variant,
                 test_bank,
                 test_number,
                 crate::common::AccountTypeId::Wallet,
-                &all_ata_program_ids,
-                &config.token_program,
-                &mint,
+                iteration, // Use iteration for varying wallets
+                run_entropy,
             )
         };
         (payer, mint, wallet)

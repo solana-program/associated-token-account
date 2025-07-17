@@ -3,7 +3,7 @@
 use {
     crate::processor::{process_create_associated_token_account, process_recover_nested},
     pinocchio::{
-        account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
+        account_info::AccountInfo, msg, no_allocator, nostd_panic_handler, program_entrypoint,
         pubkey::Pubkey, ProgramResult,
     },
 };
@@ -18,30 +18,28 @@ pub fn process_instruction(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    process_instruction_inner(program_id, accounts, data)
-}
-
-#[inline(always)]
-fn process_instruction_inner(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    data: &[u8],
-) -> ProgramResult {
+    msg!("using p-ata");
     match data {
         // Empty data defaults to Create (discriminator 0) - preserving backward compatibility
         [] => process_create_associated_token_account(program_id, accounts, false, None, None),
-        [discriminator, instruction_data @ ..] => match *discriminator {
-            // 0 - Create (with optional bump and/or account_len)
-            0 => match instruction_data {
+        [discriminator, instruction_data @ ..] => {
+            let idempotent = match *discriminator {
+                0 => false,
+                1 => true,
+                2 => return process_recover_nested(program_id, accounts),
+                _ => return Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
+            };
+
+            match instruction_data {
                 // No additional data - compute bump and account_len on-chain (original behavior)
-                [] => {
-                    process_create_associated_token_account(program_id, accounts, false, None, None)
-                }
+                [] => process_create_associated_token_account(
+                    program_id, accounts, idempotent, None, None,
+                ),
                 // Only bump provided
                 [bump] => process_create_associated_token_account(
                     program_id,
                     accounts,
-                    false,
+                    idempotent,
                     Some(*bump),
                     None,
                 ),
@@ -56,17 +54,12 @@ fn process_instruction_inner(
                     process_create_associated_token_account(
                         program_id,
                         accounts,
-                        false,
+                        idempotent,
                         Some(*bump),
                         Some(account_len as usize),
                     )
                 }
-            },
-            // 1 - CreateIdempotent
-            1 => process_create_associated_token_account(program_id, accounts, true, None, None),
-            // 2 - RecoverNested (with optional bump)
-            2 => process_recover_nested(program_id, accounts),
-            _ => Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
-        },
+            }
+        }
     }
 }

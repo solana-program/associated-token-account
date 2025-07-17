@@ -13,6 +13,7 @@ use {
     pinocchio_pubkey::derive_address,
     spl_token_interface::state::{
         account::Account as TokenAccount,
+        mint::Mint,
         multisig::{Multisig, MAX_SIGNERS},
         Transmutable,
     },
@@ -26,7 +27,7 @@ use solana_program;
 pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
 pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
 pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
-pub const TRANSFER_DISCM: u8 = 3;
+pub const TRANSFER_CHECKED_DISCM: u8 = 12;
 
 /// Parsed ATA accounts for create operations
 pub struct CreateAccounts<'a> {
@@ -87,12 +88,16 @@ fn is_token_2022_program(program_id: &Pubkey) -> bool {
     // SAFETY: Safe because we are comparing the pointers of the
     // program_id and TOKEN_2022_PROGRAM_ID, which are both const Pubkeys
     unsafe {
-        core::ptr::eq(
-            program_id.as_ref().as_ptr(),
-            TOKEN_2022_PROGRAM_ID.as_ref().as_ptr(),
-        ) || core::slice::from_raw_parts(program_id.as_ref().as_ptr(), 32)
+        core::slice::from_raw_parts(program_id.as_ref().as_ptr(), 32)
             == core::slice::from_raw_parts(TOKEN_2022_PROGRAM_ID.as_ref().as_ptr(), 32)
     }
+}
+
+/// Get zero-copy mint reference from account info
+#[inline(always)]
+unsafe fn get_mint_unchecked(account: &AccountInfo) -> &Mint {
+    let mint_data_slice = account.borrow_data_unchecked();
+    &*(mint_data_slice.as_ptr() as *const Mint)
 }
 
 /// Get zero-copy token account reference from account info
@@ -142,12 +147,13 @@ fn build_initialize_immutable_owner_data() -> [u8; 1] {
     [INITIALIZE_IMMUTABLE_OWNER_DISCM]
 }
 
-/// Build Transfer instruction data
+/// Build TransferChecked instruction data
 #[inline(always)]
-fn build_transfer_data(amount: u64) -> [u8; 9] {
-    let mut data = [0u8; 9];
-    data[0] = TRANSFER_DISCM;
+fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
+    let mut data = [0u8; 10];
+    data[0] = TRANSFER_CHECKED_DISCM;
     data[1..9].copy_from_slice(&amount.to_le_bytes());
+    data[9] = decimals;
     data
 }
 
@@ -544,12 +550,19 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         get_token_account_unchecked(recover_accounts.nested_associated_token_account).amount()
     };
 
-    let transfer_data = build_transfer_data(amount_to_recover);
+    let nested_mint_decimals = unsafe { get_mint_unchecked(recover_accounts.nested_mint).decimals };
+
+    let transfer_data = build_transfer_data(amount_to_recover, nested_mint_decimals);
 
     let transfer_metas = &[
         AccountMeta {
             pubkey: recover_accounts.nested_associated_token_account.key(),
             is_writable: true,
+            is_signer: false,
+        },
+        AccountMeta {
+            pubkey: recover_accounts.nested_mint.key(),
+            is_writable: false,
             is_signer: false,
         },
         AccountMeta {
@@ -588,6 +601,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         &ix_transfer,
         &[
             recover_accounts.nested_associated_token_account,
+            recover_accounts.nested_mint,
             recover_accounts.destination_associated_token_account,
             recover_accounts.owner_associated_token_account,
         ],

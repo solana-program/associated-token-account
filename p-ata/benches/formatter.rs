@@ -29,7 +29,6 @@ pub fn get_all_optimizations_variant(base_test: BaseTestType) -> Option<TestVari
 }
 
 /// Nicely print the CU matrix for all test results.
-// REPLACE the implementation with comfy-table for brevity
 pub fn print_matrix_results(
     matrix_results: &HashMap<BaseTestType, HashMap<TestVariant, ComparisonResult>>,
     display_variants: &[TestVariant],

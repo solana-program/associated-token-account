@@ -329,18 +329,19 @@ fn build_base_failure_accounts(
         test_number,
         crate::common::AccountTypeId::Mint,
     );
-    let all_ata_program_ids: Vec<Pubkey> = crate::common::AtaImplementation::all()
-        .iter()
-        .map(|a| a.program_id)
-        .collect();
-    let wallet = crate::common::structured_pk_with_optimal_common_bump(
+    // Use random seeded pubkey instead of optimal bump hunting
+    // Fixed seed ensures consistency across implementations for fair comparison
+    let simple_entropy = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64;
+    let wallet = crate::common::random_seeded_pk(
         consistent_variant,
         crate::common::TestBankId::Failures,
         test_number,
         crate::common::AccountTypeId::Wallet,
-        &all_ata_program_ids,
-        &token_program_id,
-        &mint,
+        42, // Fixed seed ensures consistency across implementations
+        simple_entropy,
     );
 
     (payer, mint, wallet)

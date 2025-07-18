@@ -4,6 +4,7 @@ use {
     crate::account::create_pda_account,
     pinocchio::{
         account_info::AccountInfo,
+        cpi,
         instruction::{AccountMeta, Instruction, Seed, Signer},
         msg,
         program::{invoke, invoke_signed},
@@ -75,6 +76,19 @@ fn derive_canoncial_ata_pda(
     )
 }
 
+/// Check if the given program ID is SPL Token (not Token-2022)
+#[inline(always)]
+fn is_spl_token_program(program_id: &Pubkey) -> bool {
+    const SPL_TOKEN_PROGRAM_ID: Pubkey =
+        pinocchio_pubkey::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    // SAFETY: Safe because we are comparing the pointers of the
+    // program_id and SPL_TOKEN_PROGRAM_ID, which are both const Pubkeys
+    unsafe {
+        core::slice::from_raw_parts(program_id.as_ref().as_ptr(), 32)
+            == core::slice::from_raw_parts(SPL_TOKEN_PROGRAM_ID.as_ref().as_ptr(), 32)
+    }
+}
+
 /// Check if the given program ID is Token-2022
 #[inline(always)]
 fn is_token_2022_program(program_id: &Pubkey) -> bool {
@@ -88,8 +102,58 @@ fn is_token_2022_program(program_id: &Pubkey) -> bool {
     }
 }
 
+/// Get the required account size for a Token-2022 mint using GetAccountDataSize CPI
+/// Returns the account size in bytes
+#[inline(always)]
+fn get_token_2022_account_size_via_cpi(
+    mint_account: &AccountInfo,
+    token_program: &AccountInfo,
+) -> Result<usize, ProgramError> {
+    // Build GetAccountDataSize instruction (discriminator 21, no extension_types)
+    let instruction_data = [21u8]; // Just the discriminator, no additional extension types
+
+    let get_size_metas = &[AccountMeta {
+        pubkey: mint_account.key(),
+        is_writable: false,
+        is_signer: false,
+    }];
+
+    let get_size_ix = Instruction {
+        program_id: token_program.key(),
+        accounts: get_size_metas,
+        data: &instruction_data,
+    };
+
+    // Execute the CPI to get account data size
+    cpi::invoke(&get_size_ix, &[mint_account])?;
+
+    // Get return data from the CPI
+    let return_data = cpi::get_return_data().ok_or(ProgramError::InvalidAccountData)?;
+
+    if return_data.as_slice().len() != 8 {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Deserialize as little-endian u64
+    let mut size_bytes = [0u8; 8];
+    size_bytes.copy_from_slice(return_data.as_slice());
+    let size = u64::from_le_bytes(size_bytes) as usize;
+
+    Ok(size)
+}
+
+/// Check if a Token-2022 mint has extensions by examining its data length
+#[inline(always)]
+fn token_2022_mint_has_extensions(mint_account: &AccountInfo) -> bool {
+    const MINT_BASE_SIZE: usize = 82; // Base Mint size
+    const MINT_WITH_TYPE_SIZE: usize = MINT_BASE_SIZE + 1; // Base + AccountType
+
+    // If mint data is larger than base + type, it has extensions
+    mint_account.data_len() > MINT_WITH_TYPE_SIZE
+}
+
 /// Check if account data represents an initialized token account.
-/// Mimics Token-2022's is_initialized_account check.
+/// Mimics p-token's is_initialized_account check.
 ///
 /// Safety: caller must ensure account_data.len() >= 109.
 #[inline(always)]
@@ -310,12 +374,20 @@ pub fn create_and_initialize_ata(
     let space = match maybe_token_account_len {
         Some(len) => len,
         None => {
-            if is_token_2022_program(token_program.key()) {
-                // For Token-2022, default to base account (165 bytes) + ImmutableOwner (5 bytes) = 170 bytes.
-                // Tests can supply a larger `account_len` when required via instruction data.
-                TokenAccount::LEN + 5 // 170 bytes fallback for Token-2022
+            if is_spl_token_program(token_program.key()) {
+                TokenAccount::LEN // 165 bytes for SPL Token
+            } else if is_token_2022_program(token_program.key()) {
+                // For Token-2022, check if mint has extensions
+                if token_2022_mint_has_extensions(mint_account) {
+                    // Mint has extensions, use CPI to get correct account size
+                    get_token_2022_account_size_via_cpi(mint_account, token_program)?
+                } else {
+                    // No extensions, use base account (165 bytes) + ImmutableOwner (5 bytes) = 170 bytes
+                    TokenAccount::LEN + 5
+                }
             } else {
-                TokenAccount::LEN // 165 bytes for regular Token
+                // Unknown token program, default to 165 bytes
+                TokenAccount::LEN
             }
         }
     };
@@ -338,8 +410,10 @@ pub fn create_and_initialize_ata(
         seeds,
     )?;
 
-    // For Token-2022, initialize ImmutableOwner extension first
-    if is_token_2022_program(token_program.key()) {
+    // Initialize ImmutableOwner extension for non-SPL Token programs.
+    // Note this requires that any future Token programs support ImmutableOwner in order
+    // for this p-ata program to support them.
+    if !is_spl_token_program(token_program.key()) {
         let initialize_immutable_owner_data = build_initialize_immutable_owner_data();
 
         let initialize_immutable_owner_metas = &[AccountMeta {
@@ -408,6 +482,7 @@ fn is_off_curve(_address: &Pubkey) -> bool {
     }
     #[cfg(not(target_os = "solana"))]
     {
+        // TODO: hand-roll something here, just for testing
         false
     }
 }
@@ -450,7 +525,7 @@ fn ensure_no_better_canonical_address_and_bump(
 /// [5] token_program
 /// [6] rent_sysvar
 ///
-/// For Token-2022 accounts, create the account with the correct size (170 bytes)
+/// For Token-2022 accounts, create the account with the correct size
 /// and call InitializeImmutableOwner followed by InitializeAccount3.
 pub fn process_create_associated_token_account(
     program_id: &Pubkey,

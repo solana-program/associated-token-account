@@ -8,7 +8,7 @@ use {
         msg,
         program::{invoke, invoke_signed},
         program_error::ProgramError,
-        pubkey::Pubkey,
+        pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
@@ -21,12 +21,8 @@ use {
     },
 };
 
-#[cfg(not(test))]
-use pinocchio::pubkey::find_program_address;
 #[cfg(target_os = "solana")]
 use pinocchio::syscalls::sol_curve_validate_point;
-#[cfg(test)]
-use solana_program;
 
 pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
 pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
@@ -73,23 +69,10 @@ fn derive_canoncial_ata_pda(
     mint: &Pubkey,
     program_id: &Pubkey,
 ) -> (Pubkey, u8) {
-    #[cfg(test)]
-    {
-        // Use solana_program's find_program_address for tests since pinocchio's only works on target_os = "solana"
-        let solana_program_id = solana_program::pubkey::Pubkey::new_from_array(*program_id);
-        let (address, bump) = solana_program::pubkey::Pubkey::find_program_address(
-            &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
-            &solana_program_id,
-        );
-        (Pubkey::from(address.to_bytes()), bump)
-    }
-    #[cfg(not(test))]
-    {
-        find_program_address(
-            &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
-            program_id,
-        )
-    }
+    find_program_address(
+        &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
+        program_id,
+    )
 }
 
 /// Check if the given program ID is Token-2022

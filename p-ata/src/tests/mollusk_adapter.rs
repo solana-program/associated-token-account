@@ -146,15 +146,11 @@ impl MolluskBanksClient {
                 }
             }
 
-            let initial_mollusk_instruction = solana_sdk::instruction::Instruction {
+            let mollusk_instruction = solana_sdk::instruction::Instruction {
                 program_id,
                 accounts: mollusk_accounts,
                 data: instruction.data.clone(),
             };
-
-            // Handle special case for ATA creation with Token-2022 - add account size to instruction data
-            let mollusk_instruction =
-                self.maybe_add_token_2022_account_size(initial_mollusk_instruction);
 
             // Process the instruction through Mollusk
             let result = self
@@ -241,98 +237,6 @@ impl MolluskBanksClient {
     ) -> Result<Hash, solana_program::program_error::ProgramError> {
         // Return a new mock blockhash
         Ok(Hash::new_unique())
-    }
-
-    fn maybe_add_token_2022_account_size(
-        &self,
-        instruction: solana_sdk::instruction::Instruction,
-    ) -> solana_sdk::instruction::Instruction {
-        // Only handle create_associated_token_account (discriminator 0) instructions targeting Token-2022
-        if instruction.program_id != spl_associated_token_account::id()
-            || instruction.data.len() != 1
-            || instruction.data[0] != 0
-        {
-            return instruction;
-        }
-
-        // Standard create layout: [
-        //   0. `[signer]` Payer
-        //   1. `[writable]` Associated Token Account to create
-        //   2. `[]` Wallet address (owner)
-        //   3. `[]` Mint address
-        //   4. `[]` System program
-        //   5. `[]` Token program
-        //   6. `[]` Rent sysvar (optional)
-        // ]
-        if instruction.accounts.len() < 6 {
-            return instruction; // malformed – let runtime handle
-        }
-
-        let token_program_key = instruction.accounts[5].pubkey;
-        if token_program_key != spl_token_2022::id() {
-            return instruction; // Not Token-2022 – leave untouched
-        }
-
-        let wallet_key = instruction.accounts[2].pubkey;
-        let mint_key = instruction.accounts[3].pubkey;
-        let ata_key = instruction.accounts[1].pubkey;
-
-        // --- Compute bump for canonical ATA PDA ---
-        // Derive canonical ATA and bump via PDA logic
-        let seeds: &[&[u8]] = &[
-            wallet_key.as_ref(),
-            token_program_key.as_ref(),
-            mint_key.as_ref(),
-        ];
-        let (canonical_ata, bump) =
-            Pubkey::find_program_address(seeds, &spl_associated_token_account::id());
-        // If caller passed a non-canonical address, don't try to fix it – just forward as-is
-        if canonical_ata != ata_key {
-            return instruction;
-        }
-
-        // --- Determine required account size based on mint extensions ---
-        let mint_account_opt = self.accounts.borrow().get(&mint_key).cloned();
-        let Some(mint_account) = mint_account_opt else {
-            return instruction; // Mint not present (shouldn’t happen in tests)
-        };
-
-        // Deserialize mint to inspect extension types
-        let mint_state = match spl_token_2022::extension::StateWithExtensionsOwned::<Mint>::unpack(
-            mint_account.data,
-        ) {
-            Ok(state) => state,
-            Err(_) => return instruction, // fallback to original
-        };
-
-        let mint_extensions = match mint_state.get_extension_types() {
-            Ok(exts) => exts,
-            Err(_) => vec![],
-        };
-
-        // Account-side extensions required by the mint (e.g. TransferFeeAmount)
-        let mut account_extensions =
-            spl_token_2022::extension::ExtensionType::get_required_init_account_extensions(
-                &mint_extensions,
-            );
-        // ATAs created via Token-2022 are always immutable
-        account_extensions.push(spl_token_2022::extension::ExtensionType::ImmutableOwner);
-
-        let space = spl_token_2022::extension::ExtensionType::try_calculate_account_len::<
-            spl_token_2022::state::Account,
-        >(&account_extensions)
-        .unwrap_or(186); // fallback conservative
-
-        // Encode data: [0, bump, len_lo, len_hi]
-        let mut new_data = Vec::with_capacity(4);
-        new_data.push(0u8);
-        new_data.push(bump);
-        new_data.extend_from_slice(&(space as u16).to_le_bytes());
-
-        solana_sdk::instruction::Instruction {
-            data: new_data,
-            ..instruction
-        }
     }
 }
 
@@ -514,7 +418,7 @@ fn map_mollusk_error_to_original(
                 if is_recover_nested {
                     InstructionError::IllegalOwner
                 } else if is_idempotent_create {
-                    // For idempotent create, if account exists but isn't proper ATA, 
+                    // For idempotent create, if account exists but isn't proper ATA,
                     // original expects InvalidSeeds (address derivation check)
                     InstructionError::InvalidSeeds
                 } else {

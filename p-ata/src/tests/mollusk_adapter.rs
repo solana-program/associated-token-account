@@ -494,6 +494,7 @@ fn map_mollusk_error_to_original(
 ) -> InstructionError {
     if instruction.program_id == spl_associated_token_account::id() {
         let is_recover_nested = instruction.data.len() > 0 && instruction.data[0] == 2;
+        let is_idempotent_create = instruction.data.len() > 0 && instruction.data[0] == 1;
 
         match error {
             // System program "account already exists" -> IllegalOwner for non-idempotent ATA create
@@ -508,10 +509,14 @@ fn map_mollusk_error_to_original(
             ProgramError::IllegalOwner => InstructionError::Custom(0),
             // InvalidInstructionData from canonical address mismatch -> InvalidSeeds
             ProgramError::InvalidInstructionData => InstructionError::InvalidSeeds,
-            // InvalidAccountData errors for recover_nested should be mapped to IllegalOwner
+            // InvalidAccountData errors need context-specific mapping
             ProgramError::InvalidAccountData => {
                 if is_recover_nested {
                     InstructionError::IllegalOwner
+                } else if is_idempotent_create {
+                    // For idempotent create, if account exists but isn't proper ATA, 
+                    // original expects InvalidSeeds (address derivation check)
+                    InstructionError::InvalidSeeds
                 } else {
                     InstructionError::from(u64::from(error))
                 }
@@ -529,16 +534,17 @@ fn map_mollusk_error_to_original(
             // InvalidArgument might be InvalidSeeds if ATA address doesn't match expected seeds
             ProgramError::InvalidArgument => {
                 // Check if this is due to invalid ATA address (seeds mismatch)
-                if instruction.accounts.len() >= 4 {
+                if instruction.accounts.len() >= 6 {
                     let provided_ata_address = instruction.accounts[1].pubkey;
                     let wallet_address = instruction.accounts[2].pubkey;
                     let token_mint_address = instruction.accounts[3].pubkey;
+                    let token_program_address = instruction.accounts[5].pubkey;
 
-                    // Calculate expected ATA address
+                    // Calculate expected ATA address using the correct token program
                     let expected_ata_address = spl_associated_token_account_client::address::get_associated_token_address_with_program_id(
                         &wallet_address,
                         &token_mint_address,
-                        &spl_token_2022::id(),
+                        &token_program_address,
                     );
 
                     // If addresses don't match, this is an InvalidSeeds error

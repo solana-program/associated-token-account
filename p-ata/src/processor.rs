@@ -34,7 +34,7 @@ pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
 pub const TRANSFER_CHECKED_DISCM: u8 = 12;
 
 // Token-2022 AccountType::Account discriminator value
-const ACCOUNTTYPE_ACCOUNT: u8 = 1;
+const ACCOUNTTYPE_ACCOUNT: u8 = 2;
 
 // Compile-time verification that TokenAccount::LEN is >= 109
 const _: [(); TokenAccount::LEN - 109] = [(); TokenAccount::LEN - 109];

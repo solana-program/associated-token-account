@@ -21,6 +21,7 @@ build-programs = []
 comparison-bench = ["build-programs"]
 default = []
 full-debug-logs = []
+bench-transfer-unchecked = []
 
 [build-dependencies]
 serde_json = "1.0"

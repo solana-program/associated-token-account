@@ -3,7 +3,7 @@
 use {
     crate::processor::{process_create_associated_token_account, process_recover_nested},
     pinocchio::{
-        account_info::AccountInfo, msg, no_allocator, nostd_panic_handler, program_entrypoint,
+        account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
         pubkey::Pubkey, ProgramResult,
     },
 };
@@ -18,7 +18,6 @@ pub fn process_instruction(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    msg!("using p-ata");
     match data {
         // Empty data defaults to Create (discriminator 0) - preserving backward compatibility
         [] => process_create_associated_token_account(program_id, accounts, false, None, None),

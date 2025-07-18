@@ -57,7 +57,7 @@ pub mod {} {{
     
     // Import additional items needed by the tests
     use std::vec;
-    use alloc::vec::Vec;
+    use std::vec::Vec;
     
     // Re-export mollusk types at the module level to override solana_program_test imports
     pub use crate::tests::mollusk_adapter::{{BanksClient, ProgramTestContext}};

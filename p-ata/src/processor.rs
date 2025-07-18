@@ -7,6 +7,7 @@ use {
         program::{invoke, invoke_signed},
         program_error::ProgramError,
         pubkey::Pubkey,
+        syscalls::sol_curve_validate_point,
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
@@ -29,6 +30,12 @@ pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
 pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
 pub const TRANSFER_CHECKED_DISCM: u8 = 12;
 
+// Token-2022 AccountType::Account discriminator value
+const ACCOUNTTYPE_ACCOUNT: u8 = 1;
+
+// Compile-time verification that TokenAccount::LEN is >= 109
+const _: [(); TokenAccount::LEN - 109] = [(); TokenAccount::LEN - 109];
+
 /// Parsed ATA accounts for create operations
 pub struct CreateAccounts<'a> {
     pub payer: &'a AccountInfo,
@@ -43,7 +50,6 @@ pub struct CreateAccounts<'a> {
 /// Parsed Recover accounts for recover operations
 pub struct RecoverNestedAccounts<'a> {
     pub nested_associated_token_account: &'a AccountInfo,
-    #[allow(dead_code)] // pending use in transfer_checked and verification
     pub nested_mint: &'a AccountInfo,
     pub destination_associated_token_account: &'a AccountInfo,
     pub owner_associated_token_account: &'a AccountInfo,
@@ -52,9 +58,13 @@ pub struct RecoverNestedAccounts<'a> {
     pub token_program: &'a AccountInfo,
 }
 
-/// Derive ATA PDA from wallet, token program, and mint
+/// Derive ATA PDA from wallet, token program, and mint.
+/// This is the least efficient derivation method, used when no bump is provided.
+/// The address returned is guaranteed to be off-curve and canonical.
+///
+/// Returns: (address, bump)
 #[inline(always)]
-fn derive_ata_pda(
+fn derive_canoncial_ata_pda(
     wallet: &Pubkey,
     token_program: &Pubkey,
     mint: &Pubkey,
@@ -84,13 +94,47 @@ fn derive_ata_pda(
 fn is_token_2022_program(program_id: &Pubkey) -> bool {
     const TOKEN_2022_PROGRAM_ID: Pubkey =
         pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-    // This hurts 2-3 CUs on create paths, but saves almost 60 on create_token2022
     // SAFETY: Safe because we are comparing the pointers of the
     // program_id and TOKEN_2022_PROGRAM_ID, which are both const Pubkeys
     unsafe {
         core::slice::from_raw_parts(program_id.as_ref().as_ptr(), 32)
             == core::slice::from_raw_parts(TOKEN_2022_PROGRAM_ID.as_ref().as_ptr(), 32)
     }
+}
+
+/// Check if account data represents an initialized token account.
+/// Mimics Token-2022's is_initialized_account check.
+/// 
+/// Safety: caller must ensure account_data.len() >= 109.
+#[inline(always)]
+unsafe fn is_initialized_account(account_data: &[u8]) -> bool {
+    // Token account state is at offset 108 (after mint, owner, amount, delegate fields)
+    // State: 0 = Uninitialized, 1 = Initialized, 2 = Frozen
+    account_data[108] != 0
+}
+
+/// Validate that account data represents a valid token account.
+/// Replicates Token-2022's GenericTokenAccount::valid_account_data checks.
+#[inline(always)]
+fn valid_token_account_data(account_data: &[u8]) -> bool {
+    // Regular Token account: exact length match and initialized
+    if account_data.len() == TokenAccount::LEN {
+        // SAFETY: TokenAccount::LEN is compile-ensured to be >= 109
+        return unsafe { is_initialized_account(account_data) };
+    }
+    
+    // Token-2022 account with extensions
+    if account_data.len() > TokenAccount::LEN 
+        // TODO: validate we need this!
+        && account_data.len() != Multisig::LEN  // Avoid confusion with multisig
+        // SAFETY: TokenAccount::LEN is compile-ensured to be >= 109
+        && unsafe { is_initialized_account(account_data) }
+    {
+        // Check AccountType discriminator at position TokenAccount::LEN
+        return account_data[TokenAccount::LEN] == ACCOUNTTYPE_ACCOUNT;
+    }
+    
+    false
 }
 
 /// Get zero-copy mint reference from account info
@@ -100,11 +144,17 @@ unsafe fn get_mint_unchecked(account: &AccountInfo) -> &Mint {
     &*(mint_data_slice.as_ptr() as *const Mint)
 }
 
-/// Get zero-copy token account reference from account info
+/// Get token account reference with validation
 #[inline(always)]
-unsafe fn get_token_account_unchecked(account: &AccountInfo) -> &TokenAccount {
-    let ata_data_slice = account.borrow_data_unchecked();
-    &*(ata_data_slice.as_ptr() as *const TokenAccount)
+fn get_token_account(account: &AccountInfo) -> Result<&TokenAccount, ProgramError> {
+    let account_data = unsafe { account.borrow_data_unchecked() };
+    
+    if !valid_token_account_data(&account_data) {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    
+    // SAFETY: We've validated the account data structure above
+    unsafe { Ok(&*(account_data.as_ptr() as *const TokenAccount)) }
 }
 
 /// Validate token account owner matches expected owner
@@ -229,15 +279,16 @@ pub fn check_idempotent_account(
     program_id: &Pubkey,
 ) -> Result<bool, ProgramError> {
     if idempotent && associated_token_account.is_owned_by(token_program.key()) {
-        let ata_state = unsafe { get_token_account_unchecked(associated_token_account) };
-        // validation is more or less the point of CreateIdempotent,
-        // so TBD on these staying or going
+        let ata_state = get_token_account(associated_token_account)?;
+
+        // validation is the point of CreateIdempotent,
+        // so these checks should not be optimized out
         validate_token_account_owner(ata_state, wallet.key())?;
         validate_token_account_mint(ata_state, mint_account.key())?;
 
         // Also validate that the account is at the canonical ATA address
         // Prevents idempotent operations from succeeding with non-canonical addresses
-        let (canonical_address, _bump) = derive_ata_pda(
+        let (canonical_address, _bump) = derive_canoncial_ata_pda(
             wallet.key(),
             token_program.key(),
             mint_account.key(),
@@ -347,6 +398,40 @@ pub fn create_and_initialize_ata(
     Ok(())
 }
 
+/// Check if a given address is off-curve using the sol_curve_validate_point syscall.
+/// Returns true if the address is off-curve (invalid as an Ed25519 point).
+#[inline(always)]
+#[allow(unexpected_cfgs)]
+fn is_off_curve(_address: &Pubkey) -> bool {
+    #[cfg(target_os = "solana")]
+    {
+        const ED25519_CURVE_ID: u64 = 0;
+        
+        let mut result: u8 = 0;
+        let point_addr = _address.as_ref().as_ptr();
+        let result_addr = &mut result as *mut u8;
+        
+        // SAFETY: We're passing valid pointers to the syscall
+        let syscall_result = unsafe {
+            sol_curve_validate_point(
+                ED25519_CURVE_ID,
+                point_addr,
+                result_addr,
+            )
+        };
+        
+        // If syscall fails (non-zero return), assume off-curve for safety
+        // If syscall succeeds (zero return), check the result:
+        // - result == 1 means point is ON the curve
+        // - result == 0 means point is OFF the curve
+        syscall_result != 0 || result == 0
+    }
+    #[cfg(not(target_os = "solana"))]
+    {
+        false
+    }
+}
+
 /// Given a hint bump, return a guaranteed canonical bump.
 /// The bump is not guaranteed to be off-curve, but it is guaranteed that
 /// no better (greater) off-curve bump exists. This prevents callers
@@ -368,7 +453,7 @@ fn ensure_no_better_canonical_address_and_bump(
     let mut better_bump = 255;
     while better_bump > hint_bump {
         let maybe_better_address = derive_address::<3>(seeds, better_bump, program_id);
-        if maybe_better_address != derive_address(seeds, better_bump, program_id) {
+        if is_off_curve(&maybe_better_address) {
             return (Some(maybe_better_address), better_bump);
         }
         better_bump -= 1;
@@ -424,7 +509,7 @@ pub fn process_create_associated_token_account(
             provided_bump,
         ),
         None => {
-            let (address, computed_bump) = derive_ata_pda(
+            let (address, computed_bump) = derive_canoncial_ata_pda(
                 create_accounts.wallet.key(),
                 create_accounts.token_program.key(),
                 create_accounts.mint.key(),
@@ -468,7 +553,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
     let recover_accounts = parse_recover_accounts(accounts)?;
 
     // Verify owner address derivation
-    let (owner_associated_token_address, bump) = derive_ata_pda(
+    let (owner_associated_token_address, bump) = derive_canoncial_ata_pda(
         recover_accounts.wallet.key(),
         recover_accounts.token_program.key(),
         recover_accounts.owner_mint.key(),
@@ -481,7 +566,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
     }
 
     // Verify nested address derivation
-    let (nested_associated_token_address, _) = derive_ata_pda(
+    let (nested_associated_token_address, _) = derive_canoncial_ata_pda(
         recover_accounts.owner_associated_token_account.key(),
         recover_accounts.token_program.key(),
         recover_accounts.nested_mint.key(),
@@ -493,7 +578,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
     }
 
     // Verify destination address derivation
-    let (destination_associated_token_address, _) = derive_ata_pda(
+    let (destination_associated_token_address, _) = derive_canoncial_ata_pda(
         recover_accounts.wallet.key(),
         recover_accounts.token_program.key(),
         recover_accounts.nested_mint.key(),
@@ -546,9 +631,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         }
     }
 
-    let amount_to_recover = unsafe {
-        get_token_account_unchecked(recover_accounts.nested_associated_token_account).amount()
-    };
+    let amount_to_recover = get_token_account(recover_accounts.nested_associated_token_account)?.amount();
 
     let nested_mint_decimals = unsafe { get_mint_unchecked(recover_accounts.nested_mint).decimals };
 

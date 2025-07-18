@@ -1,7 +1,10 @@
+//! An adapter that allows the original solana_program_test to run against the p-ata program
+//! using Mollusk and pinocchio.
+
 use {
     crate::entrypoint::process_instruction as pinocchio_process_instruction,
-    alloc::collections::BTreeMap,
-    alloc::vec::Vec,
+    std::collections::BTreeMap,
+    std::vec::Vec,
     bincode,
     core::cell::RefCell,
     mollusk_svm::{program::loader_keys, Mollusk},
@@ -84,7 +87,7 @@ impl MolluskBanksClient {
                 transaction.message.account_keys[instruction.program_id_index as usize];
 
             // Build the instruction with proper accounts
-            let mut instruction_accounts = alloc::vec::Vec::new();
+            let mut instruction_accounts = std::vec::Vec::new();
             for &account_index in &instruction.accounts {
                 let account_key = transaction.message.account_keys[account_index as usize];
                 let account = self
@@ -100,7 +103,7 @@ impl MolluskBanksClient {
             }
 
             // Create the instruction for Mollusk with proper account meta flags
-            let mut mollusk_accounts = alloc::vec::Vec::new();
+            let mut mollusk_accounts = std::vec::Vec::new();
             for &account_index in &instruction.accounts {
                 let account_key = transaction.message.account_keys[account_index as usize];
 

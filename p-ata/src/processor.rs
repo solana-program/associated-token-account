@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 use {
     crate::account::create_pda_account,
     pinocchio::{
@@ -7,7 +9,6 @@ use {
         program::{invoke, invoke_signed},
         program_error::ProgramError,
         pubkey::Pubkey,
-        syscalls::sol_curve_validate_point,
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
@@ -22,6 +23,8 @@ use {
 
 #[cfg(not(test))]
 use pinocchio::pubkey::find_program_address;
+#[cfg(target_os = "solana")]
+use pinocchio::syscalls::sol_curve_validate_point;
 #[cfg(test)]
 use solana_program;
 
@@ -104,7 +107,7 @@ fn is_token_2022_program(program_id: &Pubkey) -> bool {
 
 /// Check if account data represents an initialized token account.
 /// Mimics Token-2022's is_initialized_account check.
-/// 
+///
 /// Safety: caller must ensure account_data.len() >= 109.
 #[inline(always)]
 unsafe fn is_initialized_account(account_data: &[u8]) -> bool {
@@ -122,9 +125,9 @@ fn valid_token_account_data(account_data: &[u8]) -> bool {
         // SAFETY: TokenAccount::LEN is compile-ensured to be >= 109
         return unsafe { is_initialized_account(account_data) };
     }
-    
+
     // Token-2022 account with extensions
-    if account_data.len() > TokenAccount::LEN 
+    if account_data.len() > TokenAccount::LEN
         // TODO: validate we need this!
         && account_data.len() != Multisig::LEN  // Avoid confusion with multisig
         // SAFETY: TokenAccount::LEN is compile-ensured to be >= 109
@@ -133,7 +136,7 @@ fn valid_token_account_data(account_data: &[u8]) -> bool {
         // Check AccountType discriminator at position TokenAccount::LEN
         return account_data[TokenAccount::LEN] == ACCOUNTTYPE_ACCOUNT;
     }
-    
+
     false
 }
 
@@ -148,11 +151,11 @@ unsafe fn get_mint_unchecked(account: &AccountInfo) -> &Mint {
 #[inline(always)]
 fn get_token_account(account: &AccountInfo) -> Result<&TokenAccount, ProgramError> {
     let account_data = unsafe { account.borrow_data_unchecked() };
-    
-    if !valid_token_account_data(&account_data) {
+
+    if !valid_token_account_data(account_data) {
         return Err(ProgramError::InvalidAccountData);
     }
-    
+
     // SAFETY: We've validated the account data structure above
     unsafe { Ok(&*(account_data.as_ptr() as *const TokenAccount)) }
 }
@@ -401,25 +404,19 @@ pub fn create_and_initialize_ata(
 /// Check if a given address is off-curve using the sol_curve_validate_point syscall.
 /// Returns true if the address is off-curve (invalid as an Ed25519 point).
 #[inline(always)]
-#[allow(unexpected_cfgs)]
 fn is_off_curve(_address: &Pubkey) -> bool {
     #[cfg(target_os = "solana")]
     {
         const ED25519_CURVE_ID: u64 = 0;
-        
+
         let mut result: u8 = 0;
         let point_addr = _address.as_ref().as_ptr();
         let result_addr = &mut result as *mut u8;
-        
+
         // SAFETY: We're passing valid pointers to the syscall
-        let syscall_result = unsafe {
-            sol_curve_validate_point(
-                ED25519_CURVE_ID,
-                point_addr,
-                result_addr,
-            )
-        };
-        
+        let syscall_result =
+            unsafe { sol_curve_validate_point(ED25519_CURVE_ID, point_addr, result_addr) };
+
         // If syscall fails (non-zero return), assume off-curve for safety
         // If syscall succeeds (zero return), check the result:
         // - result == 1 means point is ON the curve
@@ -631,7 +628,8 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         }
     }
 
-    let amount_to_recover = get_token_account(recover_accounts.nested_associated_token_account)?.amount();
+    let amount_to_recover =
+        get_token_account(recover_accounts.nested_associated_token_account)?.amount();
 
     let nested_mint_decimals = unsafe { get_mint_unchecked(recover_accounts.nested_mint).decimals };
 

@@ -354,7 +354,44 @@ pub fn check_idempotent_account(
     Ok(false) // Need to create account
 }
 
+/// Compute the required space (in bytes) for the associated token account.
+///
+/// This is extracted from `create_and_initialize_ata` so the heavy lifting is
+/// done once _before_ calling the function, avoiding additional branching
+/// inside the hot path.  Inline to ensure no extra call overhead.
+#[inline(always)]
+fn resolve_token_account_space(
+    token_program: &AccountInfo,
+    mint_account: &AccountInfo,
+    maybe_token_account_len: Option<usize>,
+) -> Result<usize, ProgramError> {
+    match maybe_token_account_len {
+        Some(len) => Ok(len),
+        None => {
+            if is_spl_token_program(token_program.key()) {
+                Ok(TokenAccount::LEN)
+            } else if is_token_2022_program(token_program.key()) {
+                if token_2022_mint_has_extensions(mint_account) {
+                    // Mint has extensions – ask the token-2022 program for
+                    // the exact size via CPI.
+                    get_token_2022_account_size_via_cpi(mint_account, token_program)
+                } else {
+                    // Base account + ImmutableOwner extension.
+                    Ok(TokenAccount::LEN + 5)
+                }
+            } else {
+                // Fallback for unknown programs – assume a standard account.
+                Ok(TokenAccount::LEN)
+            }
+        }
+    }
+}
+
 /// Create and initialize an ATA account with the given bump seed.
+///
+/// All optional inputs (`Rent`, account length) are resolved _before_ calling
+/// this function so the implementation here stays branch-free and hot-path
+/// friendly.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub fn create_and_initialize_ata(
@@ -362,36 +399,11 @@ pub fn create_and_initialize_ata(
     associated_token_account: &AccountInfo,
     wallet: &AccountInfo,
     mint_account: &AccountInfo,
-    // if an account isn't owned by the system program,
-    // the create_pda_account call will fail anyway when trying to allocate/assign
-    _system_program: &AccountInfo,
     token_program: &AccountInfo,
-    maybe_rent_info: Option<&AccountInfo>,
+    rent: &Rent,
     bump: u8,
-    maybe_token_account_len: Option<usize>,
+    space: usize,
 ) -> ProgramResult {
-    // Use provided account length if available, otherwise calculate based on token program
-    let space = match maybe_token_account_len {
-        Some(len) => len,
-        None => {
-            if is_spl_token_program(token_program.key()) {
-                TokenAccount::LEN // 165 bytes for SPL Token
-            } else if is_token_2022_program(token_program.key()) {
-                // For Token-2022, check if mint has extensions
-                if token_2022_mint_has_extensions(mint_account) {
-                    // Mint has extensions, use CPI to get correct account size
-                    get_token_2022_account_size_via_cpi(mint_account, token_program)?
-                } else {
-                    // No extensions, use base account (165 bytes) + ImmutableOwner (5 bytes) = 170 bytes
-                    TokenAccount::LEN + 5
-                }
-            } else {
-                // Unknown token program, default to 165 bytes
-                TokenAccount::LEN
-            }
-        }
-    };
-
     let seeds: &[&[u8]] = &[
         wallet.key().as_ref(),
         token_program.key().as_ref(),
@@ -399,41 +411,33 @@ pub fn create_and_initialize_ata(
         &[bump],
     ];
 
-    // Use Rent passed in accounts if supplied to avoid syscall
-    let rent = resolve_rent(maybe_rent_info)?;
     create_pda_account(
         payer,
-        &rent,
+        rent,
         space,
         token_program.key(),
         associated_token_account,
         seeds,
     )?;
 
-    // Initialize ImmutableOwner extension for non-SPL Token programs.
-    // Note this requires that any future Token programs support ImmutableOwner in order
-    // for this p-ata program to support them.
+    // Initialize ImmutableOwner for non-SPL Token programs (future compatible)
     if !is_spl_token_program(token_program.key()) {
         let initialize_immutable_owner_data = build_initialize_immutable_owner_data();
-
         let initialize_immutable_owner_metas = &[AccountMeta {
             pubkey: associated_token_account.key(),
             is_writable: true,
             is_signer: false,
         }];
-
         let init_immutable_owner_ix = Instruction {
             program_id: token_program.key(),
             accounts: initialize_immutable_owner_metas,
             data: &initialize_immutable_owner_data,
         };
-
-        invoke(&init_immutable_owner_ix, &[associated_token_account])?;
+        cpi::invoke(&init_immutable_owner_ix, &[associated_token_account])?;
     }
 
-    // Initialize account using InitializeAccount3 (2 accounts + owner in instruction data)
+    // Initialize account via InitializeAccount3.
     let initialize_account_instr_data = build_initialize_account3_data(wallet.key());
-
     let initialize_account_metas = &[
         AccountMeta {
             pubkey: associated_token_account.key(),
@@ -446,15 +450,13 @@ pub fn create_and_initialize_ata(
             is_signer: false,
         },
     ];
-
     let init_ix = Instruction {
         program_id: token_program.key(),
         accounts: initialize_account_metas,
         data: &initialize_account_instr_data,
     };
 
-    invoke(&init_ix, &[associated_token_account, mint_account])?;
-
+    cpi::invoke(&init_ix, &[associated_token_account, mint_account])?;
     Ok(())
 }
 
@@ -582,16 +584,22 @@ pub fn process_create_associated_token_account(
         return Err(ProgramError::InvalidInstructionData);
     }
 
+    let rent = resolve_rent(create_accounts.rent_sysvar)?;
+    let space = resolve_token_account_space(
+        create_accounts.token_program,
+        create_accounts.mint,
+        maybe_token_account_len,
+    )?;
+
     create_and_initialize_ata(
         create_accounts.payer,
         create_accounts.associated_token_account_to_create,
         create_accounts.wallet,
         create_accounts.mint,
-        create_accounts.system_program,
         create_accounts.token_program,
-        create_accounts.rent_sysvar,
+        &rent,
         bump,
-        maybe_token_account_len,
+        space,
     )
 }
 

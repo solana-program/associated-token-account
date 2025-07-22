@@ -3227,6 +3227,7 @@ dependencies = [
  "spl-token-interface",
  "strum 0.27.1",
  "test-case",
+ "tokio",
 ]
 
 [[package]]

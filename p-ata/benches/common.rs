@@ -704,11 +704,10 @@ impl BenchmarkRunner {
 
         let mut total_compute_units = 0u64;
         let mut success_count = 0usize;
-        let mut last_result = None;
         let mut last_error_message = None;
 
         // Run the benchmark multiple times to get average compute units
-        for _ in 0..iterations {
+        for i in 0..iterations {
             // Run with quiet logging unless full-debug-logs feature is enabled
             #[cfg(not(feature = "full-debug-logs"))]
             let result = mollusk.process_instruction(ix, accounts);
@@ -746,7 +745,8 @@ impl BenchmarkRunner {
                 last_error_message = Some(format!("{:?}", result.program_result));
             }
 
-            last_result = Some(result);
+            // Per-iteration debug output
+            // println!("iter {i}: {}", result.compute_units_consumed);
         }
 
         // Calculate average compute units (only from successful runs)
@@ -790,12 +790,11 @@ impl BenchmarkRunner {
 
         let mut total_compute_units = 0u64;
         let mut success_count = 0usize;
-        let mut last_result = None;
         let mut last_error_message = None;
 
         // Run the benchmark multiple times with different test cases for each iteration
-        for iteration in 0..iterations {
-            let (ix, accounts) = test_case_builder(iteration);
+        for i in 0..iterations {
+            let (ix, accounts) = test_case_builder(i);
             let accounts_slice: Vec<(Pubkey, Account)> = accounts;
 
             // Run with quiet logging unless full-debug-logs feature is enabled
@@ -835,7 +834,8 @@ impl BenchmarkRunner {
                 last_error_message = Some(format!("{:?}", result.program_result));
             }
 
-            last_result = Some(result);
+            // Per-iteration debug output
+            // println!("iter {i}: {}", result.compute_units_consumed);
         }
 
         // Calculate average compute units (only from successful runs)

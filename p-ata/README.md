@@ -20,7 +20,9 @@ Expanded Functionality:
 
 ## Testing and Benchmarking
 
-`cargo build --features build-programs && cargo bench`
+Benchmarking averages a number of runs. 1000 completes in about 5 seconds on modern hardware:
+
+`cargo build --features build-programs && BENCH_ITERATIONS=1000 cargo bench`
 
 Mollusk's extensive debug logs are filtered out unless a test has an unexpected result. To show all of them, run `cargo bench --features full-debug-logs`.
 

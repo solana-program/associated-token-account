@@ -103,7 +103,8 @@ fn get_token_account_size(
         return Ok(TokenAccount::LEN);
     }
 
-    // Token mint has no ImmutableOwner
+    // Token mint has no extensions other than ImmutableOwner
+    // (this assumes any future token program has ImmutableOwner)
     if !token_mint_has_extensions(mint_account) {
         return Ok(TokenAccount::LEN + 5);
     }

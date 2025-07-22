@@ -170,7 +170,8 @@ fn valid_token_account_data(account_data: &[u8]) -> bool {
 
     // Token-2022 account with extensions
     if account_data.len() > TokenAccount::LEN
-        // TODO: validate we need this!
+        // TODO: validate we need this! And is there a collision where a Multisig length
+        // can be the same as a valid Token-2022 length?
         && account_data.len() != Multisig::LEN  // Avoid confusion with multisig
         // SAFETY: TokenAccount::LEN is compile-ensured to be >= 109
         && unsafe { is_initialized_account(account_data) }
@@ -495,13 +496,8 @@ fn ensure_no_better_canonical_address_and_bump(
     program_id: &Pubkey,
     hint_bump: u8,
 ) -> (Option<Pubkey>, u8) {
-    // note: this complexity (rather than just find_program_address) is because we are en route
-    // to benching a solution that verifies there is no better canonical address, but does not
-    // guarantee that the found address, IF it matches the provided bump, is off-curve.
-    // This saves an AVERAGE of 76% compute, with the only downside being that the client
-    // will encounter an error if the bump they provide is not off-curve.
-    // However, this is not implemented quite yet, since we will bench actual savings
-    // in a later commit vs this one.
+    // Optimization: Only verify no better bump exists, don't require hint_bump to be off-curve
+    // This saves significant compute units while still preventing non-canonical addresses
     let mut better_bump = 255;
     while better_bump > hint_bump {
         let maybe_better_address = derive_address::<3>(seeds, better_bump, program_id);

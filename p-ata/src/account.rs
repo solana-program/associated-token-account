@@ -23,7 +23,7 @@ use pinocchio_system::instructions::{Allocate, Assign, Transfer};
 /// - pda: the address of the account to create (pre-derived by the caller)
 /// - pda_signer_seeds: full seed slice including the bump (wallet, token_program, mint, bump)
 #[inline(always)]
-pub fn create_pda_account(
+pub(crate) fn create_pda_account(
     payer: &AccountInfo,
     rent: &Rent,
     space: usize,

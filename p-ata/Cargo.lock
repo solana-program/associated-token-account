@@ -3197,6 +3197,7 @@ dependencies = [
  "colored",
  "comfy-table",
  "criterion",
+ "curve25519-dalek 4.2.0",
  "itertools 0.12.1",
  "mollusk-svm",
  "mollusk-svm-bencher",

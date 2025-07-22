@@ -7,7 +7,7 @@ use {
         cpi,
         instruction::{AccountMeta, Instruction, Seed, Signer},
         msg,
-        program::{invoke, invoke_signed},
+        program::invoke_signed,
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
@@ -42,6 +42,7 @@ pub struct CreateAccounts<'a> {
     pub associated_token_account_to_create: &'a AccountInfo,
     pub wallet: &'a AccountInfo,
     pub mint: &'a AccountInfo,
+    #[allow(dead_code)]
     pub system_program: &'a AccountInfo,
     pub token_program: &'a AccountInfo,
     pub rent_sysvar: Option<&'a AccountInfo>,
@@ -468,23 +469,39 @@ fn is_off_curve(_address: &Pubkey) -> bool {
     {
         const ED25519_CURVE_ID: u64 = 0;
 
-        let mut result: u8 = 0;
         let point_addr = _address.as_ref().as_ptr();
-        let result_addr = &mut result as *mut u8;
 
         // SAFETY: We're passing valid pointers to the syscall
-        let syscall_result =
-            unsafe { sol_curve_validate_point(ED25519_CURVE_ID, point_addr, result_addr) };
+        // The syscall directly returns the validation result:
+        // - 0 means point is ON the curve (valid)
+        // - 1 means point is OFF the curve (invalid)
+        // - any other value means error (assume off-curve for safety)
+        let syscall_result = unsafe {
+            sol_curve_validate_point(ED25519_CURVE_ID, point_addr, core::ptr::null_mut())
+        };
 
-        // If syscall fails (non-zero return), assume off-curve for safety
-        // If syscall succeeds (zero return), check the result:
-        // - result == 1 means point is ON the curve
-        // - result == 0 means point is OFF the curve
-        syscall_result != 0 || result == 0
+        syscall_result != 0
     }
-    #[cfg(not(target_os = "solana"))]
+    #[cfg(all(not(target_os = "solana"), test))]
     {
-        // TODO: hand-roll something here, just for testing
+        // Host build (tests, benches): replicate the on-chain `sol_curve_validate_point` logic
+        // using curve25519-dalek. A pubkey is "off-curve" if it cannot be decompressed into
+        // an Edwards point **or** it decomposes to a small-order point
+        // (matches Solana’s runtime rules).
+
+        use curve25519_dalek::edwards::CompressedEdwardsY;
+
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(_address.as_ref());
+        let compressed = CompressedEdwardsY(bytes);
+
+        match compressed.decompress() {
+            None => true,                    // invalid encoding → off-curve
+            Some(pt) => pt.is_small_order(), // small-order = off-curve, otherwise on-curve
+        }
+    }
+    #[cfg(all(not(target_os = "solana"), not(test)))]
+    {
         false
     }
 }

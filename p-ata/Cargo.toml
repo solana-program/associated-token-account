@@ -15,7 +15,6 @@ crate-type = ["cdylib"]
 # Build script (build.rs) compiles token programs during benchmarks
 
 [features]
-logging = []
 create-account-prefunded = []
 build-programs = []
 comparison-bench = ["build-programs"]
@@ -42,13 +41,14 @@ spl-token-interface = { version = "^0", git = "https://github.com/solana-program
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+curve25519-dalek = { version = "4.2.0", default-features = false }
 assert_matches = "1.5.0"
 num-traits = "0.2"
 solana-account = "2.2.1"
 solana-instruction = "2.3.0"
 solana-keypair = "2.2.3"
 solana-logger = "2.3.0"
-solana-pubkey = "2.2.1"
+solana-pubkey = { version = "2.2.1", features = ["curve25519"] }
 solana-signature = "2.3.0"
 solana-signer = "2.2.1"
 solana-sysvar = "2.2.2"

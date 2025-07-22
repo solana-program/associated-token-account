@@ -9,11 +9,14 @@ use solana_sdk::instruction::InstructionError;
 use solana_sdk::{signer::Signer, transaction::Transaction, transaction::TransactionError};
 use std::vec::Vec;
 
+#[cfg(feature = "test-debug")]
+use std::eprintln;
+
 // TODO: off-curve syscall maybe fails in test? implement test alternative in program?
 
 /// Find a wallet such that its canonical off-curve bump equals `target_canonical` and also
 /// has at least one lower off-curve bump. Returns:
-/// (wallet, canonical_addr, sub_bump, sub_addr)
+/// (wallet, canonical_addr, sub_addr)
 fn find_wallet_pair(
     canonical_bump: u8,
     sub_bump: u8,
@@ -29,6 +32,12 @@ fn find_wallet_pair(
             &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
             ata_program_id,
         );
+
+        // sanity check while debugging
+        if Pubkey::is_on_curve(&canonical_addr) {
+            panic!("*** Picked canonical address is on curve! ***");
+        }
+
         if bump != canonical_bump {
             continue;
         }
@@ -113,8 +122,27 @@ async fn rejects_suboptimal_bump() {
 
     let (mut banks_client, payer, mut recent_blockhash) = pt.start().await;
 
+    #[cfg(feature = "test-debug")]
+    {
+        eprintln!("=== Starting non-canonical bump test ===");
+        eprintln!("Testing {} pairs: {:?}", pairs.len(), pairs);
+    }
+
     for (wallet, canonical_bump, canonical_addr, sub_bump, sub_addr) in wallet_infos {
+        #[cfg(feature = "test-debug")]
+        {
+            eprintln!(
+                "\n--- Testing pair: canonical={}, sub={} ---",
+                canonical_bump, sub_bump
+            );
+            eprintln!("Wallet: {}", wallet);
+            eprintln!("Canonical address: {}", canonical_addr);
+            eprintln!("Sub-optimal address: {}", sub_addr);
+        }
+
         // 1) Sub-optimal should fail
+        #[cfg(feature = "test-debug")]
+        eprintln!("Testing sub-optimal bump {} (should FAIL)", sub_bump);
         let ix_fail = build_create_ix(
             ata_program_id,
             sub_addr,
@@ -135,6 +163,8 @@ async fn rejects_suboptimal_bump() {
             ))) => {}
             other => panic!("Sub-optimal bump {sub_bump}: unexpected {other:?}"),
         }
+        #[cfg(feature = "test-debug")]
+        eprintln!("✓ Sub-optimal bump {} correctly failed", sub_bump);
 
         // Refresh blockhash
         recent_blockhash = banks_client
@@ -143,6 +173,8 @@ async fn rejects_suboptimal_bump() {
             .expect("blockhash");
 
         // 2) Canonical should succeed
+        #[cfg(feature = "test-debug")]
+        eprintln!("Testing canonical bump {} (should SUCCEED)", canonical_bump);
         let ix_ok = build_create_ix(
             ata_program_id,
             canonical_addr,
@@ -158,7 +190,13 @@ async fn rejects_suboptimal_bump() {
         banks_client
             .process_transaction(tx_ok)
             .await
-            .unwrap_or_else(|e| panic!("Canonical bump {canonical_bump} failed: {e:?}"));
+            .unwrap_or_else(|e| {
+                #[cfg(feature = "test-debug")]
+                eprintln!("✗ Canonical bump {} FAILED: {e:?}", canonical_bump);
+                panic!("Canonical bump {canonical_bump} failed: {e:?}")
+            });
+        #[cfg(feature = "test-debug")]
+        eprintln!("✓ Canonical bump {} correctly succeeded", canonical_bump);
 
         // Get fresh blockhash for next iteration
         recent_blockhash = banks_client
@@ -166,4 +204,6 @@ async fn rejects_suboptimal_bump() {
             .await
             .expect("blockhash");
     }
+    #[cfg(feature = "test-debug")]
+    eprintln!("\n=== All test pairs completed successfully ===");
 }

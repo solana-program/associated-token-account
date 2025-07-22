@@ -110,8 +110,7 @@ fn get_token_2022_account_size_via_cpi(
     mint_account: &AccountInfo,
     token_program: &AccountInfo,
 ) -> Result<usize, ProgramError> {
-    // Build GetAccountDataSize instruction (discriminator 21, no extension_types)
-    let instruction_data = [21u8]; // Just the discriminator, no additional extension types
+    let instruction_data = [21u8, 7u8, 0u8]; // 21 = discriminator, [7, 0] = ImmutableOwner as u16
 
     let get_size_metas = &[AccountMeta {
         pubkey: mint_account.key(),

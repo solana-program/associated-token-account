@@ -130,8 +130,10 @@ fn get_token_account_size(
     // `try_into` as this could be an unknown token program;
     // it must error if it doesn't give us [u8; 8]
     Ok(u64::from_le_bytes(
-        return_data.as_slice().try_into()
-        .map_err(|_| ProgramError::InvalidAccountData)?
+        return_data
+            .as_slice()
+            .try_into()
+            .map_err(|_| ProgramError::InvalidAccountData)?,
     ) as usize)
 }
 

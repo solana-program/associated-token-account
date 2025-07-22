@@ -91,7 +91,8 @@ fn is_spl_token_program(program_id: &Pubkey) -> bool {
     }
 }
 
-/// Get the required account size for a mint using GetAccountDataSize CPI
+/// Get the required account size for a mint using GetAccountDataSize CPI,
+/// except for SPL Token, which has a fixed length.
 /// Returns the account size in bytes
 #[inline(always)]
 fn get_token_account_size(
@@ -122,22 +123,15 @@ fn get_token_account_size(
         data: &instruction_data,
     };
 
-    // Execute the CPI to get account data size
     cpi::invoke(&get_size_ix, &[mint_account])?;
-
-    // Get return data from the CPI
     let return_data = cpi::get_return_data().ok_or(ProgramError::InvalidAccountData)?;
 
-    if return_data.as_slice().len() != 8 {
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    // Deserialize as little-endian u64
-    let mut size_bytes = [0u8; 8];
-    size_bytes.copy_from_slice(return_data.as_slice());
-    let size = u64::from_le_bytes(size_bytes) as usize;
-
-    Ok(size)
+    // `try_into` as this could be an unknown token program;
+    // it must error if it doesn't give us [u8; 8]
+    Ok(u64::from_le_bytes(
+        return_data.as_slice().try_into()
+        .map_err(|_| ProgramError::InvalidAccountData)?
+    ) as usize)
 }
 
 /// Check if a Token-2022 mint has extensions by examining its data length

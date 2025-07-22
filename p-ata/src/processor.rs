@@ -29,6 +29,7 @@ pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
 pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
 pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
 pub const TRANSFER_CHECKED_DISCM: u8 = 12;
+pub const GET_ACCOUNT_DATA_SIZE_DISCM: u8 = 21;
 
 // Token-2022 AccountType::Account discriminator value
 const ACCOUNTTYPE_ACCOUNT: u8 = 2;
@@ -90,27 +91,24 @@ fn is_spl_token_program(program_id: &Pubkey) -> bool {
     }
 }
 
-/// Check if the given program ID is Token-2022
-#[inline(always)]
-fn is_token_2022_program(program_id: &Pubkey) -> bool {
-    const TOKEN_2022_PROGRAM_ID: Pubkey =
-        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-    // SAFETY: Safe because we are comparing the pointers of the
-    // program_id and TOKEN_2022_PROGRAM_ID, which are both const Pubkeys
-    unsafe {
-        core::slice::from_raw_parts(program_id.as_ref().as_ptr(), 32)
-            == core::slice::from_raw_parts(TOKEN_2022_PROGRAM_ID.as_ref().as_ptr(), 32)
-    }
-}
-
-/// Get the required account size for a Token-2022 mint using GetAccountDataSize CPI
+/// Get the required account size for a mint using GetAccountDataSize CPI
 /// Returns the account size in bytes
 #[inline(always)]
-fn get_token_2022_account_size_via_cpi(
+fn get_token_account_size(
     mint_account: &AccountInfo,
     token_program: &AccountInfo,
 ) -> Result<usize, ProgramError> {
-    let instruction_data = [21u8, 7u8, 0u8]; // 21 = discriminator, [7, 0] = ImmutableOwner as u16
+    if is_spl_token_program(token_program.key()) {
+        return Ok(TokenAccount::LEN);
+    }
+
+    // Token mint has no ImmutableOwner
+    if !token_mint_has_extensions(mint_account) {
+        return Ok(TokenAccount::LEN + 5);
+    }
+
+    // ImmutableOwner extension is required for Token-2022 Associated Token Accounts
+    let instruction_data = [GET_ACCOUNT_DATA_SIZE_DISCM, 7u8, 0u8]; // [7, 0] = ImmutableOwner as u16
 
     let get_size_metas = &[AccountMeta {
         pubkey: mint_account.key(),
@@ -144,7 +142,7 @@ fn get_token_2022_account_size_via_cpi(
 
 /// Check if a Token-2022 mint has extensions by examining its data length
 #[inline(always)]
-fn token_2022_mint_has_extensions(mint_account: &AccountInfo) -> bool {
+fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
     const MINT_BASE_SIZE: usize = 82; // Base Mint size
     const MINT_WITH_TYPE_SIZE: usize = MINT_BASE_SIZE + 1; // Base + AccountType
 
@@ -367,23 +365,7 @@ fn resolve_token_account_space(
 ) -> Result<usize, ProgramError> {
     match maybe_token_account_len {
         Some(len) => Ok(len),
-        None => {
-            if is_spl_token_program(token_program.key()) {
-                Ok(TokenAccount::LEN)
-            } else if is_token_2022_program(token_program.key()) {
-                if token_2022_mint_has_extensions(mint_account) {
-                    // Mint has extensions – ask the token-2022 program for
-                    // the exact size via CPI.
-                    get_token_2022_account_size_via_cpi(mint_account, token_program)
-                } else {
-                    // Base account + ImmutableOwner extension.
-                    Ok(TokenAccount::LEN + 5)
-                }
-            } else {
-                // Fallback for unknown programs – assume a standard account.
-                Ok(TokenAccount::LEN)
-            }
-        }
+        None => get_token_account_size(mint_account, token_program),
     }
 }
 

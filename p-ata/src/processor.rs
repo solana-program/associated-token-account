@@ -475,12 +475,12 @@ fn is_off_curve(_address: &Pubkey) -> bool {
         // The syscall directly returns the validation result:
         // - 0 means point is ON the curve (valid)
         // - 1 means point is OFF the curve (invalid)
-        // - any other value means error (assume off-curve for safety)
+        // - any other value means error
         let syscall_result = unsafe {
             sol_curve_validate_point(ED25519_CURVE_ID, point_addr, core::ptr::null_mut())
         };
 
-        syscall_result != 0
+        syscall_result == 1
     }
     #[cfg(all(not(target_os = "solana"), test))]
     {

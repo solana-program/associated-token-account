@@ -3217,6 +3217,7 @@ dependencies = [
  "solana-program-test",
  "solana-pubkey",
  "solana-sdk",
+ "solana-sdk-ids",
  "solana-seed-derivable",
  "solana-signature",
  "solana-signer",

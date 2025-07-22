@@ -597,7 +597,7 @@ pub fn process_create_associated_token_account(
     if verified_associated_token_account_to_create
         .is_some_and(|address| &address != create_accounts.associated_token_account_to_create.key())
     {
-        msg!("Canonical address does not match provided address. Use correct owner and optimal bump.");
+        msg!("Error: Canonical address does not match provided address. Use correct owner and optimal bump.");
         return Err(ProgramError::InvalidInstructionData);
     }
 

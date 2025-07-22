@@ -1,16 +1,11 @@
 use super::mollusk_adapter::mollusk_program_test;
-use solana_program::{
-    instruction::{AccountMeta, Instruction},
-    pubkey::Pubkey,
-    system_program, sysvar,
-};
+use solana_instruction::{AccountMeta, Instruction};
 use solana_program_test::BanksClientError;
+use solana_pubkey::Pubkey;
 use solana_sdk::instruction::InstructionError;
 use solana_sdk::{signer::Signer, transaction::Transaction, transaction::TransactionError};
+use solana_sdk_ids::{system_program, sysvar};
 use std::vec::Vec;
-
-#[cfg(feature = "test-debug")]
-use std::eprintln;
 
 // TODO: off-curve syscall maybe fails in test? implement test alternative in program?
 

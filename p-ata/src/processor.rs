@@ -303,15 +303,6 @@ pub(crate) fn build_close_account_data() -> [u8; 1] {
     [CLOSE_ACCOUNT_DISCM]
 }
 
-/// Resolve rent from sysvar account or syscall
-#[inline(always)]
-pub(crate) fn resolve_rent(maybe_rent_info: Option<&AccountInfo>) -> Result<Rent, ProgramError> {
-    match maybe_rent_info {
-        Some(rent_account) => unsafe { Rent::from_account_info_unchecked(rent_account) }.cloned(),
-        None => Rent::get(),
-    }
-}
-
 /// Parse and validate the standard Recover account layout.
 #[inline(always)]
 pub(crate) fn parse_recover_accounts(
@@ -621,23 +612,40 @@ pub(crate) fn process_create_associated_token_account(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let rent = resolve_rent(create_accounts.rent_sysvar)?;
     let space = resolve_token_account_space(
         create_accounts.token_program,
         create_accounts.mint,
         maybe_token_account_len,
     )?;
 
-    create_and_initialize_ata(
-        create_accounts.payer,
-        create_accounts.associated_token_account_to_create,
-        create_accounts.wallet,
-        create_accounts.mint,
-        create_accounts.token_program,
-        &rent,
-        bump,
-        space,
-    )
+    match create_accounts.rent_sysvar {
+        Some(rent_account) => {
+            let rent_ref = unsafe { Rent::from_account_info_unchecked(rent_account) }?;
+            create_and_initialize_ata(
+                create_accounts.payer,
+                create_accounts.associated_token_account_to_create,
+                create_accounts.wallet,
+                create_accounts.mint,
+                create_accounts.token_program,
+                rent_ref,
+                bump,
+                space,
+            )
+        }
+        None => {
+            let rent = Rent::get()?;
+            create_and_initialize_ata(
+                create_accounts.payer,
+                create_accounts.associated_token_account_to_create,
+                create_accounts.wallet,
+                create_accounts.mint,
+                create_accounts.token_program,
+                &rent,
+                bump,
+                space,
+            )
+        }
+    }
 }
 
 /// Accounts:

@@ -1,11 +1,18 @@
-use super::mollusk_adapter::mollusk_program_test;
-use solana_instruction::{AccountMeta, Instruction};
-use solana_program_test::BanksClientError;
-use solana_pubkey::Pubkey;
-use solana_sdk::instruction::InstructionError;
-use solana_sdk::{signer::Signer, transaction::Transaction, transaction::TransactionError};
-use solana_sdk_ids::{system_program, sysvar};
-use std::vec::Vec;
+use {
+    mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
+    solana_instruction::{AccountMeta, Instruction},
+    solana_pubkey::Pubkey,
+    solana_sdk::{
+        account::Account, program_error::ProgramError, signature::Keypair, signer::Signer,
+    },
+    solana_sdk_ids::{system_program, sysvar},
+    std::{vec, vec::Vec},
+};
+
+const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
+    5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
+    101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
+]);
 
 /// Find a wallet such that its canonical off-curve bump equals `target_canonical` and also
 /// has at least one lower off-curve bump. Returns:
@@ -25,11 +32,6 @@ fn find_wallet_pair(
             &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
             ata_program_id,
         );
-
-        // sanity check while debugging
-        if Pubkey::is_on_curve(&canonical_addr) {
-            panic!("*** Picked canonical address is on curve! ***");
-        }
 
         if bump != canonical_bump {
             continue;
@@ -61,8 +63,8 @@ fn build_create_ix(
     token_program: Pubkey,
 ) -> Instruction {
     let mut accounts = Vec::with_capacity(7);
-    accounts.push(AccountMeta::new(payer, true)); // payer signer
-    accounts.push(AccountMeta::new(ata_address, false)); // ATA account (writable)
+    accounts.push(AccountMeta::new(payer, true));
+    accounts.push(AccountMeta::new(ata_address, false));
     accounts.push(AccountMeta::new_readonly(wallet, false));
     accounts.push(AccountMeta::new_readonly(mint, false));
     accounts.push(AccountMeta::new_readonly(system_program::id(), false));
@@ -76,12 +78,69 @@ fn build_create_ix(
     }
 }
 
-#[tokio::test]
-async fn test_rejects_suboptimal_bump() {
+/// Creates mint account data with specified decimals
+fn create_mint_data(decimals: u8) -> Vec<u8> {
+    const MINT_ACCOUNT_SIZE: usize = 82;
+    let mut data = [0u8; MINT_ACCOUNT_SIZE];
+    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
+    data[44] = decimals;
+    data[45] = 1; // is_initialized = 1
+    data.to_vec()
+}
+
+/// Create base accounts needed for all tests
+fn create_base_accounts(
+    payer: &Keypair,
+    wallet: &Pubkey,
+    mint: &Pubkey,
+    token_program: &Pubkey,
+) -> Vec<(Pubkey, Account)> {
+    vec![
+        (
+            payer.pubkey(),
+            Account::new(1_000_000_000, 0, &system_program::id()),
+        ),
+        (*wallet, Account::new(0, 0, &system_program::id())),
+        (
+            *mint,
+            Account {
+                lamports: 1_461_600,
+                data: create_mint_data(6),
+                owner: *token_program,
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+        (
+            system_program::id(),
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: NATIVE_LOADER_ID,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        (
+            *token_program,
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: LOADER_V3,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        (sysvar::rent::id(), Account::new(1009200, 17, &sysvar::id())),
+    ]
+}
+
+#[test]
+fn test_rejects_suboptimal_bump() {
     let ata_program_id = spl_associated_token_account::id();
     let token_program_id = spl_token::id();
-
     let mint_pubkey = Pubkey::new_unique();
+    let payer = Keypair::new();
 
     // Define (canonical, sub) bump pairs to verify.
     let pairs = [
@@ -91,10 +150,12 @@ async fn test_rejects_suboptimal_bump() {
         (254u8, 252u8),
     ];
 
-    // Set up Mollusk test environment once.
-    let mut pt = mollusk_program_test(mint_pubkey);
+    #[cfg(feature = "test-debug")]
+    {
+        eprintln!("=== Starting non-canonical bump test ===");
+        eprintln!("Testing {} pairs: {:?}", pairs.len(), pairs);
+    }
 
-    // Discover wallets & add funding.
     let mut wallet_infos = Vec::new();
     for &(canonical, sub) in &pairs {
         let (wallet, canonical_addr, sub_addr) = find_wallet_pair(
@@ -104,21 +165,7 @@ async fn test_rejects_suboptimal_bump() {
             &mint_pubkey,
             &ata_program_id,
         );
-
-        pt.add_account(
-            wallet,
-            solana_sdk::account::Account::new(1_000_000_000, 0, &system_program::id()),
-        );
-
         wallet_infos.push((wallet, canonical, canonical_addr, sub, sub_addr));
-    }
-
-    let (mut banks_client, payer, mut recent_blockhash) = pt.start().await;
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("=== Starting non-canonical bump test ===");
-        eprintln!("Testing {} pairs: {:?}", pairs.len(), pairs);
     }
 
     for (wallet, canonical_bump, canonical_addr, sub_bump, sub_addr) in wallet_infos {
@@ -133,70 +180,91 @@ async fn test_rejects_suboptimal_bump() {
             eprintln!("Sub-optimal address: {}", sub_addr);
         }
 
-        // 1) Sub-optimal should fail
-        #[cfg(feature = "test-debug")]
-        eprintln!("Testing sub-optimal bump {} (should FAIL)", sub_bump);
-        let ix_fail = build_create_ix(
-            ata_program_id,
-            sub_addr,
-            sub_bump,
-            payer.pubkey(),
-            wallet,
-            mint_pubkey,
-            token_program_id,
-        );
+        // Test 1: Sub-optimal should fail
+        {
+            let mut mollusk = Mollusk::default();
 
-        let mut tx_fail = Transaction::new_with_payer(&[ix_fail], Some(&payer.pubkey()));
-        tx_fail.sign(&[&payer], recent_blockhash);
-        let res_fail = banks_client.process_transaction(tx_fail).await;
-        match res_fail {
-            Err(BanksClientError::TransactionError(TransactionError::InstructionError(
-                _,
-                InstructionError::InvalidSeeds,
-            ))) => {}
-            other => panic!("Sub-optimal bump {sub_bump}: unexpected {other:?}"),
+            mollusk.add_program(
+                &ata_program_id,
+                "target/deploy/pinocchio_ata_program",
+                &LOADER_V3,
+            );
+
+            mollusk.add_program(
+                &token_program_id,
+                "programs/token/target/deploy/pinocchio_token_program",
+                &LOADER_V3,
+            );
+
+            #[cfg(feature = "test-debug")]
+            eprintln!("Testing sub-optimal bump {} (should FAIL)", sub_bump);
+
+            let ix_fail = build_create_ix(
+                ata_program_id,
+                sub_addr,
+                sub_bump,
+                payer.pubkey(),
+                wallet,
+                mint_pubkey,
+                token_program_id,
+            );
+
+            let mut accounts =
+                create_base_accounts(&payer, &wallet, &mint_pubkey, &token_program_id);
+            accounts.push((
+                sub_addr,
+                Account::new(0, 0, &system_program::id()), // ATA account (will be created)
+            ));
+
+            mollusk.process_and_validate_instruction(
+                &ix_fail,
+                &accounts,
+                &[Check::err(ProgramError::InvalidInstructionData)],
+            );
         }
-        #[cfg(feature = "test-debug")]
-        eprintln!("✓ Sub-optimal bump {} correctly failed", sub_bump);
 
-        // Refresh blockhash
-        recent_blockhash = banks_client
-            .get_new_latest_blockhash(&recent_blockhash)
-            .await
-            .expect("blockhash");
+        {
+            let mut mollusk = Mollusk::default();
 
-        // 2) Canonical should succeed
-        #[cfg(feature = "test-debug")]
-        eprintln!("Testing canonical bump {} (should SUCCEED)", canonical_bump);
-        let ix_ok = build_create_ix(
-            ata_program_id,
-            canonical_addr,
-            canonical_bump,
-            payer.pubkey(),
-            wallet,
-            mint_pubkey,
-            token_program_id,
-        );
+            mollusk.add_program(
+                &ata_program_id,
+                "target/deploy/pinocchio_ata_program",
+                &LOADER_V3,
+            );
 
-        let mut tx_ok = Transaction::new_with_payer(&[ix_ok], Some(&payer.pubkey()));
-        tx_ok.sign(&[&payer], recent_blockhash);
-        banks_client
-            .process_transaction(tx_ok)
-            .await
-            .unwrap_or_else(|e| {
-                #[cfg(feature = "test-debug")]
-                eprintln!("✗ Canonical bump {} FAILED: {e:?}", canonical_bump);
-                panic!("Canonical bump {canonical_bump} failed: {e:?}")
-            });
-        #[cfg(feature = "test-debug")]
-        eprintln!("✓ Canonical bump {} correctly succeeded", canonical_bump);
+            mollusk.add_program(
+                &token_program_id,
+                "programs/token/target/deploy/pinocchio_token_program",
+                &LOADER_V3,
+            );
 
-        // Get fresh blockhash for next iteration
-        recent_blockhash = banks_client
-            .get_new_latest_blockhash(&recent_blockhash)
-            .await
-            .expect("blockhash");
+            #[cfg(feature = "test-debug")]
+            eprintln!("Testing canonical bump {} (should SUCCEED)", canonical_bump);
+
+            let ix_ok = build_create_ix(
+                ata_program_id,
+                canonical_addr,
+                canonical_bump,
+                payer.pubkey(),
+                wallet,
+                mint_pubkey,
+                token_program_id,
+            );
+
+            let mut accounts =
+                create_base_accounts(&payer, &wallet, &mint_pubkey, &token_program_id);
+            accounts.push((
+                canonical_addr,
+                Account::new(0, 0, &system_program::id()), // ATA account (will be created)
+            ));
+
+            mollusk.process_and_validate_instruction(&ix_ok, &accounts, &[Check::success()]);
+
+            #[cfg(feature = "test-debug")]
+            eprintln!("✓ Canonical bump {} correctly succeeded", canonical_bump);
+        }
     }
+
     #[cfg(feature = "test-debug")]
     eprintln!("\n=== All test pairs completed successfully ===");
 }

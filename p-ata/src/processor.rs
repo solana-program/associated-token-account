@@ -34,8 +34,12 @@ pub const GET_ACCOUNT_DATA_SIZE_DISCM: u8 = 21;
 // Token-2022 AccountType::Account discriminator value
 const ACCOUNTTYPE_ACCOUNT: u8 = 2;
 
-// Compile-time verification that TokenAccount::LEN is >= 109
-const _: [(); TokenAccount::LEN - 109] = [(); TokenAccount::LEN - 109];
+// Compile-time verifications
+const _: () = assert!(
+    TokenAccount::LEN == 165,
+    "TokenAccount size changed unexpectedly"
+);
+const _: () = assert!(Multisig::LEN == 355, "Multisig size changed unexpectedly");
 
 /// Parsed ATA accounts for create operations
 pub struct CreateAccounts<'a> {
@@ -147,6 +151,30 @@ fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
     mint_account.data_len() > MINT_WITH_TYPE_SIZE
 }
 
+/// Validate that account data represents a valid multisig account.
+/// This ensures we don't confuse a multisig with a token account of the same length.
+#[inline(always)]
+fn is_valid_multisig_data(account_data: &[u8]) -> bool {
+    if account_data.len() != Multisig::LEN {
+        return false;
+    }
+
+    let m = account_data[0];
+    let n = account_data[1];
+    let is_initialized = account_data[2];
+
+    // Validate m and n are within valid signer range (1-11)
+    if !(1..=11).contains(&m) || !(1..=11).contains(&n) {
+        return false;
+    }
+
+    if is_initialized != 1 {
+        return false;
+    }
+
+    true
+}
+
 /// Check if account data represents an initialized token account.
 /// Mimics p-token's is_initialized_account check.
 ///
@@ -164,20 +192,25 @@ unsafe fn is_initialized_account(account_data: &[u8]) -> bool {
 fn valid_token_account_data(account_data: &[u8]) -> bool {
     // Regular Token account: exact length match and initialized
     if account_data.len() == TokenAccount::LEN {
-        // SAFETY: TokenAccount::LEN is compile-ensured to be >= 109
+        // SAFETY: TokenAccount::LEN is compile-ensured to be == 165
         return unsafe { is_initialized_account(account_data) };
     }
 
-    // Token-2022 account with extensions
-    if account_data.len() > TokenAccount::LEN
-        // TODO: validate we need this! And is there a collision where a Multisig length
-        // can be the same as a valid Token-2022 length?
-        && account_data.len() != Multisig::LEN  // Avoid confusion with multisig
-        // SAFETY: TokenAccount::LEN is compile-ensured to be >= 109
-        && unsafe { is_initialized_account(account_data) }
-    {
-        // Check AccountType discriminator at position TokenAccount::LEN
-        return account_data[TokenAccount::LEN] == ACCOUNTTYPE_ACCOUNT;
+    // Token-2022's GenericTokenAccount::valid_account_data assumes Multisig
+    // if account_data length is Multisig::LEN. To prevent collisions in future
+    // token programs where account_data.len() may happen to be the same as
+    // Multisig::LEN, we also check it's a valid multisig, if the length matches.
+    // Otherwise, the token program must have its account type discriminator at
+    // account_data[TokenAccount::LEN].
+    if account_data.len() > TokenAccount::LEN {
+        if account_data.len() == Multisig::LEN && is_valid_multisig_data(account_data) {
+            return false;
+        }
+        // SAFETY: TokenAccount::LEN is compile-ensured to be == 165, and in
+        // this branch account_data.len > TokenAccount::LEN
+        if unsafe { is_initialized_account(account_data) } {
+            return account_data[TokenAccount::LEN] == ACCOUNTTYPE_ACCOUNT;
+        }
     }
 
     false

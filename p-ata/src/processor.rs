@@ -2,6 +2,7 @@
 
 use {
     crate::account::create_pda_account,
+    core::mem::MaybeUninit,
     pinocchio::{
         account_info::AccountInfo,
         cpi,
@@ -266,11 +267,14 @@ pub(crate) fn validate_token_account_mint(
 /// Build InitializeAccount3 instruction data
 #[inline(always)]
 pub(crate) fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
-    let mut data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
-    data[0] = INITIALIZE_ACCOUNT_3_DISCM;
-    // unsafe variants here do not reduce CUs in benching
-    data[1..33].copy_from_slice(owner.as_ref());
-    data
+    let mut data = MaybeUninit::<[u8; 33]>::uninit();
+    let data_ptr = data.as_mut_ptr() as *mut u8;
+    // SAFETY: We initialize all 33 bytes before calling assume_init()
+    unsafe {
+        *data_ptr = INITIALIZE_ACCOUNT_3_DISCM;
+        core::ptr::copy_nonoverlapping(owner.as_ref().as_ptr(), data_ptr.add(1), 32);
+        data.assume_init()
+    }
 }
 
 /// Build InitializeImmutableOwner instruction data
@@ -282,11 +286,15 @@ pub(crate) fn build_initialize_immutable_owner_data() -> [u8; 1] {
 /// Build TransferChecked instruction data
 #[inline(always)]
 pub(crate) fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
-    let mut data = [0u8; 10];
-    data[0] = TRANSFER_CHECKED_DISCM;
-    data[1..9].copy_from_slice(&amount.to_le_bytes());
-    data[9] = decimals;
-    data
+    let mut data = MaybeUninit::<[u8; 10]>::uninit();
+    let data_ptr = data.as_mut_ptr() as *mut u8;
+    // SAFETY: We initialize all 10 bytes before calling assume_init()
+    unsafe {
+        *data_ptr = TRANSFER_CHECKED_DISCM;
+        core::ptr::copy_nonoverlapping(amount.to_le_bytes().as_ptr(), data_ptr.add(1), 8);
+        *data_ptr.add(9) = decimals;
+        data.assume_init()
+    }
 }
 
 /// Build CloseAccount instruction data
@@ -508,8 +516,13 @@ pub(crate) fn is_off_curve(_address: &Pubkey) -> bool {
 
         use curve25519_dalek::edwards::CompressedEdwardsY;
 
-        let mut bytes = [0u8; 32];
-        bytes.copy_from_slice(_address.as_ref());
+        let mut bytes = MaybeUninit::<[u8; 32]>::uninit();
+        let bytes_ptr = bytes.as_mut_ptr() as *mut u8;
+        // SAFETY: We initialize all 32 bytes before calling assume_init()
+        let bytes = unsafe {
+            core::ptr::copy_nonoverlapping(_address.as_ref().as_ptr(), bytes_ptr, 32);
+            bytes.assume_init()
+        };
         let compressed = CompressedEdwardsY(bytes);
 
         match compressed.decompress() {

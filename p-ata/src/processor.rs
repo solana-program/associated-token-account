@@ -30,6 +30,8 @@ pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
 pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
 pub const TRANSFER_CHECKED_DISCM: u8 = 12;
 pub const GET_ACCOUNT_DATA_SIZE_DISCM: u8 = 21;
+pub const MINT_BASE_SIZE: usize = 82;
+pub const MINT_WITH_TYPE_SIZE: usize = MINT_BASE_SIZE + 1;
 
 // Token-2022 AccountType::Account discriminator value
 const ACCOUNTTYPE_ACCOUNT: u8 = 2;
@@ -70,7 +72,7 @@ pub struct RecoverNestedAccounts<'a> {
 ///
 /// Returns: (address, bump)
 #[inline(always)]
-fn derive_canonical_ata_pda(
+pub(crate) fn derive_canonical_ata_pda(
     wallet: &Pubkey,
     token_program: &Pubkey,
     mint: &Pubkey,
@@ -84,7 +86,7 @@ fn derive_canonical_ata_pda(
 
 /// Check if the given program ID is SPL Token (not Token-2022)
 #[inline(always)]
-fn is_spl_token_program(program_id: &Pubkey) -> bool {
+pub(crate) fn is_spl_token_program(program_id: &Pubkey) -> bool {
     const SPL_TOKEN_PROGRAM_ID: Pubkey =
         pinocchio_pubkey::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
     // SAFETY: Safe because we are comparing the pointers of the
@@ -99,7 +101,7 @@ fn is_spl_token_program(program_id: &Pubkey) -> bool {
 /// except for SPL Token, which has a fixed length.
 /// Returns the account size in bytes
 #[inline(always)]
-fn get_token_account_size(
+pub(crate) fn get_token_account_size(
     mint_account: &AccountInfo,
     token_program: &AccountInfo,
 ) -> Result<usize, ProgramError> {
@@ -143,10 +145,7 @@ fn get_token_account_size(
 
 /// Check if a Token-2022 mint has extensions by examining its data length
 #[inline(always)]
-fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
-    const MINT_BASE_SIZE: usize = 82; // Base Mint size
-    const MINT_WITH_TYPE_SIZE: usize = MINT_BASE_SIZE + 1; // Base + AccountType
-
+pub(crate) fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
     // If mint data is larger than base + type, it has extensions
     mint_account.data_len() > MINT_WITH_TYPE_SIZE
 }
@@ -154,7 +153,7 @@ fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
 /// Validate that account data represents a valid multisig account.
 /// This ensures we don't confuse a multisig with a token account of the same length.
 #[inline(always)]
-fn is_valid_multisig_data(account_data: &[u8]) -> bool {
+pub(crate) fn is_valid_multisig_data(account_data: &[u8]) -> bool {
     if account_data.len() != Multisig::LEN {
         return false;
     }
@@ -165,6 +164,10 @@ fn is_valid_multisig_data(account_data: &[u8]) -> bool {
 
     // Validate m and n are within valid signer range (1-11)
     if !(1..=11).contains(&m) || !(1..=11).contains(&n) {
+        return false;
+    }
+
+    if m > n {
         return false;
     }
 
@@ -180,7 +183,7 @@ fn is_valid_multisig_data(account_data: &[u8]) -> bool {
 ///
 /// Safety: caller must ensure account_data.len() >= 109.
 #[inline(always)]
-unsafe fn is_initialized_account(account_data: &[u8]) -> bool {
+pub(crate) unsafe fn is_initialized_account(account_data: &[u8]) -> bool {
     // Token account state is at offset 108 (after mint, owner, amount, delegate fields)
     // State: 0 = Uninitialized, 1 = Initialized, 2 = Frozen
     account_data[108] != 0
@@ -189,7 +192,7 @@ unsafe fn is_initialized_account(account_data: &[u8]) -> bool {
 /// Validate that account data represents a valid token account.
 /// Replicates Token-2022's GenericTokenAccount::valid_account_data checks.
 #[inline(always)]
-fn valid_token_account_data(account_data: &[u8]) -> bool {
+pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
     // Regular Token account: exact length match and initialized
     if account_data.len() == TokenAccount::LEN {
         // SAFETY: TokenAccount::LEN is compile-ensured to be == 165
@@ -218,14 +221,14 @@ fn valid_token_account_data(account_data: &[u8]) -> bool {
 
 /// Get zero-copy mint reference from account info
 #[inline(always)]
-unsafe fn get_mint_unchecked(account: &AccountInfo) -> &Mint {
+pub(crate) unsafe fn get_mint_unchecked(account: &AccountInfo) -> &Mint {
     let mint_data_slice = account.borrow_data_unchecked();
     &*(mint_data_slice.as_ptr() as *const Mint)
 }
 
 /// Get token account reference with validation
 #[inline(always)]
-fn get_token_account(account: &AccountInfo) -> Result<&TokenAccount, ProgramError> {
+pub(crate) fn get_token_account(account: &AccountInfo) -> Result<&TokenAccount, ProgramError> {
     let account_data = unsafe { account.borrow_data_unchecked() };
 
     if !valid_token_account_data(account_data) {
@@ -238,7 +241,7 @@ fn get_token_account(account: &AccountInfo) -> Result<&TokenAccount, ProgramErro
 
 /// Validate token account owner matches expected owner
 #[inline(always)]
-fn validate_token_account_owner(
+pub(crate) fn validate_token_account_owner(
     account: &TokenAccount,
     expected_owner: &Pubkey,
 ) -> Result<(), ProgramError> {
@@ -250,7 +253,7 @@ fn validate_token_account_owner(
 
 /// Validate token account mint matches expected mint
 #[inline(always)]
-fn validate_token_account_mint(
+pub(crate) fn validate_token_account_mint(
     account: &TokenAccount,
     expected_mint: &Pubkey,
 ) -> Result<(), ProgramError> {
@@ -262,7 +265,7 @@ fn validate_token_account_mint(
 
 /// Build InitializeAccount3 instruction data
 #[inline(always)]
-fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
+pub(crate) fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
     let mut data = [0u8; 33]; // 1 byte discriminator + 32 bytes owner
     data[0] = INITIALIZE_ACCOUNT_3_DISCM;
     // unsafe variants here do not reduce CUs in benching
@@ -272,13 +275,13 @@ fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
 
 /// Build InitializeImmutableOwner instruction data
 #[inline(always)]
-fn build_initialize_immutable_owner_data() -> [u8; 1] {
+pub(crate) fn build_initialize_immutable_owner_data() -> [u8; 1] {
     [INITIALIZE_IMMUTABLE_OWNER_DISCM]
 }
 
 /// Build TransferChecked instruction data
 #[inline(always)]
-fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
+pub(crate) fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
     let mut data = [0u8; 10];
     data[0] = TRANSFER_CHECKED_DISCM;
     data[1..9].copy_from_slice(&amount.to_le_bytes());
@@ -288,13 +291,13 @@ fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
 
 /// Build CloseAccount instruction data
 #[inline(always)]
-fn build_close_account_data() -> [u8; 1] {
+pub(crate) fn build_close_account_data() -> [u8; 1] {
     [CLOSE_ACCOUNT_DISCM]
 }
 
 /// Resolve rent from sysvar account or syscall
 #[inline(always)]
-fn resolve_rent(maybe_rent_info: Option<&AccountInfo>) -> Result<Rent, ProgramError> {
+pub(crate) fn resolve_rent(maybe_rent_info: Option<&AccountInfo>) -> Result<Rent, ProgramError> {
     match maybe_rent_info {
         Some(rent_account) => unsafe { Rent::from_account_info_unchecked(rent_account) }.cloned(),
         None => Rent::get(),
@@ -303,7 +306,7 @@ fn resolve_rent(maybe_rent_info: Option<&AccountInfo>) -> Result<Rent, ProgramEr
 
 /// Parse and validate the standard Recover account layout.
 #[inline(always)]
-pub fn parse_recover_accounts(
+pub(crate) fn parse_recover_accounts(
     accounts: &[AccountInfo],
 ) -> Result<RecoverNestedAccounts, ProgramError> {
     if accounts.len() < 7 {
@@ -326,7 +329,9 @@ pub fn parse_recover_accounts(
 
 /// Parse and validate the standard Create account layout.
 #[inline(always)]
-pub fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts, ProgramError> {
+pub(crate) fn parse_create_accounts(
+    accounts: &[AccountInfo],
+) -> Result<CreateAccounts, ProgramError> {
     let rent_info = match accounts.len() {
         len if len >= 7 => Some(unsafe { accounts.get_unchecked(6) }),
         6 => None,
@@ -349,7 +354,7 @@ pub fn parse_create_accounts(accounts: &[AccountInfo]) -> Result<CreateAccounts,
 
 /// Check if account already exists and is properly configured (idempotent check).
 #[inline(always)]
-pub fn check_idempotent_account(
+pub(crate) fn check_idempotent_account(
     associated_token_account: &AccountInfo,
     wallet: &AccountInfo,
     mint_account: &AccountInfo,
@@ -389,7 +394,7 @@ pub fn check_idempotent_account(
 /// done once _before_ calling the function, avoiding additional branching
 /// inside the hot path.  Inline to ensure no extra call overhead.
 #[inline(always)]
-fn resolve_token_account_space(
+pub(crate) fn resolve_token_account_space(
     token_program: &AccountInfo,
     mint_account: &AccountInfo,
     maybe_token_account_len: Option<usize>,
@@ -407,7 +412,7 @@ fn resolve_token_account_space(
 /// friendly.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-pub fn create_and_initialize_ata(
+pub(crate) fn create_and_initialize_ata(
     payer: &AccountInfo,
     associated_token_account: &AccountInfo,
     wallet: &AccountInfo,
@@ -476,7 +481,7 @@ pub fn create_and_initialize_ata(
 /// Check if a given address is off-curve using the sol_curve_validate_point syscall.
 /// Returns true if the address is off-curve (invalid as an Ed25519 point).
 #[inline(always)]
-fn is_off_curve(_address: &Pubkey) -> bool {
+pub(crate) fn is_off_curve(_address: &Pubkey) -> bool {
     #[cfg(target_os = "solana")]
     {
         const ED25519_CURVE_ID: u64 = 0;
@@ -524,7 +529,7 @@ fn is_off_curve(_address: &Pubkey) -> bool {
 /// from creating non-canonical associated token accounts by passing in
 /// sub-optimal bumps.
 #[inline(always)]
-fn ensure_no_better_canonical_address_and_bump(
+pub(crate) fn ensure_no_better_canonical_address_and_bump(
     seeds: &[&[u8]; 3],
     program_id: &Pubkey,
     hint_bump: u8,
@@ -553,7 +558,7 @@ fn ensure_no_better_canonical_address_and_bump(
 ///
 /// For Token-2022 accounts, create the account with the correct size
 /// and call InitializeImmutableOwner followed by InitializeAccount3.
-pub fn process_create_associated_token_account(
+pub(crate) fn process_create_associated_token_account(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     idempotent: bool,
@@ -573,11 +578,6 @@ pub fn process_create_associated_token_account(
     )? {
         return Ok(());
     }
-
-    // reenable this if determining that it is better than ata validation
-    // if !create_accounts.payer.is_signer() {
-    //     return Err(ProgramError::MissingRequiredSignature);
-    // }
 
     let (verified_associated_token_account_to_create, bump) = match maybe_bump {
         Some(provided_bump) => ensure_no_better_canonical_address_and_bump(
@@ -636,7 +636,10 @@ pub fn process_create_associated_token_account(
 /// [5] wallet
 /// [6] token_program
 /// [7..] multisig signer accounts
-pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+pub(crate) fn process_recover_nested(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+) -> ProgramResult {
     let recover_accounts = parse_recover_accounts(accounts)?;
 
     // Verify owner address derivation

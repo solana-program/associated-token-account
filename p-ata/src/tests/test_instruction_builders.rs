@@ -1,0 +1,136 @@
+use {
+    crate::processor::{
+        build_close_account_data, build_initialize_account3_data,
+        build_initialize_immutable_owner_data, build_transfer_data, CLOSE_ACCOUNT_DISCM,
+        INITIALIZE_ACCOUNT_3_DISCM, INITIALIZE_IMMUTABLE_OWNER_DISCM, TRANSFER_CHECKED_DISCM,
+    },
+    pinocchio::pubkey::Pubkey,
+    test_case::test_case,
+};
+
+#[test]
+fn test_build_initialize_account3_data() {
+    let owner = Pubkey::from([1u8; 32]);
+    let data = build_initialize_account3_data(&owner);
+
+    assert_eq!(data.len(), 33);
+    assert_eq!(data[0], INITIALIZE_ACCOUNT_3_DISCM);
+    assert_eq!(&data[1..33], owner.as_ref());
+}
+
+#[test]
+fn test_build_initialize_account3_data_different_owners() {
+    let owner1 = Pubkey::from([1u8; 32]);
+    let owner2 = Pubkey::from([2u8; 32]);
+
+    let data1 = build_initialize_account3_data(&owner1);
+    let data2 = build_initialize_account3_data(&owner2);
+
+    assert_eq!(data1[0], data2[0]); // Same discriminator
+    assert_ne!(&data1[1..], &data2[1..]); // Different owner bytes
+}
+
+#[test]
+fn test_build_initialize_immutable_owner_data() {
+    let data = build_initialize_immutable_owner_data();
+
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0], INITIALIZE_IMMUTABLE_OWNER_DISCM);
+}
+
+#[test_case(0, 0; "zero_amount_zero_decimals")]
+#[test_case(1000, 6; "typical_amount")]
+#[test_case(u64::MAX, 18; "max_amount_max_decimals")]
+#[test_case(123456789, 9; "random_values")]
+fn test_build_transfer_data(amount: u64, decimals: u8) {
+    let data = build_transfer_data(amount, decimals);
+
+    assert_eq!(data.len(), 10);
+    assert_eq!(data[0], TRANSFER_CHECKED_DISCM);
+
+    let parsed_amount = u64::from_le_bytes([
+        data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
+    ]);
+    assert_eq!(parsed_amount, amount);
+    assert_eq!(data[9], decimals);
+}
+
+#[test]
+fn test_build_transfer_data_endianness() {
+    let amount = 0x0123456789abcdef_u64;
+    let decimals = 6;
+    let data = build_transfer_data(amount, decimals);
+
+    // Verify little-endian encoding
+    let expected_bytes = amount.to_le_bytes();
+    assert_eq!(&data[1..9], &expected_bytes);
+}
+
+#[test]
+fn test_build_close_account_data() {
+    let data = build_close_account_data();
+
+    assert_eq!(data.len(), 1);
+    assert_eq!(data[0], CLOSE_ACCOUNT_DISCM);
+}
+
+#[test]
+fn test_instruction_data_deterministic() {
+    let owner = Pubkey::from([42u8; 32]);
+
+    let data1 = build_initialize_account3_data(&owner);
+    let data2 = build_initialize_account3_data(&owner);
+    assert_eq!(data1, data2);
+
+    let immutable1 = build_initialize_immutable_owner_data();
+    let immutable2 = build_initialize_immutable_owner_data();
+    assert_eq!(immutable1, immutable2);
+
+    let transfer1 = build_transfer_data(1000, 6);
+    let transfer2 = build_transfer_data(1000, 6);
+    assert_eq!(transfer1, transfer2);
+
+    let close1 = build_close_account_data();
+    let close2 = build_close_account_data();
+    assert_eq!(close1, close2);
+}
+
+#[test]
+fn test_discriminator_uniqueness() {
+    let unique_discriminators = [
+        INITIALIZE_ACCOUNT_3_DISCM,
+        INITIALIZE_IMMUTABLE_OWNER_DISCM,
+        TRANSFER_CHECKED_DISCM,
+        CLOSE_ACCOUNT_DISCM,
+    ];
+
+    for (i, &disc1) in unique_discriminators.iter().enumerate() {
+        for (j, &disc2) in unique_discriminators.iter().enumerate() {
+            if i != j {
+                assert_ne!(disc1, disc2, "Discriminators must be unique");
+            }
+        }
+    }
+}
+
+#[test]
+fn test_build_transfer_data_zero_values() {
+    let data = build_transfer_data(0, 0);
+
+    assert_eq!(data[0], TRANSFER_CHECKED_DISCM);
+    for &byte in &data[1..9] {
+        assert_eq!(byte, 0);
+    }
+    assert_eq!(data[9], 0);
+}
+
+#[test]
+fn test_build_transfer_data_max_values() {
+    let data = build_transfer_data(u64::MAX, u8::MAX);
+
+    assert_eq!(data[0], TRANSFER_CHECKED_DISCM);
+    for &byte in &data[1..9] {
+        assert_eq!(byte, 255);
+    }
+    assert_eq!(data[9], 255);
+}

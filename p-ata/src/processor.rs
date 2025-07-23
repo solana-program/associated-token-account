@@ -821,11 +821,6 @@ pub(crate) fn process_recover_nested(
             is_writable: false,
             is_signer: true,
         },
-        AccountMeta {
-            pubkey: recover_accounts.token_program.key(),
-            is_writable: false,
-            is_signer: false,
-        },
     ];
 
     let ix_close = Instruction {
@@ -840,7 +835,6 @@ pub(crate) fn process_recover_nested(
             recover_accounts.nested_associated_token_account,
             recover_accounts.wallet,
             recover_accounts.owner_associated_token_account,
-            recover_accounts.token_program,
         ],
         &[pda_signer],
     )?;

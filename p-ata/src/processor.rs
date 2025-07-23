@@ -70,7 +70,7 @@ pub struct RecoverNestedAccounts<'a> {
 ///
 /// Returns: (address, bump)
 #[inline(always)]
-fn derive_canoncial_ata_pda(
+fn derive_canonical_ata_pda(
     wallet: &Pubkey,
     token_program: &Pubkey,
     mint: &Pubkey,
@@ -367,7 +367,7 @@ pub fn check_idempotent_account(
 
         // Also validate that the account is at the canonical ATA address
         // Prevents idempotent operations from succeeding with non-canonical addresses
-        let (canonical_address, _bump) = derive_canoncial_ata_pda(
+        let (canonical_address, _bump) = derive_canonical_ata_pda(
             wallet.key(),
             token_program.key(),
             mint_account.key(),
@@ -590,7 +590,7 @@ pub fn process_create_associated_token_account(
             provided_bump,
         ),
         None => {
-            let (address, computed_bump) = derive_canoncial_ata_pda(
+            let (address, computed_bump) = derive_canonical_ata_pda(
                 create_accounts.wallet.key(),
                 create_accounts.token_program.key(),
                 create_accounts.mint.key(),
@@ -640,7 +640,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
     let recover_accounts = parse_recover_accounts(accounts)?;
 
     // Verify owner address derivation
-    let (owner_associated_token_address, bump) = derive_canoncial_ata_pda(
+    let (owner_associated_token_address, bump) = derive_canonical_ata_pda(
         recover_accounts.wallet.key(),
         recover_accounts.token_program.key(),
         recover_accounts.owner_mint.key(),
@@ -653,7 +653,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
     }
 
     // Verify nested address derivation
-    let (nested_associated_token_address, _) = derive_canoncial_ata_pda(
+    let (nested_associated_token_address, _) = derive_canonical_ata_pda(
         recover_accounts.owner_associated_token_account.key(),
         recover_accounts.token_program.key(),
         recover_accounts.nested_mint.key(),
@@ -665,7 +665,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
     }
 
     // Verify destination address derivation
-    let (destination_associated_token_address, _) = derive_canoncial_ata_pda(
+    let (destination_associated_token_address, _) = derive_canonical_ata_pda(
         recover_accounts.wallet.key(),
         recover_accounts.token_program.key(),
         recover_accounts.nested_mint.key(),

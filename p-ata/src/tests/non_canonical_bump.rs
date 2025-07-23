@@ -79,7 +79,7 @@ fn build_create_ix(
 }
 
 #[tokio::test]
-async fn rejects_suboptimal_bump() {
+async fn test_rejects_suboptimal_bump() {
     let ata_program_id = spl_associated_token_account::id();
     let token_program_id = spl_token::id();
 

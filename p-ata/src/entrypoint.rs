@@ -4,9 +4,13 @@ use {
     crate::processor::{process_create_associated_token_account, process_recover_nested},
     pinocchio::{
         account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
-        pubkey::Pubkey, ProgramResult,
+        program_error::ProgramError, pubkey::Pubkey, ProgramResult,
     },
 };
+
+/// An arbitrary maximum limit to prevent accounts which are expensive
+/// to work with (i.e. u16::MAX) from being created for others.
+const MAX_SANE_ACCOUNT_LENGTH: u16 = 2048;
 
 program_entrypoint!(process_instruction);
 no_allocator!();
@@ -45,11 +49,14 @@ pub fn process_instruction(
                 // Bump + account_len provided (for Token-2022 optimization)
                 [bump, account_len_bytes @ ..] => {
                     // SAFETY: runtime-bounded, and account_len is last.
-                    // TODO: examine whether this could be exploited by creating a huge account
-                    // for some user.
                     let account_len = unsafe {
                         u16::from_le_bytes(*(account_len_bytes.as_ptr() as *const [u8; 2]))
                     };
+
+                    if account_len > MAX_SANE_ACCOUNT_LENGTH {
+                        return Err(ProgramError::InvalidInstructionData);
+                    }
+
                     process_create_associated_token_account(
                         program_id,
                         accounts,

@@ -7,8 +7,6 @@ use solana_sdk::{signer::Signer, transaction::Transaction, transaction::Transact
 use solana_sdk_ids::{system_program, sysvar};
 use std::vec::Vec;
 
-// TODO: off-curve syscall maybe fails in test? implement test alternative in program?
-
 /// Find a wallet such that its canonical off-curve bump equals `target_canonical` and also
 /// has at least one lower off-curve bump. Returns:
 /// (wallet, canonical_addr, sub_addr)

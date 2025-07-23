@@ -6,7 +6,7 @@ use {
     bincode,
     core::cell::RefCell,
     mollusk_svm::{program::loader_keys, Mollusk},
-    solana_program::{account_info::AccountInfo, msg, program_error::ProgramError, pubkey::Pubkey},
+    solana_program::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey},
     solana_program_test::{ProgramTest, *},
     solana_sdk::{
         account::Account,
@@ -17,11 +17,7 @@ use {
         transaction::{Transaction, TransactionError},
     },
     spl_associated_token_account, spl_associated_token_account_client,
-    spl_token_2022::extension::{BaseStateWithExtensions, ExtensionType, StateWithExtensions},
-    spl_token_2022::state::Mint,
     std::collections::BTreeMap,
-    std::vec,
-    std::vec::Vec,
 };
 
 fn process_instruction(

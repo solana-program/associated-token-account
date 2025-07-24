@@ -111,8 +111,8 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
 
     // Check if this mint has extensions (must be larger than base + account type)
     if mint_data.len() <= ACCOUNT_TYPE_OFFSET {
-        // No extensions
-        return Some(TOKEN_ACCOUNT_LEN);
+        // No mint extensions, but Token-2022 ATAs still need account type discriminator + ImmutableOwner
+        return Some(TOKEN_ACCOUNT_LEN + 1 + 4); // +1 for account type, +4 for ImmutableOwner TLV
     }
 
     let mut account_extensions_size = 0usize;
@@ -137,9 +137,9 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
                 account_extensions_size += 4 + 8; // TLV overhead + data
             }
             9 => {
-                // NonTransferable → requires NonTransferableAccount (0 bytes) + ImmutableOwner (0 bytes)
+                // NonTransferable → requires NonTransferableAccount (0 bytes)
+                // (ImmutableOwner is already accounted for globally)
                 account_extensions_size += 4 + 0; // NonTransferableAccount: TLV overhead + data
-                account_extensions_size += 4 + 0; // ImmutableOwner: TLV overhead + data
             }
             14 => {
                 // TransferHook → requires TransferHookAccount (1 byte + 4 TLV overhead)
@@ -172,12 +172,11 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
         cursor += 4 + length as usize;
     }
 
-    // Official token-2022 logic: Only add account type discriminator (+1) when there are account extensions
-    if account_extensions_size > 0 {
-        Some(TOKEN_ACCOUNT_LEN + 1 + account_extensions_size) // +1 for account type discriminator
-    } else {
-        Some(TOKEN_ACCOUNT_LEN) // No account extensions = just base size
-    }
+    // For Token-2022 ATAs, we ALWAYS include:
+    // - Account type discriminator (+1 byte)
+    // - ImmutableOwner extension (+4 bytes TLV overhead + 0 bytes data = 4 bytes)
+    // - Any additional extensions derived from mint extensions
+    Some(TOKEN_ACCOUNT_LEN + 1 + 4 + account_extensions_size)
 }
 
 /// Get the required account size for a mint using inline parsing first,

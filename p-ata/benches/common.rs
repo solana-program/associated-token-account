@@ -282,6 +282,123 @@ pub fn random_seeded_pk(
     Pubkey::new_from_array(bytes)
 }
 
+/// Find a wallet that produces bump 255 for ALL given mints
+///
+/// Modular function that searches for a wallet that when used in find_program_address
+/// with [wallet, token_program, mint] produces bump 255 for EVERY mint in the array.
+///
+/// # Arguments
+/// * `token_program` - Token program ID for ATA derivation
+/// * `mints` - Array of mint addresses that must ALL produce bump 255  
+/// * `ata_program` - ATA program ID for derivation
+/// * `base_entropy` - Base entropy for deterministic starting point
+///
+/// # Returns
+/// A wallet pubkey that produces bump 255 for [wallet, token_program, mint] for ALL mints
+///
+/// # Usage
+/// - Create operations: `find_optimal_wallet_for_mints(&[mint])`
+/// - Recover operations: `find_optimal_wallet_for_mints(&[owner_mint, nested_mint])`
+pub fn find_optimal_wallet_for_mints(
+    token_program: &Pubkey,
+    mints: &[Pubkey],
+    ata_programs: &[Pubkey],
+    base_entropy: u64,
+) -> Pubkey {
+    let mut modifier = base_entropy;
+    
+    loop {
+        // Generate candidate wallet from modifier
+        let mut wallet_bytes = [0u8; 32];
+        wallet_bytes[0..8].copy_from_slice(&modifier.to_le_bytes());
+        wallet_bytes[8..16].copy_from_slice(&(modifier.wrapping_mul(0x9E3779B9)).to_le_bytes());
+        wallet_bytes[16..24].copy_from_slice(&(modifier.wrapping_mul(0x85EBCA6B)).to_le_bytes());
+        wallet_bytes[24..32].copy_from_slice(&(modifier.wrapping_mul(0xC2B2AE35)).to_le_bytes());
+        
+        let candidate_wallet = Pubkey::new_from_array(wallet_bytes);
+        
+        // Check if this wallet produces bump 255 for ALL mints across ALL ATA programs
+        let all_optimal = mints.iter().all(|mint| {
+            ata_programs.iter().all(|ata_program| {
+                let (_, bump) = Pubkey::find_program_address(
+                    &[
+                        candidate_wallet.as_ref(),
+                        token_program.as_ref(),
+                        mint.as_ref(),
+                    ],
+                    ata_program,
+                );
+                bump == 255
+            })
+        });
+        
+        if all_optimal {
+            #[cfg(feature = "full-debug-logs")]
+            println!(
+                "🎯 Found optimal wallet with bump 255 for {} mints after {} attempts: {}",
+                mints.len(),
+                attempts + 1,
+                candidate_wallet.to_string()[0..8].to_string()
+            );
+            return candidate_wallet;
+        }
+        
+        modifier = modifier.wrapping_add(1);
+    }
+}
+
+/// Generate a pubkey with optimal bump (255) for consistent single-iteration benchmarking
+///
+/// When benchmarking with iterations=1, this ensures predictable results by finding
+/// wallets that produce bump=255, which is optimal for ATA derivation performance.
+/// Falls back to random generation for multiple iterations to maintain test variety.
+///
+/// # Arguments
+/// * `variant` - The ATA variant to use for seeding
+/// * `test_bank` - The test bank ID for seeding
+/// * `test_number` - The test number for seeding  
+/// * `account_type` - The account type for seeding
+/// * `iteration` - Current iteration number
+/// * `run_entropy` - A run-specific entropy value to use for seeding
+/// * `token_program_id` - Token program ID for ATA derivation
+/// * `ata_program_id` - ATA program ID for derivation
+/// * `mint` - Mint address for ATA derivation
+/// * `max_iterations` - Total number of benchmark iterations (to detect single-iteration mode)
+///
+/// # Returns
+/// A pubkey that produces optimal bump when used as wallet for ATA derivation
+pub fn const_pk_with_optimal_bump(
+    variant: &AtaVariant,
+    test_bank: TestBankId,
+    test_number: u8,
+    account_type: AccountTypeId,
+    iteration: usize,
+    run_entropy: u64,
+    token_program_id: &Pubkey,
+    ata_program_ids: &[Pubkey],
+    mint: &Pubkey,
+    max_iterations: usize,
+) -> Pubkey {
+    // For multiple iterations or non-wallet account types, use random generation
+    if max_iterations > 1 || account_type != AccountTypeId::Wallet {
+        return random_seeded_pk(
+            variant,
+            test_bank,
+            test_number,
+            account_type,
+            iteration,
+            run_entropy,
+        );
+    }
+
+    // For single iterations on wallet generation, find optimal bump (255)
+    let search_entropy = run_entropy
+        .wrapping_add(test_number as u64)
+        .wrapping_add(iteration as u64);
+    
+    find_optimal_wallet_for_mints(token_program_id, &[*mint], ata_program_ids, search_entropy)
+}
+
 pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
     use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
 

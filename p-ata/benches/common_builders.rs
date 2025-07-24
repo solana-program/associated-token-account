@@ -139,6 +139,7 @@ impl CommonTestCaseBuilder {
         token_program_id: &Pubkey,
         iteration: usize,
         run_entropy: u64,
+        max_iterations: Option<usize>,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         let config = Self::get_config_for_test(base_test, token_program_id);
         Self::build_with_config_and_iteration(
@@ -148,6 +149,7 @@ impl CommonTestCaseBuilder {
             None,
             iteration,
             run_entropy,
+            max_iterations,
         )
     }
 
@@ -361,6 +363,7 @@ impl CommonTestCaseBuilder {
             _test_name,
             42,
             simple_entropy,
+            None, // max_iterations not available in this context
         )
     }
 
@@ -372,6 +375,7 @@ impl CommonTestCaseBuilder {
         _test_name: Option<&str>,
         iteration: usize,
         run_entropy: u64,
+        max_iterations: Option<usize>,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         // Use structured addressing to prevent cross-contamination
         let test_bank = if config.failure_mode.is_some() {
@@ -384,8 +388,99 @@ impl CommonTestCaseBuilder {
         // even though SPL ATA strips variant-specific instruction data
         let test_number = calculate_test_number(config.base_test, variant, config.setup_topup);
 
-        let (payer, mint, wallet) =
+        let (payer, mint, mut wallet) =
             Self::get_structured_addresses(&config, test_bank, test_number, iteration, run_entropy);
+
+        // For single iterations, replace wallet with optimal bump wallet
+        if let Some(1) = max_iterations {
+            let search_entropy = run_entropy
+                .wrapping_add(test_number as u64)
+                .wrapping_add(iteration as u64);
+
+            if matches!(
+                config.base_test,
+                BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
+            ) {
+                // For recover operations, find wallet optimal for both owner_mint and nested_mint
+                if let Some(SpecialAccountMod::NestedAta {
+                    owner_mint,
+                    nested_mint,
+                }) = config
+                    .special_account_mods
+                    .iter()
+                    .find(|m| matches!(m, SpecialAccountMod::NestedAta { .. }))
+                {
+                    // For recover operations, optimize ALL three ATAs: Owner, Destination, AND Nested
+                    let all_implementations = crate::common::AtaImplementation::all();
+                    let ata_program_ids = vec![
+                        all_implementations.spl_impl.program_id,
+                        all_implementations.pata_legacy_impl.program_id,
+                        all_implementations.pata_prefunded_impl.program_id,
+                    ];
+                    
+                    let mut attempt_entropy = search_entropy;
+                    while {
+                        // 1. Find wallet optimal for Owner ATA and Destination ATA
+                                                 let candidate_wallet = crate::common::find_optimal_wallet_for_mints(
+                            &config.token_program,
+                            &[*owner_mint, *nested_mint],
+                            &ata_program_ids[..],
+                            attempt_entropy,
+                        );
+                        
+                        // 2. Check if Nested ATA also has bump 255 for all programs
+                        let mut all_nested_optimal = true;
+                        for ata_program_id in &ata_program_ids {
+                            let (owner_ata_address, _) = Pubkey::find_program_address(
+                                &[
+                                    candidate_wallet.as_ref(),
+                                    config.token_program.as_ref(),
+                                    owner_mint.as_ref(),
+                                ],
+                                ata_program_id,
+                            );
+                            
+                            let (_, nested_bump) = Pubkey::find_program_address(
+                                &[
+                                    owner_ata_address.as_ref(),
+                                    config.token_program.as_ref(),
+                                    nested_mint.as_ref(),
+                                ],
+                                ata_program_id,
+                            );
+                            
+                            if nested_bump != 255 {
+                                all_nested_optimal = false;
+                                break;
+                            }
+                        }
+                        
+                        if all_nested_optimal {
+                            wallet = candidate_wallet;
+                            false // exit while loop
+                        } else {
+                            attempt_entropy = attempt_entropy.wrapping_add(1);
+                            true // continue while loop
+                        }
+                    } {}
+                }
+            } else if !matches!(config.base_test, BaseTestType::WorstCase) {
+                // For standard create operations, find wallet optimal for mint across all ATA programs
+                let all_implementations = crate::common::AtaImplementation::all();
+                let ata_program_ids = vec![
+                    all_implementations.spl_impl.program_id,
+                    all_implementations.pata_legacy_impl.program_id,
+                    all_implementations.pata_prefunded_impl.program_id,
+                ];
+                wallet = crate::common::find_optimal_wallet_for_mints(
+                    &config.token_program,
+                    &[mint],
+                    &ata_program_ids[..],
+                    search_entropy,
+                );
+            }
+            // Note: WorstCase tests intentionally use sub-optimal wallets, so skip optimization
+        }
 
         #[cfg(feature = "full-debug-logs")]
         {
@@ -544,14 +639,13 @@ impl CommonTestCaseBuilder {
                 panic!("Could not find NestedAta config for recover test");
             };
 
-            // Use random seeded pubkey instead of optimal bump hunting
-            // Iteration-based seed ensures varying wallets across iterations
+            // Use random seeded pubkey for recover tests - optimal bump logic will be added later
             crate::common::random_seeded_pk(
                 consistent_variant,
                 test_bank,
                 test_number,
                 crate::common::AccountTypeId::Wallet,
-                iteration, // Use iteration for varying wallets
+                iteration,
                 run_entropy,
             )
         } else if matches!(config.base_test, BaseTestType::WorstCase) {
@@ -562,14 +656,13 @@ impl CommonTestCaseBuilder {
                 crate::common::AccountTypeId::Wallet,
             )
         } else {
-            // Use random seeded pubkey instead of optimal bump hunting
-            // Iteration-based seed ensures varying wallets across iterations
+            // Use random seeded pubkey for standard tests - optimal bump logic will be added later
             crate::common::random_seeded_pk(
                 consistent_variant,
                 test_bank,
                 test_number,
                 crate::common::AccountTypeId::Wallet,
-                iteration, // Use iteration for varying wallets
+                iteration,
                 run_entropy,
             )
         };

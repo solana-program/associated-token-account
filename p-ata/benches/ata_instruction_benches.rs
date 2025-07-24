@@ -267,6 +267,7 @@ impl PerformanceTestOrchestrator {
                 token_program_id,
                 iteration,
                 run_entropy,
+                Some(iterations),
             )
         };
 
@@ -278,6 +279,7 @@ impl PerformanceTestOrchestrator {
                 token_program_id,
                 iteration,
                 run_entropy,
+                Some(iterations),
             )
         };
 

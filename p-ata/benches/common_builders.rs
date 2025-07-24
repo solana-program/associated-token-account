@@ -417,17 +417,17 @@ impl CommonTestCaseBuilder {
                         all_implementations.pata_legacy_impl.program_id,
                         all_implementations.pata_prefunded_impl.program_id,
                     ];
-                    
+
                     let mut attempt_entropy = search_entropy;
                     while {
                         // 1. Find wallet optimal for Owner ATA and Destination ATA
-                                                 let candidate_wallet = crate::common::find_optimal_wallet_for_mints(
+                        let candidate_wallet = crate::common::find_optimal_wallet_for_mints(
                             &config.token_program,
                             &[*owner_mint, *nested_mint],
                             &ata_program_ids[..],
                             attempt_entropy,
                         );
-                        
+
                         // 2. Check if Nested ATA also has bump 255 for all programs
                         let mut all_nested_optimal = true;
                         for ata_program_id in &ata_program_ids {
@@ -439,7 +439,7 @@ impl CommonTestCaseBuilder {
                                 ],
                                 ata_program_id,
                             );
-                            
+
                             let (_, nested_bump) = Pubkey::find_program_address(
                                 &[
                                     owner_ata_address.as_ref(),
@@ -448,13 +448,13 @@ impl CommonTestCaseBuilder {
                                 ],
                                 ata_program_id,
                             );
-                            
+
                             if nested_bump != 255 {
                                 all_nested_optimal = false;
                                 break;
                             }
                         }
-                        
+
                         if all_nested_optimal {
                             wallet = candidate_wallet;
                             false // exit while loop

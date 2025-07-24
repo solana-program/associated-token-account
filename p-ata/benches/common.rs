@@ -306,7 +306,7 @@ pub fn find_optimal_wallet_for_mints(
     base_entropy: u64,
 ) -> Pubkey {
     let mut modifier = base_entropy;
-    
+
     loop {
         // Generate candidate wallet from modifier
         let mut wallet_bytes = [0u8; 32];
@@ -314,9 +314,9 @@ pub fn find_optimal_wallet_for_mints(
         wallet_bytes[8..16].copy_from_slice(&(modifier.wrapping_mul(0x9E3779B9)).to_le_bytes());
         wallet_bytes[16..24].copy_from_slice(&(modifier.wrapping_mul(0x85EBCA6B)).to_le_bytes());
         wallet_bytes[24..32].copy_from_slice(&(modifier.wrapping_mul(0xC2B2AE35)).to_le_bytes());
-        
+
         let candidate_wallet = Pubkey::new_from_array(wallet_bytes);
-        
+
         // Check if this wallet produces bump 255 for ALL mints across ALL ATA programs
         let all_optimal = mints.iter().all(|mint| {
             ata_programs.iter().all(|ata_program| {
@@ -331,7 +331,7 @@ pub fn find_optimal_wallet_for_mints(
                 bump == 255
             })
         });
-        
+
         if all_optimal {
             #[cfg(feature = "full-debug-logs")]
             println!(
@@ -342,7 +342,7 @@ pub fn find_optimal_wallet_for_mints(
             );
             return candidate_wallet;
         }
-        
+
         modifier = modifier.wrapping_add(1);
     }
 }
@@ -395,7 +395,7 @@ pub fn const_pk_with_optimal_bump(
     let search_entropy = run_entropy
         .wrapping_add(test_number as u64)
         .wrapping_add(iteration as u64);
-    
+
     find_optimal_wallet_for_mints(token_program_id, &[*mint], ata_program_ids, search_entropy)
 }
 

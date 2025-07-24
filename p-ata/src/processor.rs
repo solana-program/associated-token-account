@@ -37,6 +37,9 @@ pub const MINT_WITH_TYPE_SIZE: usize = MINT_BASE_SIZE + 1;
 // Token-2022 AccountType::Account discriminator value
 const ACCOUNTTYPE_ACCOUNT: u8 = 2;
 
+pub const INITIALIZE_IMMUTABLE_OWNER_DATA: [u8; 1] = [INITIALIZE_IMMUTABLE_OWNER_DISCM];
+pub const CLOSE_ACCOUNT_DATA: [u8; 1] = [CLOSE_ACCOUNT_DISCM];
+
 // Compile-time verifications
 const _: () = assert!(
     TokenAccount::LEN == 165,
@@ -277,12 +280,6 @@ pub(crate) fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
     }
 }
 
-/// Build InitializeImmutableOwner instruction data
-#[inline(always)]
-pub(crate) fn build_initialize_immutable_owner_data() -> [u8; 1] {
-    [INITIALIZE_IMMUTABLE_OWNER_DISCM]
-}
-
 /// Build TransferChecked instruction data
 #[inline(always)]
 pub(crate) fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
@@ -295,12 +292,6 @@ pub(crate) fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
         *data_ptr.add(9) = decimals;
         data.assume_init()
     }
-}
-
-/// Build CloseAccount instruction data
-#[inline(always)]
-pub(crate) fn build_close_account_data() -> [u8; 1] {
-    [CLOSE_ACCOUNT_DISCM]
 }
 
 /// Parse and validate the standard Recover account layout.
@@ -431,7 +422,6 @@ pub(crate) fn create_and_initialize_ata(
 
     // Initialize ImmutableOwner for non-SPL Token programs (future compatible)
     if !is_spl_token_program(token_program.key()) {
-        let initialize_immutable_owner_data = build_initialize_immutable_owner_data();
         let initialize_immutable_owner_metas = &[AccountMeta {
             pubkey: associated_token_account.key(),
             is_writable: true,
@@ -440,7 +430,7 @@ pub(crate) fn create_and_initialize_ata(
         let init_immutable_owner_ix = Instruction {
             program_id: token_program.key(),
             accounts: initialize_immutable_owner_metas,
-            data: &initialize_immutable_owner_data,
+            data: &INITIALIZE_IMMUTABLE_OWNER_DATA,
         };
         cpi::invoke(&init_immutable_owner_ix, &[associated_token_account])?;
     }
@@ -791,8 +781,6 @@ pub(crate) fn process_recover_nested(
         &[pda_signer.clone()],
     )?;
 
-    let close_data = build_close_account_data();
-
     let close_metas = &[
         AccountMeta {
             pubkey: recover_accounts.nested_associated_token_account.key(),
@@ -814,7 +802,7 @@ pub(crate) fn process_recover_nested(
     let ix_close = Instruction {
         program_id: recover_accounts.token_program.key(),
         accounts: close_metas,
-        data: &close_data,
+        data: &CLOSE_ACCOUNT_DATA,
     };
 
     invoke_signed(

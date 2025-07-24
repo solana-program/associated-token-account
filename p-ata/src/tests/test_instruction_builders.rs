@@ -1,7 +1,6 @@
 use {
     crate::processor::{
-        build_close_account_data, build_initialize_account3_data,
-        build_initialize_immutable_owner_data, build_transfer_data, CLOSE_ACCOUNT_DISCM,
+        build_initialize_account3_data, build_transfer_data, CLOSE_ACCOUNT_DISCM,
         INITIALIZE_ACCOUNT_3_DISCM, INITIALIZE_IMMUTABLE_OWNER_DISCM, TRANSFER_CHECKED_DISCM,
     },
     pinocchio::pubkey::Pubkey,
@@ -28,14 +27,6 @@ fn test_build_initialize_account3_data_different_owners() {
 
     assert_eq!(data1[0], data2[0]); // Same discriminator
     assert_ne!(&data1[1..], &data2[1..]); // Different owner bytes
-}
-
-#[test]
-fn test_build_initialize_immutable_owner_data() {
-    let data = build_initialize_immutable_owner_data();
-
-    assert_eq!(data.len(), 1);
-    assert_eq!(data[0], INITIALIZE_IMMUTABLE_OWNER_DISCM);
 }
 
 #[test_case(0, 0; "zero_amount_zero_decimals")]
@@ -67,14 +58,6 @@ fn test_build_transfer_data_endianness() {
 }
 
 #[test]
-fn test_build_close_account_data() {
-    let data = build_close_account_data();
-
-    assert_eq!(data.len(), 1);
-    assert_eq!(data[0], CLOSE_ACCOUNT_DISCM);
-}
-
-#[test]
 fn test_instruction_data_deterministic() {
     let owner = Pubkey::from([42u8; 32]);
 
@@ -82,17 +65,9 @@ fn test_instruction_data_deterministic() {
     let data2 = build_initialize_account3_data(&owner);
     assert_eq!(data1, data2);
 
-    let immutable1 = build_initialize_immutable_owner_data();
-    let immutable2 = build_initialize_immutable_owner_data();
-    assert_eq!(immutable1, immutable2);
-
     let transfer1 = build_transfer_data(1000, 6);
     let transfer2 = build_transfer_data(1000, 6);
     assert_eq!(transfer1, transfer2);
-
-    let close1 = build_close_account_data();
-    let close2 = build_close_account_data();
-    assert_eq!(close1, close2);
 }
 
 #[test]

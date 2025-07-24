@@ -164,7 +164,6 @@ fn test_create_token_account_data_structure() {
 
     let data = create_token_account_data(&mint, &owner, amount);
 
-    // Verify structure using our validation helper
     assert!(validate_token_account_structure(&data, &mint, &owner));
     assert!(valid_token_account_data(&data));
 }

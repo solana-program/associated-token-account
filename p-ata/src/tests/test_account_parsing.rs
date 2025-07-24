@@ -3,7 +3,6 @@ use {
     pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey},
 };
 
-// Standard collection types/macros
 use std::{mem, ptr, vec::Vec};
 
 use crate::tests::test_utils::AccountLayout;
@@ -69,7 +68,6 @@ fn test_parse_create_accounts_success_with_rent() {
 
 #[test]
 fn test_parse_create_accounts_error_insufficient() {
-    // Fewer than 6 accounts should error.
     let accounts: Vec<AccountInfo> = (0..5).map(make_test_account).collect();
     assert!(matches!(
         parse_create_accounts(&accounts),
@@ -79,7 +77,6 @@ fn test_parse_create_accounts_error_insufficient() {
 
 #[test]
 fn test_parse_recover_accounts_success() {
-    // 7 accounts – required minimal length.
     let accounts: Vec<AccountInfo> = (30..37).map(|s| make_test_account(s as u8)).collect();
     assert_eq!(accounts.len(), 7);
 

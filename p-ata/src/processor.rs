@@ -388,10 +388,6 @@ pub(crate) fn check_idempotent_account(
 }
 
 /// Compute the required space (in bytes) for the associated token account.
-///
-/// This is extracted from `create_and_initialize_ata` so the heavy lifting is
-/// done once _before_ calling the function, avoiding additional branching
-/// inside the hot path.  Inline to ensure no extra call overhead.
 #[inline(always)]
 pub(crate) fn resolve_token_account_space(
     token_program: &AccountInfo,
@@ -405,10 +401,6 @@ pub(crate) fn resolve_token_account_space(
 }
 
 /// Create and initialize an ATA account with the given bump seed.
-///
-/// All optional inputs (`Rent`, account length) are resolved _before_ calling
-/// this function so the implementation here stays branch-free and hot-path
-/// friendly.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) fn create_and_initialize_ata(
@@ -663,7 +655,6 @@ pub(crate) fn process_recover_nested(
 ) -> ProgramResult {
     let recover_accounts = parse_recover_accounts(accounts)?;
 
-    // Verify owner address derivation
     let (owner_associated_token_address, bump) = derive_canonical_ata_pda(
         recover_accounts.wallet.key(),
         recover_accounts.token_program.key(),
@@ -676,7 +667,6 @@ pub(crate) fn process_recover_nested(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // Verify nested address derivation
     let (nested_associated_token_address, _) = derive_canonical_ata_pda(
         recover_accounts.owner_associated_token_account.key(),
         recover_accounts.token_program.key(),
@@ -688,7 +678,6 @@ pub(crate) fn process_recover_nested(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // Verify destination address derivation
     let (destination_associated_token_address, _) = derive_canonical_ata_pda(
         recover_accounts.wallet.key(),
         recover_accounts.token_program.key(),
@@ -712,7 +701,6 @@ pub(crate) fn process_recover_nested(
             return Err(ProgramError::MissingRequiredSignature);
         }
 
-        // Load and validate multisig state
         let wallet_data_slice = unsafe { recover_accounts.wallet.borrow_data_unchecked() };
         let multisig_state: &Multisig =
             unsafe { spl_token_interface::state::load::<Multisig>(wallet_data_slice)? };

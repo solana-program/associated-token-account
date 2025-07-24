@@ -101,9 +101,88 @@ pub(crate) fn is_spl_token_program(program_id: &Pubkey) -> bool {
     }
 }
 
-/// Get the required account size for a mint using GetAccountDataSize CPI,
-/// except for SPL Token, which has a fixed length.
-/// Returns the account size in bytes
+/// Calculate token account size by parsing mint extension data inline.
+/// This avoids the expensive CPI call to GetAccountDataSize for most cases.
+/// Returns None if unknown/variable-length extensions are found.
+#[inline(always)]
+pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
+    const TOKEN_ACCOUNT_LEN: usize = 165;
+    const ACCOUNT_TYPE_OFFSET: usize = 165; // Account type discriminator position
+
+    // Check if this mint has extensions (must be larger than base + account type)
+    if mint_data.len() <= ACCOUNT_TYPE_OFFSET {
+        // No extensions
+        return Some(TOKEN_ACCOUNT_LEN);
+    }
+
+    let mut account_extensions_size = 0usize;
+    let mut cursor = ACCOUNT_TYPE_OFFSET + 1; // Start after account type discriminator
+
+    while cursor + 4 <= mint_data.len() {
+        // Parse TLV header manually: 2 bytes type + 2 bytes length
+        let extension_type = u16::from_le_bytes([mint_data[cursor], mint_data[cursor + 1]]);
+        let length = u16::from_le_bytes([mint_data[cursor + 2], mint_data[cursor + 3]]);
+
+        if extension_type == 0 {
+            break;
+        } // TypeEnd/Uninitialized
+
+        // Based on token-2022's get_required_init_account_extensions:
+        // Only specific mint extensions require account-side data
+        #[allow(clippy::manual_range_patterns)]
+        #[allow(clippy::identity_op)]
+        match extension_type {
+            1 => {
+                // TransferFeeConfig → requires TransferFeeAmount (8 bytes + 4 TLV overhead)
+                account_extensions_size += 4 + 8; // TLV overhead + data
+            }
+            9 => {
+                // NonTransferable → requires NonTransferableAccount (0 bytes) + ImmutableOwner (0 bytes)
+                account_extensions_size += 4 + 0; // NonTransferableAccount: TLV overhead + data
+                account_extensions_size += 4 + 0; // ImmutableOwner: TLV overhead + data
+            }
+            14 => {
+                // TransferHook → requires TransferHookAccount (1 byte + 4 TLV overhead)
+                account_extensions_size += 4 + 1; // TLV overhead + data
+            }
+            26 => {
+                // Pausable → requires PausableAccount (0 bytes + 4 TLV overhead)
+                account_extensions_size += 4 + 0; // TLV overhead + data
+            }
+            // Known simple mint-only extensions (don't affect account size)
+            2 | 3 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 15 | 17 | 18 | 20 | 24 | 25 | 27 => {
+                // These are simple mint extensions that don't require account data
+            }
+            // Complex extensions - fall back to CPI for safety
+            4 | 5 | 16 => {
+                // ConfidentialTransferMint, ConfidentialTransferAccount, ConfidentialTransferFeeConfig
+                return None; // Complex confidential transfer extensions, fall back to CPI
+            }
+            19 => {
+                // TokenMetadata is variable-length (proven by sized() -> false)
+                return None; // Variable-length, fall back to CPI
+            }
+            21 | 22 | 23 => {
+                // TokenGroup, GroupMemberPointer, TokenGroupMember
+                return None; // Complex group extensions, fall back to CPI
+            }
+            // Unknown or variable-length extensions → fall back to CPI
+            _ => return None,
+        }
+        cursor += 4 + length as usize;
+    }
+
+    // Official token-2022 logic: Only add account type discriminator (+1) when there are account extensions
+    if account_extensions_size > 0 {
+        Some(TOKEN_ACCOUNT_LEN + 1 + account_extensions_size) // +1 for account type discriminator
+    } else {
+        Some(TOKEN_ACCOUNT_LEN) // No account extensions = just base size
+    }
+}
+
+/// Get the required account size for a mint using inline parsing first,
+/// falling back to GetAccountDataSize CPI only when necessary.
+/// Returns the account size in bytes.
 #[inline(always)]
 pub(crate) fn get_token_account_size(
     mint_account: &AccountInfo,
@@ -119,6 +198,13 @@ pub(crate) fn get_token_account_size(
         return Ok(TokenAccount::LEN + 5);
     }
 
+    // Try inline parsing first
+    let mint_data = unsafe { mint_account.borrow_data_unchecked() };
+    if let Some(size) = account_size_from_mint_inline(mint_data) {
+        return Ok(size);
+    }
+
+    // Fallback to CPI for unknown/variable-length extensions
     // ImmutableOwner extension is required for Token-2022 Associated Token Accounts
     let instruction_data = [GET_ACCOUNT_DATA_SIZE_DISCM, 7u8, 0u8]; // [7, 0] = ImmutableOwner as u16
 

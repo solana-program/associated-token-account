@@ -37,6 +37,7 @@ pinocchio-log = { version = "0.4", default-features = false }
 pinocchio-pubkey = { verison = "0.2.4", git = "https://github.com/anza-xyz/pinocchio.git" }
 pinocchio-system = { version = "0.2.3", git = "https://github.com/rustopian/pinocchio.git", branch = "create-account-prefunded" }
 pinocchio-token = "0.3.0"
+solana-program-option = "2.2.1"
 spl-token-interface = { version = "^0", git = "https://github.com/solana-program/token.git" }
 
 [dev-dependencies]

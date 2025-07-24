@@ -1,0 +1,330 @@
+use {
+    crate::processor::account_size_from_mint_inline,
+    solana_program_option::COption,
+    solana_pubkey::Pubkey,
+    spl_token_2022::extension::{
+        default_account_state::DefaultAccountState, group_pointer::GroupPointer,
+        interest_bearing_mint::InterestBearingConfig, metadata_pointer::MetadataPointer,
+        mint_close_authority::MintCloseAuthority, non_transferable::NonTransferable,
+        pausable::PausableConfig, permanent_delegate::PermanentDelegate,
+        transfer_fee::TransferFeeConfig, transfer_hook::TransferHook, BaseStateWithExtensionsMut,
+        ExtensionType, PodStateWithExtensionsMut,
+    },
+    spl_token_2022::pod::PodMint,
+    std::vec,
+    std::vec::Vec,
+};
+
+/// Create a basic mint with no extensions for testing
+fn create_base_mint_data() -> Vec<u8> {
+    const MINT_BASE_SIZE: usize = 82;
+    let mut data = vec![0u8; MINT_BASE_SIZE + 5]; // +5 for account type discriminator
+
+    // Set mint state to Initialized
+    data[0..4].copy_from_slice(&1u32.to_le_bytes());
+
+    // Set account type discriminator (Token-2022 style)
+    data[MINT_BASE_SIZE] = 1; // AccountType::Mint
+
+    data
+}
+
+/// Create mint data with specific extensions using token-2022's official methods
+fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8> {
+    // Calculate required size using official token-2022 method
+    let required_size =
+        ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(extension_types)
+            .expect("Failed to calculate account length");
+
+    let mut data = vec![0u8; required_size];
+
+    // Initialize the mint with extensions
+    let mut mint = PodStateWithExtensionsMut::<PodMint>::unpack_uninitialized(&mut data)
+        .expect("Failed to unpack mint");
+
+    // Set mint state to Initialized
+    mint.base.mint_authority = COption::None.try_into().unwrap();
+    mint.base.supply = 0u64.into();
+    mint.base.decimals = 6;
+    mint.base.is_initialized = true.into();
+    mint.base.freeze_authority = COption::None.try_into().unwrap();
+
+    // Initialize each extension with default values
+    for extension_type in extension_types {
+        match extension_type {
+            ExtensionType::TransferFeeConfig => {
+                let extension = mint
+                    .init_extension::<TransferFeeConfig>(true)
+                    .expect("Failed to init TransferFeeConfig");
+                extension.transfer_fee_config_authority = COption::None.try_into().unwrap();
+                extension.withdraw_withheld_authority = COption::None.try_into().unwrap();
+                extension.withheld_amount = 0u64.into();
+            }
+            ExtensionType::DefaultAccountState => {
+                let extension = mint
+                    .init_extension::<DefaultAccountState>(true)
+                    .expect("Failed to init DefaultAccountState");
+                extension.state = spl_token_2022::state::AccountState::Initialized.into();
+            }
+            ExtensionType::InterestBearingConfig => {
+                let extension = mint
+                    .init_extension::<InterestBearingConfig>(true)
+                    .expect("Failed to init InterestBearingConfig");
+                extension.rate_authority = COption::None.try_into().unwrap();
+                extension.initialization_timestamp = 0i64.into();
+                extension.pre_update_average_rate = 0i16.into();
+                extension.last_update_timestamp = 0i64.into();
+                extension.current_rate = 0i16.into();
+            }
+            ExtensionType::MintCloseAuthority => {
+                let extension = mint
+                    .init_extension::<MintCloseAuthority>(true)
+                    .expect("Failed to init MintCloseAuthority");
+                extension.close_authority = COption::None.try_into().unwrap();
+            }
+            ExtensionType::PermanentDelegate => {
+                let extension = mint
+                    .init_extension::<PermanentDelegate>(true)
+                    .expect("Failed to init PermanentDelegate");
+                extension.delegate = COption::None.try_into().unwrap();
+            }
+            ExtensionType::TransferHook => {
+                let extension = mint
+                    .init_extension::<TransferHook>(true)
+                    .expect("Failed to init TransferHook");
+                extension.authority = COption::None.try_into().unwrap();
+                extension.program_id = COption::None.try_into().unwrap();
+            }
+            ExtensionType::MetadataPointer => {
+                let extension = mint
+                    .init_extension::<MetadataPointer>(true)
+                    .expect("Failed to init MetadataPointer");
+                extension.authority = COption::None.try_into().unwrap();
+                extension.metadata_address = COption::None.try_into().unwrap();
+            }
+            ExtensionType::GroupPointer => {
+                let extension = mint
+                    .init_extension::<GroupPointer>(true)
+                    .expect("Failed to init GroupPointer");
+                extension.authority = COption::None.try_into().unwrap();
+                extension.group_address = COption::None.try_into().unwrap();
+            }
+            ExtensionType::Pausable => {
+                let extension = mint
+                    .init_extension::<PausableConfig>(true)
+                    .expect("Failed to init PausableConfig");
+                extension.authority = COption::Some(Pubkey::new_from_array([1; 32]))
+                    .try_into()
+                    .unwrap();
+                extension.paused = false.into();
+            }
+            ExtensionType::NonTransferable => {
+                let _extension = mint
+                    .init_extension::<NonTransferable>(true)
+                    .expect("Failed to init NonTransferable");
+                // NonTransferable is a zero-sized struct, no fields to initialize
+            }
+            _ => {
+                // Skip extensions we don't test
+            }
+        }
+    }
+
+    data
+}
+
+/// Calculate expected account size using token-2022's official method
+fn calculate_expected_account_size(mint_extensions: &[ExtensionType]) -> usize {
+    let account_extensions = ExtensionType::get_required_init_account_extensions(mint_extensions);
+    ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&account_extensions)
+        .expect("Failed to calculate account length")
+}
+
+#[test]
+fn test_no_extensions() {
+    let mint_data = create_base_mint_data();
+    let expected_size = 165; // Base account size for Token-2022
+
+    let result = account_size_from_mint_inline(&mint_data);
+    assert_eq!(
+        result,
+        Some(expected_size),
+        "No extensions should return base account size"
+    );
+}
+
+#[test]
+fn test_transfer_fee_config() {
+    let extensions = vec![ExtensionType::TransferFeeConfig];
+    let mint_data = create_mint_data_with_extensions(&extensions);
+    let expected_size = calculate_expected_account_size(&extensions);
+
+    let result = account_size_from_mint_inline(&mint_data);
+    assert_eq!(
+        result,
+        Some(expected_size),
+        "TransferFeeConfig should add TransferFeeAmount extension to account size"
+    );
+}
+
+#[test]
+fn test_transfer_hook() {
+    let extensions = vec![ExtensionType::TransferHook];
+    let mint_data = create_mint_data_with_extensions(&extensions);
+    let expected_size = calculate_expected_account_size(&extensions);
+
+    let result = account_size_from_mint_inline(&mint_data);
+    assert_eq!(
+        result,
+        Some(expected_size),
+        "TransferHook should add TransferHookAccount extension to account size"
+    );
+}
+
+#[test]
+fn test_pausable_config() {
+    let extensions = vec![ExtensionType::Pausable];
+    let mint_data = create_mint_data_with_extensions(&extensions);
+    let expected_size = calculate_expected_account_size(&extensions);
+
+    let result = account_size_from_mint_inline(&mint_data);
+    assert_eq!(
+        result,
+        Some(expected_size),
+        "PausableConfig should add PausableAccount extension to account size"
+    );
+}
+
+#[test]
+fn test_extensions_without_account_data() {
+    let extensions = vec![
+        ExtensionType::DefaultAccountState,
+        ExtensionType::InterestBearingConfig,
+        ExtensionType::MintCloseAuthority,
+        ExtensionType::PermanentDelegate,
+        ExtensionType::MetadataPointer,
+        ExtensionType::GroupPointer,
+    ];
+
+    for extension in extensions {
+        let mint_data = create_mint_data_with_extensions(&vec![extension]);
+        let expected_size = calculate_expected_account_size(&vec![extension]);
+
+        let result = account_size_from_mint_inline(&mint_data);
+        assert_eq!(
+            result,
+            Some(expected_size),
+            "Extension {:?} should match official calculation",
+            extension
+        );
+
+        // These should all return base account size since they don't require account-side data
+        assert_eq!(
+            expected_size, 165,
+            "Extension {:?} should not add to account size",
+            extension
+        );
+    }
+}
+
+#[test]
+fn test_multiple_extensions_with_account_data() {
+    let extensions = vec![
+        ExtensionType::TransferFeeConfig,
+        ExtensionType::TransferHook,
+        ExtensionType::Pausable,
+    ];
+
+    let mint_data = create_mint_data_with_extensions(&extensions);
+    let expected_size = calculate_expected_account_size(&extensions);
+
+    let result = account_size_from_mint_inline(&mint_data);
+    assert_eq!(
+        result,
+        Some(expected_size),
+        "Multiple extensions should correctly sum account sizes"
+    );
+}
+
+#[test]
+fn test_mixed_extensions() {
+    let extensions = vec![
+        ExtensionType::TransferFeeConfig,
+        ExtensionType::DefaultAccountState,
+        ExtensionType::TransferHook,
+        ExtensionType::InterestBearingConfig,
+        ExtensionType::MetadataPointer,
+    ];
+
+    let mint_data = create_mint_data_with_extensions(&extensions);
+    let expected_size = calculate_expected_account_size(&extensions);
+
+    let result = account_size_from_mint_inline(&mint_data);
+    assert_eq!(
+        result,
+        Some(expected_size),
+        "Mixed extensions should correctly calculate only account-side sizes"
+    );
+}
+
+#[test]
+fn test_unsupported_extensions_return_none() {
+    // These extensions should cause our function to return None (fall back to CPI)
+    let unsupported_extensions = vec![
+        ExtensionType::ConfidentialTransferMint,
+        ExtensionType::ConfidentialTransferFeeConfig,
+        ExtensionType::TokenMetadata,
+        ExtensionType::TokenGroup,
+        ExtensionType::TokenGroupMember,
+    ];
+
+    for extension in unsupported_extensions {
+        // Create proper mint data with the extension properly positioned
+        let mut mint_data = create_base_mint_data();
+        // Extend to have enough space for account type + TLV header
+        mint_data.resize(170, 0);
+
+        // Set account type discriminator at position 165
+        mint_data[165] = 1; // AccountType::Mint
+
+        // Add the extension header at position 166
+        let extension_type = extension as u16;
+        mint_data[166..168].copy_from_slice(&extension_type.to_le_bytes());
+        mint_data[168..170].copy_from_slice(&[0u8, 0u8]); // length = 0
+
+        let result = account_size_from_mint_inline(&mint_data);
+        assert_eq!(
+            result, None,
+            "Unsupported extension {:?} should return None",
+            extension
+        );
+    }
+}
+
+#[test]
+fn test_non_transferable_extension() {
+    let extensions = vec![ExtensionType::NonTransferable];
+    let mint_data = create_mint_data_with_extensions(&extensions);
+    let expected_size = calculate_expected_account_size(&extensions);
+
+    let result = account_size_from_mint_inline(&mint_data);
+    assert_eq!(
+        result,
+        Some(expected_size),
+        "NonTransferable should be supported"
+    );
+}
+
+#[test]
+fn test_empty_extension_data() {
+    let mut mint_data = create_base_mint_data();
+    // Add TypeEnd marker (extension_type = 0)
+    mint_data.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]);
+
+    let result = account_size_from_mint_inline(&mint_data);
+    assert_eq!(
+        result,
+        Some(165),
+        "Empty extension data should return base size"
+    );
+}

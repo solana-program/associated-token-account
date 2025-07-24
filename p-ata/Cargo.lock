@@ -3214,6 +3214,7 @@ dependencies = [
  "solana-keypair",
  "solana-logger",
  "solana-program",
+ "solana-program-option",
  "solana-program-test",
  "solana-pubkey",
  "solana-sdk",

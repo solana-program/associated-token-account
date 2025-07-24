@@ -42,7 +42,6 @@ fn create_instruction_data_with_length(discriminator: u8, bump: u8, account_len:
 fn test_account_length_at_max_sane_limit_succeeds() {
     let mut mollusk = Mollusk::default();
 
-    // Add our program
     let program_id = spl_associated_token_account::id();
     mollusk.add_program(
         &program_id,
@@ -50,7 +49,6 @@ fn test_account_length_at_max_sane_limit_succeeds() {
         &LOADER_V3,
     );
 
-    // Add token-2022 program (supports extended account lengths)
     mollusk.add_program(
         &spl_token_2022::id(),
         "programs/token-2022/target/deploy/spl_token_2022",
@@ -134,7 +132,6 @@ fn test_account_length_at_max_sane_limit_succeeds() {
         ),
     ];
 
-    // Execute the instruction - max sane limit should succeed
     mollusk.process_and_validate_instruction(&instruction, &accounts, &[Check::success()]);
 }
 
@@ -142,7 +139,6 @@ fn test_account_length_at_max_sane_limit_succeeds() {
 fn test_account_length_over_max_sane_limit_fails() {
     let mut mollusk = Mollusk::default();
 
-    // Add our program
     let program_id = spl_associated_token_account::id();
     mollusk.add_program(
         &program_id,
@@ -150,7 +146,6 @@ fn test_account_length_over_max_sane_limit_fails() {
         &LOADER_V3,
     );
 
-    // Add token-2022 program (supports extended account lengths)
     mollusk.add_program(
         &spl_token_2022::id(),
         "programs/token-2022/target/deploy/spl_token_2022",
@@ -234,7 +229,6 @@ fn test_account_length_over_max_sane_limit_fails() {
         ),
     ];
 
-    // Execute the instruction - over max sane limit should fail with InvalidInstructionData
     mollusk.process_and_validate_instruction(
         &instruction,
         &accounts,
@@ -244,7 +238,6 @@ fn test_account_length_over_max_sane_limit_fails() {
 
 #[test]
 fn test_account_length_boundary_values() {
-    // Test various boundary values
     let test_cases = vec![
         (170, "standard extended token account"),
         (512, "small extension"),
@@ -253,12 +246,12 @@ fn test_account_length_boundary_values() {
         (MAX_SANE_ACCOUNT_LENGTH, "at limit"),
         (MAX_SANE_ACCOUNT_LENGTH + 1, "just over limit"),
         (4096, "way over limit"),
+        (65535, "max over limit"),
     ];
 
     for (length, _description) in test_cases {
         let mut mollusk = Mollusk::default();
 
-        // Add our program
         let program_id = spl_associated_token_account::id();
         mollusk.add_program(
             &program_id,
@@ -266,7 +259,6 @@ fn test_account_length_boundary_values() {
             &LOADER_V3,
         );
 
-        // Add token-2022 program (supports extended account lengths)
         mollusk.add_program(
             &spl_token_2022::id(),
             "programs/token-2022/target/deploy/spl_token_2022",
@@ -350,7 +342,6 @@ fn test_account_length_boundary_values() {
             ),
         ];
 
-        // Expected behavior: <= MAX_SANE_ACCOUNT_LENGTH should succeed, > MAX_SANE_ACCOUNT_LENGTH should fail
         if length <= MAX_SANE_ACCOUNT_LENGTH {
             mollusk.process_and_validate_instruction(&instruction, &accounts, &[Check::success()]);
         } else {

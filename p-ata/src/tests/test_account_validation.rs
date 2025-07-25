@@ -1,8 +1,7 @@
 use {
     crate::{
         processor::{
-            is_valid_multisig_data, valid_token_account_data, validate_token_account_mint,
-            validate_token_account_owner,
+            valid_token_account_data, validate_token_account_mint, validate_token_account_owner,
         },
         tests::test_utils::{
             create_multisig_data, create_token_account_data, validate_token_account_structure,
@@ -16,46 +15,6 @@ use {
 };
 
 use std::vec;
-
-#[test]
-fn test_is_valid_multisig_data_valid() {
-    let mut data = [0u8; Multisig::LEN];
-    data[0] = 2; // m = 2
-    data[1] = 3; // n = 3
-    data[2] = 1; // initialized = true
-
-    assert!(is_valid_multisig_data(&data));
-}
-
-#[test]
-fn test_is_valid_multisig_data_invalid_length() {
-    let data = [0u8; 100];
-    assert!(!is_valid_multisig_data(&data));
-}
-
-#[test_case(0, 3; "m_zero")]
-#[test_case(12, 3; "m_too_high")]
-#[test_case(3, 0; "n_zero")]
-#[test_case(3, 12; "n_too_high")]
-#[test_case(5, 3; "m_greater_than_n")]
-fn test_is_valid_multisig_data_invalid_parameters(m: u8, n: u8) {
-    let mut data = [0u8; Multisig::LEN];
-    data[0] = m;
-    data[1] = n;
-    data[2] = 1; // initialized
-
-    assert!(!is_valid_multisig_data(&data));
-}
-
-#[test]
-fn test_is_valid_multisig_data_not_initialized() {
-    let mut data = [0u8; Multisig::LEN];
-    data[0] = 2; // m = 2
-    data[1] = 3; // n = 3
-    data[2] = 0; // not initialized
-
-    assert!(!is_valid_multisig_data(&data));
-}
 
 #[test]
 fn test_valid_token_account_data_regular_account() {
@@ -166,16 +125,4 @@ fn test_create_token_account_data_structure() {
 
     assert!(validate_token_account_structure(&data, &mint, &owner));
     assert!(valid_token_account_data(&data));
-}
-
-#[test]
-fn test_multisig_data_structure() {
-    let signers = [
-        Pubkey::from([1u8; 32]),
-        Pubkey::from([2u8; 32]),
-        Pubkey::from([3u8; 32]),
-    ];
-
-    let data = create_multisig_data(2, 3, &signers);
-    assert!(is_valid_multisig_data(&data));
 }

@@ -239,34 +239,6 @@ pub(crate) fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
     mint_account.data_len() > MINT_WITH_TYPE_SIZE
 }
 
-/// Validate that account data represents a valid multisig account.
-/// This ensures we don't confuse a multisig with a token account of the same length.
-#[inline(always)]
-pub(crate) fn is_valid_multisig_data(account_data: &[u8]) -> bool {
-    if account_data.len() != Multisig::LEN {
-        return false;
-    }
-
-    let m = account_data[0];
-    let n = account_data[1];
-    let is_initialized = account_data[2];
-
-    // Validate m and n are within valid signer range (1-11)
-    if !(1..=11).contains(&m) || !(1..=11).contains(&n) {
-        return false;
-    }
-
-    if m > n {
-        return false;
-    }
-
-    if is_initialized != 1 {
-        return false;
-    }
-
-    true
-}
-
 /// Check if account data represents an initialized token account.
 /// Mimics p-token's is_initialized_account check.
 ///
@@ -289,13 +261,11 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
     }
 
     // Token-2022's GenericTokenAccount::valid_account_data assumes Multisig
-    // if account_data length is Multisig::LEN. To prevent collisions in future
-    // token programs where account_data.len() may happen to be the same as
-    // Multisig::LEN, we also check it's a valid multisig, if the length matches.
-    // Otherwise, the token program must have its account type discriminator at
-    // account_data[TokenAccount::LEN].
+    // if account_data length is Multisig::LEN. Collisions are prevented by
+    // adding a byte if a token account happens to have the same length as
+    // Multisig::LEN.
     if account_data.len() > TokenAccount::LEN {
-        if account_data.len() == Multisig::LEN && is_valid_multisig_data(account_data) {
+        if account_data.len() == Multisig::LEN {
             return false;
         }
         // SAFETY: TokenAccount::LEN is compile-ensured to be == 165, and in

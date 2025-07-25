@@ -101,6 +101,19 @@ pub(crate) fn is_spl_token_program(program_id: &Pubkey) -> bool {
     }
 }
 
+/// Check if the given program ID is Token-2022
+#[inline(always)]
+pub(crate) fn is_token_2022_program(program_id: &Pubkey) -> bool {
+    const TOKEN_2022_PROGRAM_ID: Pubkey =
+        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+    // SAFETY: Safe because we are comparing the pointers of the
+    // program_id and TOKEN_2022_PROGRAM_ID, which are both const Pubkeys
+    unsafe {
+        core::slice::from_raw_parts(program_id.as_ref().as_ptr(), 32)
+            == core::slice::from_raw_parts(TOKEN_2022_PROGRAM_ID.as_ref().as_ptr(), 32)
+    }
+}
+
 /// Calculate token account size by parsing mint extension data inline.
 /// This avoids the expensive CPI call to GetAccountDataSize for most cases.
 /// Returns None if unknown/variable-length extensions are found.
@@ -138,7 +151,7 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
             }
             9 => {
                 // NonTransferable → requires NonTransferableAccount (0 bytes)
-                // (ImmutableOwner is already accounted for globally)
+                // (ImmutableOwner is already accounted for globally, below)
                 account_extensions_size += 4 + 0; // NonTransferableAccount: TLV overhead + data
             }
             14 => {
@@ -172,7 +185,7 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
         cursor += 4 + length as usize;
     }
 
-    // For Token-2022 ATAs, we ALWAYS include:
+    // For Token-2022 ATAs, we always include:
     // - Account type discriminator (+1 byte)
     // - ImmutableOwner extension (+4 bytes TLV overhead + 0 bytes data = 4 bytes)
     // - Any additional extensions derived from mint extensions
@@ -197,13 +210,15 @@ pub(crate) fn get_token_account_size(
         return Ok(TokenAccount::LEN + 5);
     }
 
-    // Try inline parsing first
-    let mint_data = unsafe { mint_account.borrow_data_unchecked() };
-    if let Some(size) = account_size_from_mint_inline(mint_data) {
-        return Ok(size);
+    if is_token_2022_program(token_program.key()) {
+        // Try inline parsing first for Token-2022
+        let mint_data = unsafe { mint_account.borrow_data_unchecked() };
+        if let Some(size) = account_size_from_mint_inline(mint_data) {
+            return Ok(size);
+        }
     }
 
-    // Fallback to CPI for unknown/variable-length extensions
+    // Fallback to CPI for unknown/variable-length extensions or unknown token programs
     // ImmutableOwner extension is required for Token-2022 Associated Token Accounts
     let instruction_data = [GET_ACCOUNT_DATA_SIZE_DISCM, 7u8, 0u8]; // [7, 0] = ImmutableOwner as u16
 

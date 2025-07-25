@@ -121,9 +121,15 @@ impl StandardAccountSet {
         }
     }
 
-    /// Use Token-2022 mint instead of standard mint.
+    /// Update the mint to use Token-2022 specific layout
     pub fn with_token_2022_mint(mut self, decimals: u8) -> Self {
         self.mint.1 = AccountBuilder::token_2022_mint_account(decimals, &self.token_program.0);
+        self
+    }
+
+    /// Update the mint to use extended mint with multiple extensions
+    pub fn with_extended_mint(mut self, decimals: u8) -> Self {
+        self.mint.1 = AccountBuilder::extended_mint(decimals, &self.token_program.0);
         self
     }
 

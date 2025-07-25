@@ -4,6 +4,8 @@ pub mod lamports {
     pub const ONE_SOL: u64 = 1_000_000_000; // 1 SOL
 
     pub const TOKEN_ACCOUNT_RENT_EXEMPT: u64 = 2_000_000;
+    pub const MINT_ACCOUNT_RENT_EXEMPT: u64 = 2_000_000;
+    pub const EXTENDED_MINT_ACCOUNT_RENT_EXEMPT: u64 = 3_000_000; // Higher for extended mints
 }
 
 /// Account data sizes used in tests

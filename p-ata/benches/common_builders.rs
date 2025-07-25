@@ -237,6 +237,18 @@ impl CommonTestCaseBuilder {
                 special_account_mods: vec![],
                 failure_mode: None,
             },
+            BaseTestType::CreateExtended => TestCaseConfig {
+                base_test,
+                token_program: Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
+                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                )),
+                instruction_discriminator: 0,
+                setup_topup: false,
+                setup_existing_ata: false,
+                use_fixed_mint_owner_payer: true,
+                special_account_mods: vec![],
+                failure_mode: None,
+            },
             BaseTestType::RecoverNested => TestCaseConfig {
                 base_test,
                 token_program: *token_program_id,
@@ -706,6 +718,11 @@ impl CommonTestCaseBuilder {
             account_set = account_set.with_token_2022_mint(0);
         }
 
+        // For CreateExtended test, use extended mint with multiple extensions
+        if matches!(config.base_test, BaseTestType::CreateExtended) {
+            account_set = account_set.with_extended_mint(0);
+        }
+
         // Convert to accounts vector, adding rent sysvar if needed
         let accounts = if variant.rent_arg {
             account_set.with_rent_sysvar().to_vec()
@@ -895,10 +912,31 @@ impl CommonTestCaseBuilder {
                 == Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
                     "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
                 )) {
-                ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&[
-                    ExtensionType::ImmutableOwner,
-                ])
-                .expect("failed to calculate Token-2022 account length") as u16
+                // For CreateExtended test, calculate account size based on the mint extensions
+                if matches!(config.base_test, BaseTestType::CreateExtended) {
+                    // Calculate account extensions required by the extended mint
+                    let account_extensions =
+                        ExtensionType::get_required_init_account_extensions(&[
+                            ExtensionType::TransferFeeConfig,   // → requires TransferFeeAmount
+                            ExtensionType::NonTransferable,     // → requires NonTransferableAccount
+                            ExtensionType::TransferHook,        // → requires TransferHookAccount
+                            ExtensionType::DefaultAccountState, // → mint-only (no account extension)
+                            ExtensionType::MetadataPointer, // → mint-only (no account extension)
+                        ]);
+
+                    ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
+                        &account_extensions,
+                    )
+                    .expect("failed to calculate extended account length")
+                        as u16
+                } else {
+                    // Standard Token-2022 with just ImmutableOwner
+                    ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&[
+                        ExtensionType::ImmutableOwner,
+                    ])
+                    .expect("failed to calculate Token-2022 account length")
+                        as u16
+                }
             } else {
                 165 // Standard token account size
             };
@@ -1187,6 +1225,7 @@ pub fn calculate_test_number(
         BaseTestType::CreateTopup => 30,
         BaseTestType::CreateTopupNoCap => 40,
         BaseTestType::CreateToken2022 => 50,
+        BaseTestType::CreateExtended => 51,
         BaseTestType::RecoverNested => 60,
         BaseTestType::RecoverMultisig => 70,
         BaseTestType::WorstCase => 80,
@@ -1225,9 +1264,10 @@ pub fn calculate_failure_test_number(base_test: BaseTestType, variant: TestVaria
             BaseTestType::CreateTopup => 20,
             BaseTestType::CreateTopupNoCap => 30,
             BaseTestType::CreateToken2022 => 40,
-            BaseTestType::RecoverNested => 50,
-            BaseTestType::RecoverMultisig => 60,
-            BaseTestType::WorstCase => 70,
+            BaseTestType::CreateExtended => 50,
+            BaseTestType::RecoverNested => 60,
+            BaseTestType::RecoverMultisig => 70,
+            BaseTestType::WorstCase => 80,
         };
 
     let variant_offset = match (

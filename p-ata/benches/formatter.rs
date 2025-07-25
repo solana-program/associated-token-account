@@ -22,7 +22,9 @@ pub fn get_all_optimizations_variant(base_test: BaseTestType) -> Option<TestVari
             Some(TestVariant::RENT_BUMP)
         }
         BaseTestType::CreateIdempotent => Some(TestVariant::BASE),
-        BaseTestType::CreateToken2022 => Some(TestVariant::RENT_BUMP_LEN),
+        BaseTestType::CreateToken2022 | BaseTestType::CreateExtended => {
+            Some(TestVariant::RENT_BUMP_LEN)
+        }
         BaseTestType::RecoverNested | BaseTestType::RecoverMultisig => Some(TestVariant::BUMP),
         _ => None,
     }

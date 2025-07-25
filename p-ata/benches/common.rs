@@ -79,6 +79,87 @@ impl AccountBuilder {
         data
     }
 
+    /// Create mint data with multiple common extensions using Token-2022's official methods
+    /// Uses extensions that are supported by our inline account size calculation to avoid CPI
+    pub fn extended_mint_data_with_common_extensions(decimals: u8) -> Vec<u8> {
+        use solana_program_option::COption;
+        use spl_token_2022::{
+            extension::{
+                default_account_state::DefaultAccountState, metadata_pointer::MetadataPointer,
+                non_transferable::NonTransferable, transfer_fee::TransferFeeConfig,
+                transfer_hook::TransferHook, BaseStateWithExtensionsMut, PodStateWithExtensionsMut,
+            },
+            pod::PodMint,
+            state::AccountState,
+        };
+
+        // Use extensions that are supported by our inline helper
+        let extension_types = vec![
+            ExtensionType::TransferFeeConfig, // Adds TransferFeeAmount to account
+            ExtensionType::NonTransferable,   // Adds NonTransferableAccount to account
+            ExtensionType::TransferHook,      // Adds TransferHookAccount to account
+            ExtensionType::DefaultAccountState, // Mint-only extension
+            ExtensionType::MetadataPointer,   // Mint-only extension
+        ];
+
+        let required_size =
+            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(
+                &extension_types,
+            )
+            .expect("Failed to calculate account length");
+
+        let mut data = vec![0u8; required_size];
+
+        let mut mint = PodStateWithExtensionsMut::<PodMint>::unpack_uninitialized(&mut data)
+            .expect("Failed to unpack mint");
+
+        // Initialize base mint fields
+        mint.base.mint_authority = COption::None.try_into().unwrap();
+        mint.base.supply = 0u64.into();
+        mint.base.decimals = decimals;
+        mint.base.is_initialized = true.into();
+        mint.base.freeze_authority = COption::None.try_into().unwrap();
+
+        // Initialize TransferFeeConfig extension
+        let transfer_fee_config = mint
+            .init_extension::<TransferFeeConfig>(true)
+            .expect("Failed to init TransferFeeConfig");
+        transfer_fee_config.transfer_fee_config_authority = COption::None.try_into().unwrap();
+        transfer_fee_config.withdraw_withheld_authority = COption::None.try_into().unwrap();
+        transfer_fee_config.withheld_amount = 0u64.into();
+
+        // Initialize NonTransferable extension
+        let _non_transferable = mint
+            .init_extension::<NonTransferable>(true)
+            .expect("Failed to init NonTransferable");
+
+        // Initialize TransferHook extension
+        let transfer_hook = mint
+            .init_extension::<TransferHook>(true)
+            .expect("Failed to init TransferHook");
+        transfer_hook.authority = COption::None.try_into().unwrap();
+        transfer_hook.program_id = COption::None.try_into().unwrap();
+
+        // Initialize DefaultAccountState extension
+        let default_account_state = mint
+            .init_extension::<DefaultAccountState>(true)
+            .expect("Failed to init DefaultAccountState");
+        default_account_state.state = AccountState::Initialized.into();
+
+        // Initialize MetadataPointer extension
+        let metadata_pointer = mint
+            .init_extension::<MetadataPointer>(true)
+            .expect("Failed to init MetadataPointer");
+        metadata_pointer.authority = COption::None.try_into().unwrap();
+        metadata_pointer.metadata_address = COption::None.try_into().unwrap();
+
+        // Initialize the account type to mark as a proper mint
+        mint.init_account_type()
+            .expect("Failed to init account type");
+
+        data
+    }
+
     pub fn multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
         let byte_refs: Vec<&[u8; 32]> = signer_pubkeys
             .iter()
@@ -116,28 +197,36 @@ impl AccountBuilder {
         }
     }
 
-    pub fn mint_account(decimals: u8, token_program_id: &Pubkey, extended: bool) -> Account {
+    pub fn mint(decimals: u8, token_program_id: &Pubkey) -> Account {
         Account {
-            lamports: ONE_SOL,
-            data: if extended {
-                Self::extended_mint_data(decimals)
-            } else {
-                Self::mint_data(decimals)
-            },
+            lamports: MINT_ACCOUNT_RENT_EXEMPT,
+            data: Self::mint_data(decimals),
             owner: *token_program_id,
             executable: false,
             rent_epoch: 0,
         }
     }
 
-    pub fn token_2022_mint_account(decimals: u8, token_program_id: &Pubkey) -> Account {
+    pub fn extended_mint(decimals: u8, token_program_id: &Pubkey) -> Account {
         Account {
-            lamports: ONE_SOL,
-            data: Self::token_2022_mint_data(decimals),
+            lamports: EXTENDED_MINT_ACCOUNT_RENT_EXEMPT, // Use extended mint rent amount
+            data: Self::extended_mint_data_with_common_extensions(decimals),
             owner: *token_program_id,
             executable: false,
             rent_epoch: 0,
         }
+    }
+
+    pub fn mint_account(decimals: u8, token_program_id: &Pubkey, extended: bool) -> Account {
+        if extended {
+            Self::extended_mint(decimals, token_program_id)
+        } else {
+            Self::mint(decimals, token_program_id)
+        }
+    }
+
+    pub fn token_2022_mint_account(decimals: u8, token_program_id: &Pubkey) -> Account {
+        Self::mint(decimals, token_program_id)
     }
 
     pub fn token_2022_mint_data(decimals: u8) -> Vec<u8> {
@@ -1293,6 +1382,7 @@ pub enum BaseTestType {
     CreateTopup,
     CreateTopupNoCap,
     CreateToken2022,
+    CreateExtended,
     RecoverNested,
     RecoverMultisig,
     WorstCase,

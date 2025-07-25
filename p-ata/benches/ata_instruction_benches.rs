@@ -98,6 +98,17 @@ static TEST_CONFIGS: &[TestConfiguration] = &[
         ],
     },
     TestConfiguration {
+        base_test: BaseTestType::CreateExtended,
+        variants: &[
+            TestVariant::BASE,
+            TestVariant::RENT,
+            TestVariant::BUMP,
+            TestVariant::RENT_BUMP,
+            TestVariant::BUMP_LEN,
+            TestVariant::RENT_BUMP_LEN,
+        ],
+    },
+    TestConfiguration {
         base_test: BaseTestType::RecoverNested,
         variants: &[TestVariant::BASE, TestVariant::RENT, TestVariant::BUMP],
     },

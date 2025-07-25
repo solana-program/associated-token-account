@@ -93,12 +93,7 @@ pub(crate) fn derive_canonical_ata_pda(
 pub(crate) fn is_spl_token_program(program_id: &Pubkey) -> bool {
     const SPL_TOKEN_PROGRAM_ID: Pubkey =
         pinocchio_pubkey::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-    // SAFETY: Safe because we are comparing the pointers of the
-    // program_id and SPL_TOKEN_PROGRAM_ID, which are both const Pubkeys
-    unsafe {
-        core::slice::from_raw_parts(program_id.as_ref().as_ptr(), 32)
-            == core::slice::from_raw_parts(SPL_TOKEN_PROGRAM_ID.as_ref().as_ptr(), 32)
-    }
+    *program_id == SPL_TOKEN_PROGRAM_ID
 }
 
 /// Check if the given program ID is Token-2022
@@ -106,12 +101,7 @@ pub(crate) fn is_spl_token_program(program_id: &Pubkey) -> bool {
 pub(crate) fn is_token_2022_program(program_id: &Pubkey) -> bool {
     const TOKEN_2022_PROGRAM_ID: Pubkey =
         pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-    // SAFETY: Safe because we are comparing the pointers of the
-    // program_id and TOKEN_2022_PROGRAM_ID, which are both const Pubkeys
-    unsafe {
-        core::slice::from_raw_parts(program_id.as_ref().as_ptr(), 32)
-            == core::slice::from_raw_parts(TOKEN_2022_PROGRAM_ID.as_ref().as_ptr(), 32)
-    }
+    *program_id == TOKEN_2022_PROGRAM_ID
 }
 
 /// Calculate token account size by parsing mint extension data inline.

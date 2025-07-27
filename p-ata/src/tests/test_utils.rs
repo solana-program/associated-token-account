@@ -10,6 +10,12 @@ use std::{vec, vec::Vec};
 
 pub const SPL_TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
+// Shared constants for mollusk testing
+pub const NATIVE_LOADER_ID: SolanaPubkey = SolanaPubkey::new_from_array([
+    5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
+    101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
+]);
+
 /// Matches the pinocchio Account struct.
 /// Account fields are private, so this struct allows more readable
 /// use of them in tests.
@@ -25,6 +31,202 @@ pub struct AccountLayout {
     pub owner: Pubkey,
     pub lamports: u64,
     pub data_len: u64,
+}
+
+// ---- Shared Mollusk Test Utilities ----
+
+#[cfg(test)]
+use {
+    mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
+    solana_instruction::{AccountMeta, Instruction},
+    solana_pubkey::Pubkey as SolanaPubkey,
+    solana_sdk::{account::Account, signature::Keypair, signer::Signer, system_program, sysvar},
+};
+
+/// Common mollusk setup with ATA program and token program
+#[cfg(test)]
+pub fn setup_mollusk_with_programs(token_program_id: &SolanaPubkey) -> Mollusk {
+    let ata_program_id = spl_associated_token_account::id();
+    let mut mollusk = Mollusk::default();
+
+    mollusk.add_program(
+        &ata_program_id,
+        "target/deploy/pinocchio_ata_program",
+        &LOADER_V3,
+    );
+
+    let program_path = if *token_program_id == spl_token_2022::id() {
+        "programs/token-2022/target/deploy/spl_token_2022"
+    } else {
+        "programs/token/target/deploy/pinocchio_token_program"
+    };
+
+    mollusk.add_program(token_program_id, program_path, &LOADER_V3);
+    mollusk
+}
+
+/// Create standard base accounts needed for mollusk tests
+#[cfg(test)]
+pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(SolanaPubkey, Account)> {
+    [
+        (
+            payer.pubkey(),
+            Account::new(10_000_000_000, 0, &system_program::id()),
+        ),
+        (
+            system_program::id(),
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: NATIVE_LOADER_ID,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        // Properly initialize the Rent sysvar with realistic parameters instead of an all-zero placeholder.
+        {
+            // Use the same default rent values that Mollusk exposes so tests use the exact same
+            // parameters as the program logic. This prevents mismatches when calculating the
+            // minimum balance required for rent-exemption.
+            use solana_sdk::rent::Rent;
+
+            let rent = Rent::default();
+            let rent_data = create_rent_data(
+                rent.lamports_per_byte_year,
+                rent.exemption_threshold,
+                rent.burn_percent,
+            );
+
+            (
+                sysvar::rent::id(),
+                Account {
+                    lamports: 0,
+                    data: rent_data,
+                    owner: sysvar::id(),
+                    executable: false,
+                    rent_epoch: 0,
+                },
+            )
+        },
+    ]
+    .to_vec()
+}
+
+/// Create standard base accounts with token program
+#[cfg(test)]
+pub fn create_mollusk_base_accounts_with_token(
+    payer: &Keypair,
+    token_program_id: &SolanaPubkey,
+) -> Vec<(SolanaPubkey, Account)> {
+    let mut accounts = create_mollusk_base_accounts(payer);
+
+    accounts.push((
+        *token_program_id,
+        Account {
+            lamports: 0,
+            data: Vec::new(),
+            owner: LOADER_V3,
+            executable: true,
+            rent_epoch: 0,
+        },
+    ));
+
+    accounts
+}
+
+/// Build standard create associated token account instruction
+#[cfg(test)]
+pub fn build_create_ata_instruction(
+    ata_program_id: SolanaPubkey,
+    payer: SolanaPubkey,
+    ata_address: SolanaPubkey,
+    wallet: SolanaPubkey,
+    mint: SolanaPubkey,
+    token_program: SolanaPubkey,
+) -> Instruction {
+    let accounts = [
+        AccountMeta::new(payer, true),
+        AccountMeta::new(ata_address, false),
+        AccountMeta::new_readonly(wallet, false),
+        AccountMeta::new_readonly(mint, false),
+        AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(token_program, false),
+        AccountMeta::new_readonly(sysvar::rent::id(), false),
+    ];
+
+    Instruction {
+        program_id: ata_program_id,
+        accounts: accounts.to_vec(),
+        data: [0u8].to_vec(), // discriminator 0 (Create)
+    }
+}
+
+/// Build create idempotent associated token account instruction
+#[cfg(test)]
+pub fn build_create_idempotent_ata_instruction(
+    ata_program_id: SolanaPubkey,
+    payer: SolanaPubkey,
+    ata_address: SolanaPubkey,
+    wallet: SolanaPubkey,
+    mint: SolanaPubkey,
+    token_program: SolanaPubkey,
+) -> Instruction {
+    let accounts = [
+        AccountMeta::new(payer, true),
+        AccountMeta::new(ata_address, false),
+        AccountMeta::new_readonly(wallet, false),
+        AccountMeta::new_readonly(mint, false),
+        AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(token_program, false),
+        AccountMeta::new_readonly(sysvar::rent::id(), false),
+    ];
+
+    Instruction {
+        program_id: ata_program_id,
+        accounts: accounts.to_vec(),
+        data: [1u8].to_vec(), // discriminator 1 (CreateIdempotent)
+    }
+}
+
+/// Create valid token account data for mollusk testing (solana SDK compatible)
+#[cfg(test)]
+pub fn create_mollusk_token_account_data(
+    mint: &SolanaPubkey,
+    owner: &SolanaPubkey,
+    amount: u64,
+) -> Vec<u8> {
+    const TOKEN_ACCOUNT_SIZE: usize = 165; // SPL Token account size (no extensions)
+    let mut data = [0u8; TOKEN_ACCOUNT_SIZE];
+
+    // mint
+    data[0..32].copy_from_slice(mint.as_ref());
+    // owner
+    data[32..64].copy_from_slice(owner.as_ref());
+    // amount
+    data[64..72].copy_from_slice(&amount.to_le_bytes());
+    // delegate option = 0 (none)
+    data[72] = 0;
+    // state = 1 (initialized)
+    data[108] = 1;
+    // is_native option = 0 (none)
+    data[109] = 0;
+    // delegated_amount = 0
+    data[110..118].copy_from_slice(&0u64.to_le_bytes());
+    // close_authority option = 0 (none)
+    data[118] = 0;
+
+    data.to_vec()
+}
+
+/// Create mint account data for mollusk testing
+#[cfg(test)]
+pub fn create_mollusk_mint_data(decimals: u8) -> Vec<u8> {
+    const MINT_ACCOUNT_SIZE: usize = 82;
+    let mut data = [0u8; MINT_ACCOUNT_SIZE];
+    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
+    data[44] = decimals;
+    data[45] = 1; // is_initialized = 1
+    data.to_vec()
 }
 
 /// Create valid token account data for testing
@@ -66,7 +268,6 @@ pub fn create_rent_data(
     exemption_threshold: f64,
     burn_percent: u8,
 ) -> Vec<u8> {
-    // This is a simplified version - in real tests you'd use proper serialization
     let mut data = Vec::new();
     data.extend_from_slice(&lamports_per_byte_year.to_le_bytes());
     data.extend_from_slice(&exemption_threshold.to_le_bytes());
@@ -211,5 +412,35 @@ mod tests {
                 "data_len field should be accessible and match"
             );
         }
+    }
+
+    #[test]
+    fn test_mollusk_utilities() {
+        use solana_sdk::signature::Keypair;
+
+        let payer = Keypair::new();
+        let token_program = spl_token::id();
+
+        // Test base accounts creation
+        let accounts = create_mollusk_base_accounts(&payer);
+        assert_eq!(accounts.len(), 3);
+
+        let accounts_with_token = create_mollusk_base_accounts_with_token(&payer, &token_program);
+        assert_eq!(accounts_with_token.len(), 4);
+
+        // Test mollusk token account data
+        let mint = SolanaPubkey::new_unique();
+        let owner = SolanaPubkey::new_unique();
+        let data = create_mollusk_token_account_data(&mint, &owner, 1000);
+        assert_eq!(data.len(), 165);
+        assert_eq!(&data[0..32], mint.as_ref());
+        assert_eq!(&data[32..64], owner.as_ref());
+        assert_eq!(data[108], 1); // initialized
+
+        // Test mint data
+        let mint_data = create_mollusk_mint_data(6);
+        assert_eq!(mint_data.len(), 82);
+        assert_eq!(mint_data[44], 6); // decimals
+        assert_eq!(mint_data[45], 1); // initialized
     }
 }

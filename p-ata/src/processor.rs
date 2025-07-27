@@ -741,6 +741,9 @@ pub(crate) fn process_recover_nested(
         return Err(ProgramError::InvalidSeeds);
     }
 
+    // Validate that the owner ATA exists and is a valid token account
+    let _owner_token_account = get_token_account(recover_accounts.owner_associated_token_account)?;
+
     // Handle multisig case
     if !recover_accounts.wallet.is_signer() {
         // Multisig case: must be token-program owned

@@ -8,4 +8,13 @@ mod test_instruction_builders;
 mod test_mollusk_non_canonical_bump;
 mod test_utils;
 
+// Migrated tests from /program/tests
+mod migrated {
+    pub mod create_idempotent;
+    pub mod extended_mint;
+    pub mod process_create_associated_token_account;
+    pub mod recover_nested;
+    pub mod spl_token_create;
+}
+
 include!(concat!(env!("OUT_DIR"), "/generated_tests.rs"));

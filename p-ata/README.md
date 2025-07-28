@@ -4,17 +4,13 @@ A `pinocchio`-based Associated Token Account program.
 
 ## Overview
 
-`p-ata` uses [`pinocchio`](https://github.com/anza-xyz/pinocchio) to optimize compute units while being fully compatible with the original implementation – i.e., support the exact same instruction and account layouts as SPL Associated Token Account, byte for byte.
-
-## Features
-
-- `no_std` crate
-- Same instruction and account layout as SPL Associated Token Account
-- Minimized CU usage
-
 p-ata (pinocchio-ata) is a drop-in replacement for SPL ATA. Following in the footsteps of [p-token](https://github.com/solana-program/token/tree/main/p-token), it uses pinocchio instead of solana-program to reduce compute usage. Plus, it includes a number of additional improvements.
 
-## Additional features
+- `no_std` crate
+- Fully compatible with instruction and account layout of SPL Associated Token Account
+- Minimized CU usage
+
+## New Features (not available in SPL ATA)
 - `RecoverNested` works with multisig accounts (satisfying #24)
 - `CreatePrefundedAccount` is supported for cheaper calls of p-ata's `Create` when the account rent has been topped up in advance. Conditional on [SIMD-312](https://github.com/solana-foundation/solana-improvement-documents/pull/312), but alternative code is provided if `not(feature = "create-account-prefunded")`. Enabling this feature saves this flow ~2500 CUs (Compute Units). Currently this PR patches in branches with `CreatePrefundedAccount` support in `agave`, `system`, `pinocchio`, and `mollusk`.
 - In descending order of significance,`bump`, `rent`, and `token_account_len` can be passed in by client to save compute.

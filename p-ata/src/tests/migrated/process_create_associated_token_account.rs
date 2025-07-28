@@ -85,7 +85,7 @@ fn process_create_associated_token_account() {
     // Should be owned by the token program
     assert_eq!(created_account.owner, token_program_id);
     // Should have minimum rent-exempt lamports
-    assert!(created_account.lamports > 0);
+    assert!(created_account.lamports > 2000000);
 }
 
 #[test]

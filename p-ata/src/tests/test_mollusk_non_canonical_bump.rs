@@ -148,6 +148,8 @@ fn test_rejects_suboptimal_bump() {
         (254u8, 253u8),
         (255u8, 252u8),
         (254u8, 252u8),
+        (255u8, 250u8),
+        (254u8, 250u8),
     ];
 
     let mut wallet_infos = Vec::new();

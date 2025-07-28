@@ -46,10 +46,7 @@ fn create_with_a_lamport_with_idempotent() {
 
     // Add wallet with 1 lamport at ATA address (simulating pre-funded account)
     accounts.extend([
-        (
-            wallet_address,
-            Account::new(1_000_000, 0, &system_program::id()),
-        ),
+        (wallet_address, Account::new(1, 0, &system_program::id())),
         (
             associated_token_address,
             Account::new(1, 0, &system_program::id()),
@@ -66,8 +63,21 @@ fn create_with_a_lamport_with_idempotent() {
         token_program_id,
     );
 
-    // This should succeed because modern implementation handles pre-funded accounts
-    mollusk.process_and_validate_instruction(&create_ix, &accounts, &[Check::success()]);
+    let result =
+        mollusk.process_and_validate_instruction(&create_ix, &accounts, &[Check::success()]);
+
+    // The account should now have more lamports, too
+    let created_ata = result
+        .resulting_accounts
+        .iter()
+        .find(|(pubkey, _)| *pubkey == associated_token_address)
+        .map(|(_, account)| account.clone())
+        .expect("ATA should be created");
+    assert!(created_ata.lamports > 2000000);
+    // account properties should be as expected
+    assert_eq!(created_ata.data.len(), 165, "ATA should be 165 bytes");
+    assert_eq!(created_ata.owner, token_program_id);
+    assert_eq!(created_ata.executable, false);
 
     // Step 3: Try with idempotent instruction on already created ATA - should also succeed
     let create_idempotent_ix = build_create_idempotent_ata_instruction(
@@ -86,7 +96,7 @@ fn create_with_a_lamport_with_idempotent() {
         .iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address)
         .map(|(_, account)| account.clone())
-        .expect("ATA should be created");
+        .expect("ATA should still be available");
 
     let mut updated_accounts = accounts;
     updated_accounts
@@ -469,7 +479,7 @@ fn fail_non_ata() {
     let data = create_mollusk_token_account_data(&token_mint_address, &wallet_address, 0);
 
     // Create a valid token account but at a non-ATA address
-    let token_account_balance = 3_500_880; // Standard rent for token account with extension
+    let token_account_balance = 3_500_880;
     let valid_token_account = Account {
         lamports: token_account_balance,
         data,

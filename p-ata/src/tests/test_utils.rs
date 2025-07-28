@@ -487,8 +487,6 @@ pub fn create_test_mint(
     token_program: &SolanaPubkey,
     decimals: u8,
 ) -> Vec<(SolanaPubkey, Account)> {
-    // Standard SPL-Token mint size and rent figure used in the original
-    // tests. If these ever change, only this helper needs updating.
     let mint_space = 82u64;
     let rent_lamports = 1_461_600u64;
 
@@ -500,10 +498,8 @@ pub fn create_test_mint(
         token_program,
     );
 
-    // Base accounts plus token program account.
     let mut accounts = create_mollusk_base_accounts_with_token(payer, token_program);
 
-    // Uninitialised mint account + mint authority signer.
     accounts.push((
         mint_account.pubkey(),
         Account::new(0, 0, &system_program::id()),
@@ -515,8 +511,6 @@ pub fn create_test_mint(
 
     // Create the mint account on-chain.
     mollusk.process_and_validate_instruction(&create_mint_ix, &accounts, &[Check::success()]);
-
-    // Initialise it.
     let init_mint_ix = spl_token::instruction::initialize_mint(
         token_program,
         &mint_account.pubkey(),
@@ -541,7 +535,7 @@ pub fn create_test_mint(
 
     mollusk.process_and_validate_instruction(&init_mint_ix, &accounts, &[Check::success()]);
 
-    // Final refresh so callers see the initialised state.
+    // Final refresh so callers see the initialized state.
     if let Some((_, acct)) = mollusk
         .process_instruction(&init_mint_ix, &accounts)
         .resulting_accounts

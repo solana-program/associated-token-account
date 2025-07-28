@@ -65,7 +65,7 @@ impl StandardAccountSet {
     /// mutates the ATA (e.g. `with_topup_ata`).
     ///
     /// # Panics
-    /// Panics if the ATA has already been initialised – i.e. when its owner is no longer the
+    /// Panics if the ATA has already been initialized – i.e. when its owner is no longer the
     /// system program or its data buffer is non-empty – which would indicate that another
     /// mutator has been applied out of order.
     pub fn with_existing_ata(
@@ -92,10 +92,10 @@ impl StandardAccountSet {
     /// Used for create-account-prefunded tests.
     ///
     /// **Call-order requirement**: must be invoked before any helper that converts the ATA into a
-    /// fully-initialised token account (e.g. `with_existing_ata`).
+    /// fully-initialized token account (e.g. `with_existing_ata`).
     ///
     /// # Panics
-    /// Panics if the ATA has already been initialised or given a non-zero balance.
+    /// Panics if the ATA has already been initialized or given a non-zero balance.
     pub fn with_topup_ata(mut self) -> Self {
         assert_eq!(
             self.ata.1.owner, SYSTEM_PROGRAM_ID,

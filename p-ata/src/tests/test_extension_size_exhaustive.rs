@@ -1,4 +1,4 @@
-use std::{eprintln, string::String};
+use std::string::String;
 #[allow(unexpected_cfgs)]
 use {
     crate::processor::account_size_from_mint_inline,
@@ -17,6 +17,9 @@ use {
     spl_token_metadata_interface::state::TokenMetadata,
     std::{vec, vec::Vec},
 };
+
+#[cfg(feature = "test-debug")]
+use std::eprintln;
 
 /// Create mint data with specific extensions using token-2022's official methods
 fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8> {
@@ -59,16 +62,10 @@ fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8
     let mut mint = match PodStateWithExtensionsMut::<PodMint>::unpack_uninitialized(&mut data) {
         Ok(mint) => mint,
         Err(e) => {
-            eprintln!(
+            panic!(
                 "Failed to unpack mint for extensions {:?}: {:?}",
                 extension_types, e
             );
-            eprintln!(
-                "Required size: {}, actual data length: {}",
-                required_size,
-                data.len()
-            );
-            return vec![];
         }
     };
 
@@ -137,28 +134,14 @@ fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8
                 extension.group_address = Default::default();
             }
             ExtensionType::GroupMemberPointer => {
-                eprintln!("About to initialize GroupMemberPointer...");
-                eprintln!(
-                    "Current extensions already initialized: {:?}",
-                    extension_types
-                        .iter()
-                        .take_while(|&&x| x != ExtensionType::GroupMemberPointer)
-                        .collect::<Vec<_>>()
-                );
-
                 match mint.init_extension::<spl_token_2022::extension::group_member_pointer::GroupMemberPointer>(true) {
                     Ok(extension) => {
-                        eprintln!("GroupMemberPointer extension space allocated successfully");
                         // At least one of authority or member_address must be provided
                         extension.authority = Some(solana_pubkey::Pubkey::new_unique()).try_into().unwrap();
                         extension.member_address = Some(solana_pubkey::Pubkey::new_unique()).try_into().unwrap();
-                        eprintln!("GroupMemberPointer fields set successfully");
                     }
                     Err(e) => {
-                        eprintln!("Failed to initialize GroupMemberPointer extension: {:?}", e);
-                        eprintln!("Current mint data length: {}", data.len());
-                        eprintln!("This extension combo was: {:?}", extension_types);
-                        return vec![];
+                        panic!("Failed to init GroupMemberPointer");
                     }
                 }
             }
@@ -175,26 +158,6 @@ fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8
                 extension.delegate = Default::default();
             }
             ExtensionType::ScaledUiAmount => {
-                eprintln!("About to initialize ScaledUiAmount...");
-                eprintln!(
-                    "Current extensions in this combination: {:?}",
-                    extension_types
-                );
-                eprintln!(
-                    "Extensions already initialized: {:?}",
-                    extension_types
-                        .iter()
-                        .take_while(|&&x| x != ExtensionType::ScaledUiAmount)
-                        .collect::<Vec<_>>()
-                );
-
-                let has_interest_bearing = extension_types
-                    .iter()
-                    .any(|ext| matches!(ext, ExtensionType::InterestBearingConfig));
-                if has_interest_bearing {
-                    eprintln!("ERROR: This combination has both ScaledUiAmount AND InterestBearingConfig - should have been blocked!");
-                }
-
                 let extension = mint
                     .init_extension::<spl_token_2022::extension::scaled_ui_amount::ScaledUiAmountConfig>(true)
                     .expect("Failed to init ScaledUiAmount");
@@ -237,8 +200,6 @@ fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8
                 extension.withheld_amount = Default::default();
             }
             ExtensionType::TokenGroup => {
-                // TokenGroup is a fixed-size extension with specific initialization requirements
-                // For testing account size calculation, we just need the extension space allocated
                 if let Ok(extension) = mint.init_extension::<TokenGroup>(true) {
                     // Set sensible defaults if initialization succeeds
                     *extension = TokenGroup {
@@ -248,15 +209,12 @@ fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8
                         max_size: 100u64.into(),
                     };
                 } else {
-                    // If init fails, skip this combination - our focus is account size calculation
-                    // not complex Token-2022 initialization logic
-                    return Vec::new();
+                    panic!("Failed to init TokenGroup");
                 }
             }
             ExtensionType::TokenGroupMember => {
                 // TokenGroupMember is a fixed-size extension with specific initialization requirements
                 if let Ok(extension) = mint.init_extension::<TokenGroupMember>(true) {
-                    // Set sensible defaults if initialization succeeds
                     *extension = TokenGroupMember {
                         mint: solana_pubkey::Pubkey::new_unique(),
                         group: solana_pubkey::Pubkey::new_unique(),
@@ -277,11 +235,8 @@ fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8
 /// Categorize extension types for testing
 #[derive(Debug, PartialEq)]
 enum ExtensionCategory {
-    /// Include in combinatorial testing (mint extensions that affect account size)
     Include,
-    /// Skip - account-only extensions
     AccountOnly,
-    /// Skip - padding/test extensions
     Skip,
 }
 
@@ -384,9 +339,7 @@ fn categorize_extension(ext: ExtensionType) -> ExtensionCategory {
         ExtensionType::ConfidentialTransferFeeConfig => ExtensionCategory::Include,
         ExtensionType::TokenGroup => ExtensionCategory::Include,
         ExtensionType::TokenGroupMember => ExtensionCategory::Include,
-
-        // Complex extensions with dependencies or complex initialization - SKIP for now to avoid test complexity
-        ExtensionType::ConfidentialMintBurn => ExtensionCategory::Skip,
+        ExtensionType::ConfidentialMintBurn => ExtensionCategory::Include,
 
         // Account-only extensions - these shouldn't be in mint data
         ExtensionType::TransferFeeAmount => ExtensionCategory::AccountOnly,
@@ -398,20 +351,12 @@ fn categorize_extension(ext: ExtensionType) -> ExtensionCategory {
         ExtensionType::PausableAccount => ExtensionCategory::AccountOnly,
         ExtensionType::MemoTransfer => ExtensionCategory::AccountOnly,
         ExtensionType::CpiGuard => ExtensionCategory::AccountOnly,
-        // Note: Test-only variants (VariableLenMintTest, AccountPaddingTest, MintPaddingTest)
-        // are only available when token-2022 is built with --cfg test, which may not be the case
-        // when using it as a dependency. If they appear, they should be categorized as Skip.
     }
 }
 
 /// Get all mint ExtensionType variants by discovering them automatically.
-/// This ensures ALL variants are covered - if new variants are added to ExtensionType,
-/// the categorize_extension function will fail to compile until they're handled.
 fn get_all_extension_types() -> Vec<ExtensionType> {
     let mut result = Vec::new();
-
-    // Discover all valid ExtensionType variants by trying all possible u16 values
-    // since ExtensionType implements TryFromPrimitive<u16>
     for i in 0..=u16::MAX {
         if let Ok(ext) = ExtensionType::try_from(i) {
             if categorize_extension(ext) == ExtensionCategory::Include {
@@ -432,7 +377,6 @@ fn exhaustive_extension_combinations() {
     let total = 1usize << extensions.len();
 
     for mask in 0..total {
-        // Build current combination
         let mut combo = Vec::new();
         for (idx, ext) in extensions.iter().enumerate() {
             if (mask >> idx) & 1 == 1 {
@@ -440,37 +384,19 @@ fn exhaustive_extension_combinations() {
             }
         }
 
-        // Skip invalid extension combinations
         if !is_valid_extension_combination(&combo) {
             continue;
         }
 
-        // Debug the specific combination causing GroupMemberPointer failure
-        let has_group_member_pointer = combo
-            .iter()
-            .any(|ext| matches!(ext, ExtensionType::GroupMemberPointer));
-        if has_group_member_pointer {
-            eprintln!("Testing combination with GroupMemberPointer: {:?}", combo);
+        #[cfg(feature = "test-debug")]
+        {
+            eprintln!("combo: {:?}", combo);
         }
 
         // Create mint data
         let mint_data = create_mint_data_with_extensions(&combo);
         let inline_size = account_size_from_mint_inline(&mint_data);
 
-        #[cfg(feature = "test-debug")]
-        {
-            eprintln!("combo: {:?}", combo);
-            eprintln!("inline_size: {:?}", inline_size);
-        }
-
-        // If our parser does not support this combination, just ensure it indeed returned None
-        if inline_size.is_none() {
-            // We deliberately allow processor and parser to diverge when variable-length or
-            // otherwise unsupported extensions are present. Move on to next combination.
-            continue;
-        }
-
-        // Compute expected size via official ExtensionType utilities
         let mut account_extensions = ExtensionType::get_required_init_account_extensions(&combo);
         if !account_extensions.contains(&ExtensionType::ImmutableOwner) {
             account_extensions.push(ExtensionType::ImmutableOwner);
@@ -484,6 +410,11 @@ fn exhaustive_extension_combinations() {
         #[cfg(feature = "test-debug")]
         {
             eprintln!("expected_size: {:?}", expected_size);
+        }
+
+        #[cfg(feature = "test-debug")]
+        {
+            eprintln!("inline_size: {:?}", inline_size);
         }
 
         assert_eq!(

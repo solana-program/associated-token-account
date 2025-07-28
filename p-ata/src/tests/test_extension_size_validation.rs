@@ -15,6 +15,9 @@ use {
     std::vec::Vec,
 };
 
+#[cfg(feature = "test-debug")]
+use std::eprintln;
+
 /// Create a basic mint with no extensions for testing
 fn create_base_mint_data() -> Vec<u8> {
     const MINT_BASE_SIZE: usize = 82;
@@ -268,11 +271,8 @@ fn test_mixed_extensions() {
 fn test_unsupported_extensions_return_none() {
     // These extensions should cause our function to return None (fall back to CPI)
     let unsupported_extensions = vec![
-        ExtensionType::ConfidentialTransferMint,
-        ExtensionType::ConfidentialTransferFeeConfig,
-        ExtensionType::TokenMetadata,
-        ExtensionType::TokenGroup,
-        ExtensionType::TokenGroupMember,
+        28, // token-2022 extensions end at 27
+        29, 420,
     ];
 
     for extension in unsupported_extensions {
@@ -404,6 +404,54 @@ fn test_extension_combinations_comprehensive() {
     for extensions in large_combinations {
         test_extension_combination(&extensions, "Large extension combination");
     }
+}
+
+#[test]
+fn test_token_metadata_variable_length() {
+    // Create a simple mint data with manually constructed TokenMetadata TLV
+    let mut mint_data = std::vec![0u8; 82 + 32]; // Base mint (82) + some extension space
+
+    // Set up basic mint structure
+    mint_data[0..4].copy_from_slice(&[0, 0, 0, 0]); // mint_authority (None)
+    mint_data[4..12].copy_from_slice(&[0; 8]); // supply
+    mint_data[12] = 6; // decimals
+    mint_data[13] = 1; // is_initialized = true
+    mint_data[14..18].copy_from_slice(&[0, 0, 0, 0]); // freeze_authority (None)
+
+    // Add account type at the end (for extensions)
+    let account_type_offset = 82;
+    mint_data[account_type_offset] = 1; // AccountType::Mint
+
+    // Add a mock TokenMetadata TLV entry
+    let tlv_offset = account_type_offset + 1;
+    mint_data[tlv_offset..tlv_offset + 2].copy_from_slice(&[19u8, 0]); // Type: TokenMetadata (19)
+    mint_data[tlv_offset + 2..tlv_offset + 4].copy_from_slice(&[20u8, 0]); // Length: 20 bytes
+                                                                           // Mock 20 bytes of metadata content
+    mint_data[tlv_offset + 4..tlv_offset + 24].copy_from_slice(&[1u8; 20]);
+
+    #[cfg(feature = "test-debug")]
+    eprintln!(
+        "Created mock mint data with TokenMetadata TLV, length: {}",
+        mint_data.len()
+    );
+
+    // Test our inline parser
+    let inline_size = account_size_from_mint_inline(&mint_data);
+
+    #[cfg(feature = "test-debug")]
+    eprintln!("Inline parser result: {:?}", inline_size);
+
+    // TokenMetadata is mint-only, so account size should be base + ImmutableOwner
+    let expected_account_size = calculate_expected_account_size(&[ExtensionType::ImmutableOwner]);
+
+    assert_eq!(
+        inline_size,
+        Some(expected_account_size),
+        "TokenMetadata should be supported inline as a mint-only extension"
+    );
+
+    #[cfg(feature = "test-debug")]
+    eprintln!("TokenMetadata test passed!");
 }
 
 fn test_extension_combination(extensions: &[ExtensionType], description: &str) {

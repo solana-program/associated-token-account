@@ -153,21 +153,19 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
                 account_extensions_size += 4 + 0; // TLV overhead + data
             }
             // Known simple mint-only extensions (don't affect account size)
-            2 | 3 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 15 | 17 | 18 | 20 | 24 | 25 | 27 => {
+            2 | 3 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 15 | 17 | 18 | 20 | 21 | 22 | 23 | 24 | 25
+            | 27 => {
                 // These are simple mint extensions that don't require account data
+            }
+            19 => {
+                // TokenMetadata: variable-length but mint-only (no account data)
+                // We can inline this by reading the length from TLV header
+                // Type(2) + Length(2) + Value(length) - we just need to skip over it
             }
             // Complex extensions - fall back to CPI for safety
             4 | 5 | 16 => {
                 // ConfidentialTransferMint, ConfidentialTransferAccount, ConfidentialTransferFeeConfig
                 return None; // Complex confidential transfer extensions, fall back to CPI
-            }
-            19 => {
-                // TokenMetadata is variable-length (proven by sized() -> false)
-                return None; // Variable-length, fall back to CPI
-            }
-            21 | 22 | 23 => {
-                // TokenGroup, GroupMemberPointer, TokenGroupMember
-                return None; // Complex group extensions, fall back to CPI
             }
             // Unknown or variable-length extensions → fall back to CPI
             _ => return None,

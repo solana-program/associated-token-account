@@ -112,6 +112,11 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
     const TOKEN_ACCOUNT_LEN: usize = 165;
     const ACCOUNT_TYPE_OFFSET: usize = 165; // Account type discriminator position
 
+    // Check for completely empty mint data (invalid/failed mint creation)
+    if mint_data.is_empty() {
+        return None;
+    }
+
     // Check if this mint has extensions (must be larger than base + account type)
     if mint_data.len() <= ACCOUNT_TYPE_OFFSET {
         // No mint extensions, but Token-2022 ATAs still need account type discriminator + ImmutableOwner
@@ -153,19 +158,11 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
                 account_extensions_size += 4 + 0; // TLV overhead + data
             }
             // Known simple mint-only extensions (don't affect account size)
-            2 | 3 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 15 | 17 | 18 | 20 | 21 | 22 | 23 | 24 | 25
-            | 27 => {
+            2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 15 | 16 | 17 | 18 | 19 | 20 | 21
+            | 22 | 23 | 24 | 25 | 27 => {
                 // These are simple mint extensions that don't require account data
-            }
-            19 => {
-                // TokenMetadata: variable-length but mint-only (no account data)
-                // We can inline this by reading the length from TLV header
-                // Type(2) + Length(2) + Value(length) - we just need to skip over it
-            }
-            // Complex extensions - fall back to CPI for safety
-            4 | 5 | 16 => {
-                // ConfidentialTransferMint, ConfidentialTransferAccount, ConfidentialTransferFeeConfig
-                return None; // Complex confidential transfer extensions, fall back to CPI
+                // Including: MetadataPointer(18), TokenMetadata(19), GroupPointer(20),
+                // TokenGroup(21), GroupMemberPointer(22), TokenGroupMember(23), etc.
             }
             // Unknown or variable-length extensions → fall back to CPI
             _ => return None,

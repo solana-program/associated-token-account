@@ -1,7 +1,7 @@
 use std::string::String;
 #[allow(unexpected_cfgs)]
 use {
-    crate::processor::account_size_from_mint_inline,
+    crate::processor::calculate_account_size_from_mint_extensions,
     spl_token_2022::{
         extension::{
             default_account_state::DefaultAccountState, group_pointer::GroupPointer,
@@ -395,7 +395,7 @@ fn exhaustive_extension_combinations() {
 
         // Create mint data
         let mint_data = create_mint_data_with_extensions(&combo);
-        let inline_size = account_size_from_mint_inline(&mint_data);
+        let inline_size = calculate_account_size_from_mint_extensions(&mint_data);
 
         let mut account_extensions = ExtensionType::get_required_init_account_extensions(&combo);
         if !account_extensions.contains(&ExtensionType::ImmutableOwner) {

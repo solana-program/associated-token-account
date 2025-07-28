@@ -70,6 +70,79 @@ pub struct RecoverNestedAccounts<'a> {
     pub token_program: &'a AccountInfo,
 }
 
+/// ExtensionType, exactly as Token-2022, with additional planned extension.
+#[repr(u16)]
+#[allow(dead_code)]
+pub enum ExtensionType {
+    /// Used as padding if the account size would otherwise be 355, same as a
+    /// multisig
+    Uninitialized,
+    /// Includes transfer fee rate info and accompanying authorities to withdraw
+    /// and set the fee
+    TransferFeeConfig,
+    /// Includes withheld transfer fees
+    TransferFeeAmount,
+    /// Includes an optional mint close authority
+    MintCloseAuthority,
+    /// Auditor configuration for confidential transfers
+    ConfidentialTransferMint,
+    /// State for confidential transfers
+    ConfidentialTransferAccount,
+    /// Specifies the default Account::state for new Accounts
+    DefaultAccountState,
+    /// Indicates that the Account owner authority cannot be changed
+    ImmutableOwner,
+    /// Require inbound transfers to have memo
+    MemoTransfer,
+    /// Indicates that the tokens from this mint can't be transferred
+    NonTransferable,
+    /// Tokens accrue interest over time,
+    InterestBearingConfig,
+    /// Locks privileged token operations from happening via CPI
+    CpiGuard,
+    /// Includes an optional permanent delegate
+    PermanentDelegate,
+    /// Indicates that the tokens in this account belong to a non-transferable
+    /// mint
+    NonTransferableAccount,
+    /// Mint requires a CPI to a program implementing the "transfer hook"
+    /// interface
+    TransferHook,
+    /// Indicates that the tokens in this account belong to a mint with a
+    /// transfer hook
+    TransferHookAccount,
+    /// Includes encrypted withheld fees and the encryption public that they are
+    /// encrypted under
+    ConfidentialTransferFeeConfig,
+    /// Includes confidential withheld transfer fees
+    ConfidentialTransferFeeAmount,
+    /// Mint contains a pointer to another account (or the same account) that
+    /// holds metadata
+    MetadataPointer,
+    /// Mint contains token-metadata
+    TokenMetadata,
+    /// Mint contains a pointer to another account (or the same account) that
+    /// holds group configurations
+    GroupPointer,
+    /// Mint contains token group configurations
+    TokenGroup,
+    /// Mint contains a pointer to another account (or the same account) that
+    /// holds group member configurations
+    GroupMemberPointer,
+    /// Mint contains token group member configurations
+    TokenGroupMember,
+    /// Mint allowing the minting and burning of confidential tokens
+    ConfidentialMintBurn,
+    /// Tokens whose UI amount is scaled by a given amount
+    ScaledUiAmount,
+    /// Tokens where minting / burning / transferring can be paused
+    Pausable,
+    /// Indicates that the account belongs to a pausable mint
+    PausableAccount,
+    /// PLANNED next Token-2022 extension (0 account length)
+    PlannedZeroAccountDataLengthExtension,
+}
+
 /// Derive ATA PDA from wallet, token program, and mint.
 /// This is the least efficient derivation method, used when no bump is provided.
 /// The address returned is guaranteed to be off-curve and canonical.
@@ -108,7 +181,7 @@ pub(crate) fn is_token_2022_program(program_id: &Pubkey) -> bool {
 /// This avoids the expensive CPI call to GetAccountDataSize for most cases.
 /// Returns None if unknown extensions are found.
 #[inline(always)]
-pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
+pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> Option<usize> {
     const TOKEN_ACCOUNT_LEN: usize = 165;
     const ACCOUNT_TYPE_OFFSET: usize = 165; // Account type discriminator position
     const BASE_TOKEN_2022_ACCOUNT_SIZE: usize = TOKEN_ACCOUNT_LEN + 5;
@@ -133,42 +206,47 @@ pub(crate) fn account_size_from_mint_inline(mint_data: &[u8]) -> Option<usize> {
         // Read 4-byte TLV header (little-endian: [type: u16 | length: u16])
         let header =
             unsafe { core::ptr::read_unaligned(mint_data.as_ptr().add(cursor) as *const u32) };
-        let extension_type = (header & 0xFFFF) as u16;
+        let extension_type_raw = (header & 0xFFFF) as u16;
         let length = (header >> 16) as u16;
 
         // TypeEnd / Uninitialized ends the TLV list
-        if extension_type == 0 {
+        if extension_type_raw == 0 {
             break;
         }
 
+        // Convert u16 to ExtensionType safely - fall back to CPI for unknown extensions
+        let extension_type =
+            if extension_type_raw <= ExtensionType::PlannedZeroAccountDataLengthExtension as u16 {
+                // SAFETY: ExtensionType is repr(u16) and we've validated the value is in range
+                unsafe { core::mem::transmute::<u16, ExtensionType>(extension_type_raw) }
+            } else {
+                // Unknown extension type - fall back to CPI
+                return None;
+            };
+
         // Based on token-2022's get_required_init_account_extensions:
         // Only specific mint extensions require account-side data
-        #[allow(clippy::manual_range_patterns)]
-        #[allow(clippy::identity_op)]
         match extension_type {
-            1 => {
+            ExtensionType::TransferFeeConfig => {
                 // TransferFeeConfig → needs TransferFeeAmount (8 bytes data + 4 TLV)
                 account_extensions_size += 4 + 8;
             }
-            9 => {
+            ExtensionType::NonTransferable => {
                 // NonTransferable → NonTransferableAccount (0 bytes data + 4 TLV)
                 account_extensions_size += 4;
             }
-            14 => {
+            ExtensionType::TransferHook => {
                 // TransferHook → TransferHookAccount (1 byte data + 4 TLV)
                 account_extensions_size += 4 + 1;
             }
-            26 => {
+            ExtensionType::Pausable => {
                 // Pausable → PausableAccount (0 bytes data + 4 TLV)
                 account_extensions_size += 4;
             }
-            // Known simple mint-only extensions (don’t affect account size)
-            2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 15 | 16 | 17 | 18 | 19 | 20 | 21
-            | 22 | 23 | 24 | 25 | 27 => {
+            // All other known extensions
+            _ => {
                 // No account-side data required
             }
-            // Unknown extensions → fall back to CPI
-            _ => return None,
         }
 
         cursor += 4 + length as usize;
@@ -198,7 +276,7 @@ pub(crate) fn get_token_account_size(
     if is_token_2022_program(token_program.key()) {
         // Try inline parsing first for Token-2022
         let mint_data = unsafe { mint_account.borrow_data_unchecked() };
-        if let Some(size) = account_size_from_mint_inline(mint_data) {
+        if let Some(size) = calculate_account_size_from_mint_extensions(mint_data) {
             return Ok(size);
         }
     }

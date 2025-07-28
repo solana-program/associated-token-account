@@ -1,5 +1,5 @@
 use {
-    crate::processor::account_size_from_mint_inline,
+    crate::processor::calculate_account_size_from_mint_extensions,
     solana_program_option::COption,
     solana_pubkey::Pubkey,
     spl_token_2022::extension::{
@@ -145,7 +145,7 @@ fn test_no_extensions() {
     let mint_data = create_base_mint_data();
     let expected_size = calculate_expected_account_size(&[]);
 
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
         result,
         Some(expected_size),
@@ -159,7 +159,7 @@ fn test_transfer_fee_config() {
     let mint_data = create_mint_data_with_extensions(&extensions);
     let expected_size = calculate_expected_account_size(&extensions);
 
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
         result,
         Some(expected_size),
@@ -173,7 +173,7 @@ fn test_transfer_hook() {
     let mint_data = create_mint_data_with_extensions(&extensions);
     let expected_size = calculate_expected_account_size(&extensions);
 
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
         result,
         Some(expected_size),
@@ -187,7 +187,7 @@ fn test_pausable_config() {
     let mint_data = create_mint_data_with_extensions(&extensions);
     let expected_size = calculate_expected_account_size(&extensions);
 
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
         result,
         Some(expected_size),
@@ -210,7 +210,7 @@ fn test_extensions_without_account_data() {
         let mint_data = create_mint_data_with_extensions(&vec![extension]);
         let expected_size = calculate_expected_account_size(&vec![extension]);
 
-        let result = account_size_from_mint_inline(&mint_data);
+        let result = calculate_account_size_from_mint_extensions(&mint_data);
         assert_eq!(
             result,
             Some(expected_size),
@@ -238,7 +238,7 @@ fn test_multiple_extensions_with_account_data() {
     let mint_data = create_mint_data_with_extensions(&extensions);
     let expected_size = calculate_expected_account_size(&extensions);
 
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
         result,
         Some(expected_size),
@@ -259,7 +259,7 @@ fn test_mixed_extensions() {
     let mint_data = create_mint_data_with_extensions(&extensions);
     let expected_size = calculate_expected_account_size(&extensions);
 
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
         result,
         Some(expected_size),
@@ -271,8 +271,8 @@ fn test_mixed_extensions() {
 fn test_unsupported_extensions_return_none() {
     // These extensions should cause our function to return None (fall back to CPI)
     let unsupported_extensions = vec![
-        28, // token-2022 extensions end at 27
-        29, 420,
+        29, // token-2022 extensions end at 27, plus we support the upcoming 28
+        30, 420,
     ];
 
     for extension in unsupported_extensions {
@@ -285,7 +285,7 @@ fn test_unsupported_extensions_return_none() {
         mint_data[166..168].copy_from_slice(&extension_type.to_le_bytes());
         mint_data[168..170].copy_from_slice(&[0u8, 0u8]);
 
-        let result = account_size_from_mint_inline(&mint_data);
+        let result = calculate_account_size_from_mint_extensions(&mint_data);
         assert_eq!(
             result, None,
             "Unsupported extension {:?} should return None",
@@ -300,7 +300,7 @@ fn test_non_transferable_extension() {
     let mint_data = create_mint_data_with_extensions(&extensions);
     let expected_size = calculate_expected_account_size(&extensions);
 
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
         result,
         Some(expected_size),
@@ -313,7 +313,7 @@ fn test_empty_extension_data() {
     let mut mint_data = create_base_mint_data();
     mint_data.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]);
 
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
     let expected_size = calculate_expected_account_size(&[]);
     assert_eq!(
         result,
@@ -436,7 +436,7 @@ fn test_token_metadata_variable_length() {
     );
 
     // Test our inline parser
-    let inline_size = account_size_from_mint_inline(&mint_data);
+    let inline_size = calculate_account_size_from_mint_extensions(&mint_data);
 
     #[cfg(feature = "test-debug")]
     eprintln!("Inline parser result: {:?}", inline_size);
@@ -457,7 +457,7 @@ fn test_token_metadata_variable_length() {
 fn test_extension_combination(extensions: &[ExtensionType], description: &str) {
     let mint_data = create_mint_data_with_extensions(extensions);
     let expected_size = calculate_expected_account_size(extensions);
-    let result = account_size_from_mint_inline(&mint_data);
+    let result = calculate_account_size_from_mint_extensions(&mint_data);
 
     assert_eq!(
         result,
@@ -493,7 +493,7 @@ fn test_systematic_extension_verification() {
 
         let extensions = vec![*extension];
         let mint_data = create_mint_data_with_extensions(&extensions);
-        let result = account_size_from_mint_inline(&mint_data);
+        let result = calculate_account_size_from_mint_extensions(&mint_data);
 
         match extension {
             ExtensionType::TransferFeeConfig

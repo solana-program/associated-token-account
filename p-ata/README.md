@@ -38,36 +38,31 @@ cargo build --features build-programs && cargo test
 ```
 
 ## Benchmarking
-Average of 10,000 runs
-*as of 2025-07-23, 160bfea*
+Set `BENCH_ITERATIONS` to average a number of runs. If only 1 iteration is used, optimal bump wallets will be found instead of random wallets each run.
+
+```
+BENCH_ITERATIONS=1 cargo bench
+```
+
+"Best run" numbers (ideal bumps)
+*as of 2025-07-28, ad6fbac*
 
 "optimum args" are:
 - `bump`
 - for Token-2022, `token_account_len` passed in (after `bump`)
 - for `create` tests other than `create_idemp`, `rent` passed in as an optional additional account
 
-┌────────────────────┬─────────┬───────┬──────────┬──────────────┐
-│ Test               ┆ SPL ATA ┆ p-ata ┆ bump arg ┆ all          │
-│                    ┆         ┆       ┆          ┆ optimizations│
-╞════════════════════╪═════════╪═══════╪══════════╪══════════════╡
-│ create_idempotent  ┆ 3669    ┆ 1805  ┆ 1806     ┆ 1805         │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-│ create             ┆ 12364   ┆ 4976  ┆ 3415     ┆ 3313         │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-│ create_token2022   ┆ 14692   ┆ 7778  ┆ 6217     ┆ 6084         │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-│ create_topup       ┆ 15817   ┆ 4842  ┆ 3281     ┆ 3179         │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-│ create_topup_nocap ┆ 15817   ┆ 7609  ┆ 6048     ┆ 5946         │
-|╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-│ create_extended    ┆ 17620   ┆ 9927  ┆ 8366     ┆ 8094         │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-│ recover_nested     ┆ 12851   ┆ 8104  ┆ 8104     ┆ 8104         │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-│ recover_multisig   ┆ 0       ┆ 8550  ┆ 8550     ┆ 8550         │
-├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┤
-│ worst_case_create  ┆ 19864   ┆ 15187 ┆ 3415     ┆ 3313         │
-└────────────────────┴─────────┴───────┴──────────┴──────────────┘
+| Test                  | SPL ATA | p-ata | bump arg | all optimizations |
+|-----------------------|--------:|------:|---------:|------------------:|
+| create_idempotent     |   3669  |  1805 |    1806  |              1805 |
+| create                |  12364  |  4976 |    3415  |              3313 |
+| create_token2022      |  14692  |  7778 |    6217  |              6084 |
+| create_topup          |  15817  |  4842 |    3281  |              3179 |
+| create_topup_nocap    |  15817  |  7609 |    6048  |              5946 |
+| create_extended       |  17620  |  9927 |    8366  |              8094 |
+| recover_nested        |  12851  |  8104 |    8104  |              8104 |
+| recover_multisig      |      0  |  8550 |    8550  |              8550 |
+| worst_case_create     |  19864  | 15187 |    3415  |              3313 |
 
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.
 

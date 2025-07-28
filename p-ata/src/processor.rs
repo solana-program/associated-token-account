@@ -214,7 +214,6 @@ pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> O
             break;
         }
 
-        // Convert u16 to ExtensionType safely - fall back to CPI for unknown extensions
         let extension_type =
             if extension_type_raw <= ExtensionType::PlannedZeroAccountDataLengthExtension as u16 {
                 // SAFETY: ExtensionType is repr(u16) and we've validated the value is in range
@@ -224,8 +223,7 @@ pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> O
                 return None;
             };
 
-        // Based on token-2022's get_required_init_account_extensions:
-        // Only specific mint extensions require account-side data
+        // Based on token-2022's get_required_init_account_extensions
         match extension_type {
             ExtensionType::TransferFeeConfig => {
                 // TransferFeeConfig → needs TransferFeeAmount (8 bytes data + 4 TLV)

@@ -44,8 +44,7 @@ Set `BENCH_ITERATIONS` to average a number of runs. If only 1 iteration is used,
 BENCH_ITERATIONS=1 cargo bench
 ```
 
-"Best run" numbers (ideal bumps)
-*as of 2025-07-28, ad6fbac*
+### "Best run" numbers (ideal bumps) *as of 2025-07-28, ad6fbac*
 
 "optimum args" are:
 - `bump`

@@ -12,37 +12,51 @@ A `pinocchio`-based Associated Token Account program.
 - Same instruction and account layout as SPL Associated Token Account
 - Minimized CU usage
 
-Expanded Functionality:
+p-ata (pinocchio-ata) is a drop-in replacement for SPL ATA. Following in the footsteps of [p-token](https://github.com/solana-program/token/tree/main/p-token), it uses pinocchio instead of solana-program to reduce compute usage. Plus, it includes a number of additional improvements.
 
-- `RecoverNested` works with multisig accounts (satisfying [#24](https://github.com/solana-program/associated-token-account/issues/24))
-- `CreateAccountPrefunded` is supported for cheaper calls of p-ata's `Create` when the account rent has been topped up in advance. Conditional on [SIMD-312](https://github.com/solana-foundation/solana-improvement-documents/pull/312), but alternative code is provided if `not(feature = "create-account-prefunded")`. Enabling this feature saves this flow ~2500 CUs (Compute Units). Currently, branches of `agave`, `system`, `pinocchio`, and `mollusk` with `CreateAccountPrefunded` support are patched in.
-- In descending order of significance,`bump`, `rent`, and (TokenAccount) `token_account_len` can be passed in by client to save compute.
+## Additional features
+- `RecoverNested` works with multisig accounts (satisfying #24)
+- `CreatePrefundedAccount` is supported for cheaper calls of p-ata's `Create` when the account rent has been topped up in advance. Conditional on [SIMD-312](https://github.com/solana-foundation/solana-improvement-documents/pull/312), but alternative code is provided if `not(feature = "create-account-prefunded")`. Enabling this feature saves this flow ~2500 CUs (Compute Units). Currently this PR patches in branches with `CreatePrefundedAccount` support in `agave`, `system`, `pinocchio`, and `mollusk`.
+- In descending order of significance,`bump`, `rent`, and `token_account_len` can be passed in by client to save compute.
 
-## Testing and Benchmarking
+## Notable Performance Improvements
+- No strings attached, of course. Developed using [pinocchio](https://github.com/anza-xyz/pinocchio).
+- SPL ATA always calls `InitializeImmutableOwner` via CPI. `InitializeImmutableOwner` is a no-op in Token, though not in Token 2022. In p-ata, if the relevant program is Token (not 2022), all `ImmutableOwner` logic is skipped.
+- In p-ata, SPL Token ATA data length is assumed to be `TokenAccount::LEN`. For Token-2022, this program avoids CPI calls by using its own `calculate_account_size_from_mint_extensions`. For any other token program, ATA data length is checked via CPI. Of course, token length may be passed in as `token_account_len` to save compute.
+- A few assertions are removed to save compute, when ignoring them fails later in the ATA transaction anyway. This results in different errors in a few cases (see below).
 
-Benchmarking averages a number of runs. 1000 completes in about 5 seconds on modern hardware:
+## Test Suites
+The test suites included are:
+1. `/src/tests/mollusk_adapter.rs` - The original SPL ATA suite is run with a Mollusk adapter, allowing the unmodified solana_program_test files for SPL ATA to be run on p-ata.
+2. `/src/tests/migrated` - (Redundancy) A migrated version of the same tests, written to run on Mollusk.
+3. `/src/tests` - Unit tests for the various helper functions in processor.rs.
+4. `/src/tests/test_extension_size_exhaustive.rs` - Exhaustive tests for the `calculate_account_size_from_mint_extensions` function, which tests the results of this function for all possible combinations of token extensions against the results from Token-2022's `process_get_account_data_size`.
+5. `/benches` A benchmark suite, which benches categories of operations in p-ata against SPL ATA and verifies that accounts are changed in the same way, byte-for-byte. See "Benchmarking" below.
 
-`cargo build --features build-programs && BENCH_ITERATIONS=1000 cargo bench`
+```
+cargo build --features build-programs && cargo test
+```
 
-Mollusk's extensive debug logs are filtered out unless a test has an unexpected result. To show all of them, run `cargo bench --features full-debug-logs`.
-
-*as of 2025-07-09, 3747f8d*
+## Benchmarking
+Average of 10,000 runs
+*as of 2025-07-23, 160bfea*
 
 "optimum args" are:
 - `bump`
-- for Token-2022, `token_account_len` passed in the data
-- for some items, `rent` passed in as an optional additional account
+- for Token-2022, `token_account_len` passed in (after `bump`)
+- for `create` tests other than `create_idemp`, `rent` passed in as an optional additional account
 
 | Test                   |    SPL ATA     | p-ata, no new args   | p-ata w/ bump | p-ata w/ optimum args | Notes                                                 |
 |------------------------|----------|---------|----------|------------------|--------------------------------------------------------|
-| create_idemp           |   3,669  |    241  |       --      |       --        |                                 |
-| create_base            |  12,364  |  4,715  |  3,195 | 3,098        |                                   |
-| create_topup           |  15,817  |  4,718  | 3,198 |    3,101        | create-account-prefunded      |
-| create_topup_no_cap    |  15,817  |  7,205  |    5,685 |  5,588        | no create-account-prefunded   |
-| create_token2022       |  14,692  |  7,461  |     5,941  | 5,817        |                                                |
-| recover_nested             |  14,356  |  4,428  |    2,904 | 2,904        |                                            |
-| recover_multisig       |    --   |  4,668  |      3,144 | 3,144        |                                         |
-| worst_case_create      |  19,864  | 15,187  |     3,195 | 3,098        | Hard-to-find bump   |
+| create_idemp           |   5,116  |    3,297  |       3,297      |       3,297        |                                 |
+| create_base            |  13,903  |  6,454  |  3,783  | 3,681        |                                   |
+| create_topup           |  17,328  |  6,341  | 3,657 |    3,558        | create-prefunded-account     |
+| create_topup_no_cap    |  17,301  |  9,063  |    6,416 |  6,315        | no create-prefunded-account   |
+| create_token2022       |  16,188  |  9,242  |     6,589  | 6,449        |                                                |
+| create_extended     |  17,620 | 10,045 | 8,483  | 8,091  |  multiple Token-2022 extensions |
+| recover_nested             |  17,399  |  12,647  |    12,794 | 12,647      |                                            |
+| recover_multisig       |    --   |  13,112  |   13,080  | 13,080       |                                         |
+| worst_case_create      |  19,864  | 15,187  |   3,783 | 3,681        | Hard-to-find bump   |
 
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.
 
@@ -52,6 +66,123 @@ To benchmark (and run a set of failure tests and byte-for-byte equivalence tests
 cargo build --features build-programs && cargo bench
 ```
 
-### Notable Improvements (beyond noalloc/pinocchio)
-- SPL ATA always calls `InitializeImmutableOwner` via CPI. `InitializeImmutableOwner` is a no-op in Token, though not in Token 2022. In p-ata, if the relevant program is Token (not 2022), all `ImmutableOwner` logic is skipped.
-- Account data length is assumed to be standard (or passed in) token account length when possible, instead of using `get_account_data_size`.
+Mollusk's extensive debug logs are filtered out *unless* a test has an unexpected result. To show all of them, run `cargo bench --features full-debug-logs`.
+
+## Tests with byte-for-byte checking on changed accounts
+(byte-for-byte is irrelevant for "P-ATA optimization working" tests)
+```
+--- Testing variant create_idempotent ---
+--- Testing create_idempotent_ --- ✅ Byte-for-Byte Identical
+--- Testing create_idempotent__rent --- ✅ Byte-for-Byte Identical
+--- Testing create_idempotent__bump --- 🚀 P-ATA optimization working
+--- Testing create_idempotent__rent_bump --- 🚀 P-ATA optimization working
+
+--- Testing variant create ---
+--- Testing create_ --- ✅ Byte-for-Byte Identical
+--- Testing create__rent --- ✅ Byte-for-Byte Identical
+--- Testing create__bump --- 🚀 P-ATA optimization working
+--- Testing create__rent_bump --- 🚀 P-ATA optimization working
+
+--- Testing variant create_topup ---
+Using P-ATA prefunded binary for create_topup
+--- Testing create_topup_ --- ✅ Byte-for-Byte Identical
+--- Testing create_topup__rent --- ✅ Byte-for-Byte Identical
+--- Testing create_topup__bump --- 🚀 P-ATA optimization working
+--- Testing create_topup__rent_bump --- 🚀 P-ATA optimization working
+
+--- Testing variant create_topup_no_cap ---
+--- Testing create_topup_no_cap_ --- ✅ Byte-for-Byte Identical
+--- Testing create_topup_no_cap__rent --- ✅ Byte-for-Byte Identical
+--- Testing create_topup_no_cap__bump --- 🚀 P-ATA optimization working
+--- Testing create_topup_no_cap__rent_bump --- 🚀 P-ATA optimization working
+
+--- Testing variant create_token2022 ---
+--- Testing create_token2022_ --- ✅ Byte-for-Byte Identical
+--- Testing create_token2022__rent --- ✅ Byte-for-Byte Identical
+--- Testing create_token2022__bump --- 🚀 P-ATA optimization working
+--- Testing create_token2022__rent_bump --- 🚀 P-ATA optimization working
+--- Testing create_token2022__bump_token_account_len --- 🚀 P-ATA optimization working
+--- Testing create_token2022__rent_bump_token_account_len --- 🚀 P-ATA optimization working
+
+--- Testing variant recover_nested ---
+--- Testing recover_nested_ --- ✅ Byte-for-Byte Identical
+--- Testing recover_nested__rent --- ✅ Byte-for-Byte Identical
+--- Testing recover_nested__bump --- 🚀 P-ATA optimization working
+
+--- Testing variant recover_multisig ---
+--- Testing recover_multisig_ --- 🚀 P-ATA optimization working
+--- Testing recover_multisig__rent --- 🚀 P-ATA optimization working
+--- Testing recover_multisig__bump --- 🚀 P-ATA optimization working
+```
+
+### Should-Fail Test Results
+```
+--- Basic Account Ownership Failure Tests ---
+Test: fail_wrong_payer_owner
+    ✅ Both failed (expected)
+Test: fail_payer_not_signed
+    ✅ Both failed (expected)
+Test: fail_wrong_system_program
+    ✅ Both failed (expected)
+Test: fail_wrong_token_program
+    ⚠️ Different error messages (both failed)
+Test: fail_insufficient_funds
+    ✅ Both failed (expected)
+
+--- Address Derivation and Structure Failure Tests ---
+Test: fail_wrong_ata_address
+    ⚠️ Different error messages (both failed)
+Test: fail_mint_wrong_owner
+    ✅ Both failed (expected)
+Test: fail_invalid_mint_structure
+    ✅ Both failed (expected)
+Test: fail_invalid_token_account_structure
+    ✅ Both failed (expected)
+Test: fail_invalid_discriminator
+    ✅ Both failed (expected)
+Test: fail_invalid_bump_value
+    ✅ Failed as expected (P-ATA-only feature)
+
+--- Recovery Operation Failure Tests ---
+Test: fail_recover_wallet_not_signer
+    ✅ Both failed (expected)
+Test: fail_recover_multisig_insufficient_signers
+    ✅ Both failed (expected)
+Test: fail_recover_wrong_nested_ata_address
+    ⚠️ Different error messages (both failed)
+Test: fail_recover_wrong_destination_address
+    ⚠️ Different error messages (both failed)
+Test: fail_recover_invalid_bump_value
+    ✅ Failed as expected (P-ATA-only feature)
+
+--- Additional Validation Coverage Tests ---
+Test: fail_ata_owned_by_system_program
+    ✅ Both failed (expected)
+Test: fail_wrong_token_account_size
+    ✅ Both failed (expected)
+Test: fail_token_account_wrong_mint
+    ✅ Both failed (expected)
+Test: fail_token_account_wrong_owner
+    ⚠️ Different error messages (both failed)
+Test: fail_immutable_account
+    ✅ Both failed (expected)
+Test: fail_create_extended_mint_v1
+    ✅ Both failed (expected)
+    
+⚠️  "Different Error" Details:
+  fail_wrong_token_program - Different Error Messages:
+    P-ATA:     UnknownError(PrivilegeEscalation)
+   SPL ATA:  Failure(InvalidSeeds)
+  fail_wrong_ata_address - Different Error Messages:
+    P-ATA:     UnknownError(PrivilegeEscalation)
+   SPL ATA:  Failure(InvalidSeeds)
+  fail_recover_wrong_nested_ata_address - Different Error Messages:
+    P-ATA:     UnknownError(PrivilegeEscalation)
+   SPL ATA:  Failure(InvalidSeeds)
+  fail_recover_wrong_destination_address - Different Error Messages:
+    P-ATA:     UnknownError(PrivilegeEscalation)
+   SPL ATA:  Failure(InvalidSeeds)
+  fail_token_account_wrong_owner - Different Error Messages:
+    P-ATA:     Failure(IllegalOwner)
+   SPL ATA:  Failure(Custom(0))
+```

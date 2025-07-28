@@ -54,6 +54,7 @@ solana-sdk-ids = "2.2.1"
 solana-signature = "2.3.0"
 solana-signer = "2.2.1"
 solana-sysvar = "2.2.2"
+solana-system-interface = "1.0.0"
 solana-program-test = { version = "2.3.4" }
 solana-seed-derivable = "2.2.1"
 spl-token = { version="^4", features=["no-entrypoint"] }

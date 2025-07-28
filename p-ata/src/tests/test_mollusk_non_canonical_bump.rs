@@ -150,12 +150,6 @@ fn test_rejects_suboptimal_bump() {
         (254u8, 252u8),
     ];
 
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("=== Starting non-canonical bump test ===");
-        eprintln!("Testing {} pairs: {:?}", pairs.len(), pairs);
-    }
-
     let mut wallet_infos = Vec::new();
     for &(canonical, sub) in &pairs {
         let (wallet, canonical_addr, sub_addr) = find_wallet_pair(
@@ -169,17 +163,6 @@ fn test_rejects_suboptimal_bump() {
     }
 
     for (wallet, canonical_bump, canonical_addr, sub_bump, sub_addr) in wallet_infos {
-        #[cfg(feature = "test-debug")]
-        {
-            eprintln!(
-                "\n--- Testing pair: canonical={}, sub={} ---",
-                canonical_bump, sub_bump
-            );
-            eprintln!("Wallet: {}", wallet);
-            eprintln!("Canonical address: {}", canonical_addr);
-            eprintln!("Sub-optimal address: {}", sub_addr);
-        }
-
         // Test 1: Sub-optimal should fail
         {
             let mut mollusk = Mollusk::default();
@@ -195,9 +178,6 @@ fn test_rejects_suboptimal_bump() {
                 "programs/token/target/deploy/pinocchio_token_program",
                 &LOADER_V3,
             );
-
-            #[cfg(feature = "test-debug")]
-            eprintln!("Testing sub-optimal bump {} (should FAIL)", sub_bump);
 
             let ix_fail = build_create_ix(
                 ata_program_id,
@@ -238,9 +218,6 @@ fn test_rejects_suboptimal_bump() {
                 &LOADER_V3,
             );
 
-            #[cfg(feature = "test-debug")]
-            eprintln!("Testing canonical bump {} (should SUCCEED)", canonical_bump);
-
             let ix_ok = build_create_ix(
                 ata_program_id,
                 canonical_addr,
@@ -259,12 +236,6 @@ fn test_rejects_suboptimal_bump() {
             ));
 
             mollusk.process_and_validate_instruction(&ix_ok, &accounts, &[Check::success()]);
-
-            #[cfg(feature = "test-debug")]
-            eprintln!("✓ Canonical bump {} correctly succeeded", canonical_bump);
         }
     }
-
-    #[cfg(feature = "test-debug")]
-    eprintln!("\n=== All test pairs completed successfully ===");
 }

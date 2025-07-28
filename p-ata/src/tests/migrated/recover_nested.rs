@@ -1,90 +1,19 @@
-//! Migrated test for recover_nested functionality using mollusk and pinocchio
+//! Migrated test for recover_nested functionality using mollusk
 
 use {
     crate::tests::test_utils::{
-        create_mollusk_mint_data, create_mollusk_token_account_data, setup_mollusk_with_programs,
-        NATIVE_LOADER_ID,
+        create_mollusk_base_accounts_with_token_and_wallet, create_mollusk_mint_data,
+        create_mollusk_token_account_data, setup_mollusk_with_programs,
     },
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
     solana_instruction::{AccountMeta, Instruction},
     solana_program::program_error::ProgramError,
     solana_pubkey::Pubkey,
-    solana_sdk::{account::Account, signature::Keypair, signer::Signer, system_program, sysvar},
+    solana_sdk::{account::Account, signature::Keypair, signer::Signer},
+    solana_system_interface::program as system_program,
     spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
     std::vec::Vec,
 };
-
-/// Creates mint account data with specified decimals
-fn create_mint_data(decimals: u8) -> Vec<u8> {
-    const MINT_ACCOUNT_SIZE: usize = 82;
-    let mut data = [0u8; MINT_ACCOUNT_SIZE];
-    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
-    data[44] = decimals;
-    data[45] = 1; // is_initialized = 1
-    data.to_vec()
-}
-
-/// Helper to create token account data with specified properties
-fn create_token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
-    const TOKEN_ACCOUNT_SIZE: usize = 165; // SPL Token account size (no extensions)
-    let mut data = [0u8; TOKEN_ACCOUNT_SIZE];
-
-    // mint
-    data[0..32].copy_from_slice(mint.as_ref());
-    // owner
-    data[32..64].copy_from_slice(owner.as_ref());
-    // amount
-    data[64..72].copy_from_slice(&amount.to_le_bytes());
-    // delegate option = 0 (none)
-    data[72] = 0;
-    // state = 1 (initialized)
-    data[108] = 1;
-    // is_native option = 0 (none)
-    data[109] = 0;
-    // delegated_amount = 0
-    data[110..118].copy_from_slice(&0u64.to_le_bytes());
-    // close_authority option = 0 (none)
-    data[118] = 0;
-
-    data.to_vec()
-}
-
-/// Create base accounts needed for all tests
-fn create_base_accounts(
-    payer: &Keypair,
-    wallet: &Pubkey,
-    token_program: &Pubkey,
-) -> Vec<(Pubkey, Account)> {
-    [
-        (
-            payer.pubkey(),
-            Account::new(1_000_000_000, 0, &system_program::id()),
-        ),
-        (*wallet, Account::new(0, 0, &system_program::id())),
-        (
-            system_program::id(),
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: NATIVE_LOADER_ID,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            *token_program,
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: LOADER_V3,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        (sysvar::rent::id(), Account::new(1009200, 17, &sysvar::id())),
-    ]
-    .to_vec()
-}
 
 /// Common test variables setup
 struct TestContext {
@@ -107,7 +36,7 @@ impl TestContext {
     }
 
     fn new_with_different_mints(token_program_id: Pubkey) -> (Self, Pubkey) {
-        let mut ctx = Self::new(token_program_id);
+        let ctx = Self::new(token_program_id);
         let nested_mint = Pubkey::new_unique();
         (ctx, nested_mint)
     }
@@ -186,7 +115,7 @@ where
 
 /// Setup complete test scenario with real token program accounts
 fn setup_recover_test_scenario(
-    mollusk: &Mollusk,
+    _mollusk: &Mollusk,
     ata_program_id: &Pubkey,
     token_program_id: &Pubkey,
     payer: &Keypair,
@@ -196,7 +125,8 @@ fn setup_recover_test_scenario(
     create_destination: bool,
     amount: u64,
 ) -> Vec<(Pubkey, Account)> {
-    let mut accounts = create_base_accounts(payer, wallet, token_program_id);
+    let mut accounts =
+        create_mollusk_base_accounts_with_token_and_wallet(payer, wallet, token_program_id);
 
     // Add the ATA program
     accounts.push((
@@ -215,7 +145,7 @@ fn setup_recover_test_scenario(
         *owner_mint,
         Account {
             lamports: 1_461_600,
-            data: create_mint_data(0),
+            data: create_mollusk_mint_data(0),
             owner: *token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -228,7 +158,7 @@ fn setup_recover_test_scenario(
             *nested_mint,
             Account {
                 lamports: 1_461_600,
-                data: create_mint_data(0),
+                data: create_mollusk_mint_data(0),
                 owner: *token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -243,7 +173,7 @@ fn setup_recover_test_scenario(
         owner_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(owner_mint, wallet, 0),
+            data: create_mollusk_token_account_data(owner_mint, wallet, 0),
             owner: *token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -257,7 +187,7 @@ fn setup_recover_test_scenario(
         nested_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(nested_mint, &owner_ata, amount),
+            data: create_mollusk_token_account_data(nested_mint, &owner_ata, amount),
             owner: *token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -272,7 +202,7 @@ fn setup_recover_test_scenario(
             destination_ata,
             Account {
                 lamports: 2_039_280,
-                data: create_token_account_data(nested_mint, wallet, 0),
+                data: create_mollusk_token_account_data(nested_mint, wallet, 0),
                 owner: *token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -454,15 +384,18 @@ fn run_not_nested_test(token_program_id: Pubkey) {
     );
 
     // Set up accounts where the nested account is NOT actually nested (not owned by owner_ata)
-    let mut accounts =
-        create_base_accounts(&ctx.payer, &ctx.wallet.pubkey(), &ctx.token_program_id);
+    let mut accounts = create_mollusk_base_accounts_with_token_and_wallet(
+        &ctx.payer,
+        &ctx.wallet.pubkey(),
+        &ctx.token_program_id,
+    );
 
     // Add mint
     accounts.push((
         ctx.mint,
         Account {
             lamports: 1_461_600,
-            data: create_mint_data(0),
+            data: create_mollusk_mint_data(0),
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -479,7 +412,7 @@ fn run_not_nested_test(token_program_id: Pubkey) {
         owner_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
+            data: create_mollusk_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -493,7 +426,7 @@ fn run_not_nested_test(token_program_id: Pubkey) {
         nested_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(&ctx.mint, &wrong_wallet, 100), // owned by wrong_wallet, not owner_ata
+            data: create_mollusk_token_account_data(&ctx.mint, &wrong_wallet, 100), // owned by wrong_wallet, not owner_ata
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -510,7 +443,7 @@ fn run_not_nested_test(token_program_id: Pubkey) {
         destination_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
+            data: create_mollusk_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -565,7 +498,7 @@ fn run_wrong_address_derivation_owner_test(token_program_id: Pubkey) {
         wrong_owner_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(&ctx.mint, &wrong_wallet, 0),
+            data: create_mollusk_token_account_data(&ctx.mint, &wrong_wallet, 0),
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -713,16 +646,18 @@ fn fail_owner_account_does_not_exist() {
         ctx.token_program_id,
     );
 
-    // Create accounts manually, excluding the owner ATA
-    let mut accounts =
-        create_base_accounts(&ctx.payer, &ctx.wallet.pubkey(), &ctx.token_program_id);
+    let mut accounts = create_mollusk_base_accounts_with_token_and_wallet(
+        &ctx.payer,
+        &ctx.wallet.pubkey(),
+        &ctx.token_program_id,
+    );
 
     // Add mint
     accounts.push((
         ctx.mint,
         Account {
             lamports: 1_461_600,
-            data: create_mint_data(0),
+            data: create_mollusk_mint_data(0),
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -744,7 +679,7 @@ fn fail_owner_account_does_not_exist() {
         nested_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(&ctx.mint, &owner_ata, 100),
+            data: create_mollusk_token_account_data(&ctx.mint, &owner_ata, 100),
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -761,7 +696,7 @@ fn fail_owner_account_does_not_exist() {
         destination_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
+            data: create_mollusk_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -894,7 +829,7 @@ fn fail_destination_not_wallet_ata() {
         wrong_destination_ata,
         Account {
             lamports: 2_039_280,
-            data: create_token_account_data(&ctx.mint, &wrong_wallet, 0),
+            data: create_mollusk_token_account_data(&ctx.mint, &wrong_wallet, 0),
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,

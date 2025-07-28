@@ -7,7 +7,7 @@ use {
     core::cell::RefCell,
     mollusk_svm::{program::loader_keys, Mollusk},
     solana_program::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey},
-    solana_program_test::{ProgramTest, *},
+    solana_program_test::*,
     solana_sdk::{
         account::Account,
         hash::Hash,
@@ -20,6 +20,7 @@ use {
     std::collections::BTreeMap,
 };
 
+#[allow(dead_code)]
 fn process_instruction(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -53,6 +54,7 @@ fn process_instruction(
     }
 }
 
+#[allow(dead_code)]
 fn id() -> Pubkey {
     spl_associated_token_account::id()
 }
@@ -245,6 +247,7 @@ pub struct MolluskProgramTestContext {
 
 // Type aliases to make Mollusk types compatible with existing tests
 pub type ProgramTestContext = MolluskProgramTestContext;
+#[allow(dead_code)]
 pub type BanksClient = MolluskBanksClient;
 
 /// Mollusk-based program test that matches the original API

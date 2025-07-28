@@ -3,15 +3,12 @@ use {
         processor::{
             valid_token_account_data, validate_token_account_mint, validate_token_account_owner,
         },
-        tests::test_utils::{
-            create_multisig_data, create_token_account_data, validate_token_account_structure,
-        },
+        tests::test_utils::{create_token_account_data, validate_token_account_structure},
     },
     pinocchio::{program_error::ProgramError, pubkey::Pubkey},
     spl_token_interface::state::{
         account::Account as TokenAccount, multisig::Multisig, Transmutable,
     },
-    test_case::test_case,
 };
 
 use std::vec;

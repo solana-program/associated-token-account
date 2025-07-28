@@ -1,19 +1,16 @@
-//! Migrated test for idempotent creation functionality using mollusk and pinocchio
+//! Migrated test for idempotent creation functionality using mollusk
 
 use {
-    crate::tests::{
-        migrated::process_create_associated_token_account::create_test_mint,
-        test_utils::{
-            build_create_ata_instruction, build_create_idempotent_ata_instruction,
-            create_mollusk_base_accounts, create_mollusk_token_account_data,
-            setup_mollusk_with_programs,
-        },
+    crate::tests::test_utils::{
+        build_create_ata_instruction, build_create_idempotent_ata_instruction,
+        create_mollusk_token_account_data, create_test_mint, setup_mollusk_with_programs,
     },
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
     solana_program::program_error::ProgramError,
     solana_pubkey::Pubkey,
-    solana_sdk::{account::Account, signature::Keypair, signer::Signer, system_program},
+    solana_sdk::{account::Account, signature::Keypair, signer::Signer},
+    solana_system_interface::program as system_program,
     spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
 };
 
@@ -122,14 +119,6 @@ fn success_idempotent_on_existing_ata() {
 
     let mollusk = setup_mollusk_with_programs(&token_program_id);
 
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("=== Starting success_idempotent_on_existing_ata test ===");
-        eprintln!("Wallet: {}", wallet_address);
-        eprintln!("Token mint: {}", token_mint_address);
-        eprintln!("Associated token address: {}", associated_token_address);
-    }
-
     // Step 1: Create and initialize mint
     let mut accounts = create_test_mint(
         &mollusk,
@@ -160,11 +149,6 @@ fn success_idempotent_on_existing_ata() {
     );
 
     mollusk.process_and_validate_instruction(&create_idempotent_ix, &accounts, &[Check::success()]);
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ First CreateIdempotent succeeded");
-    }
 
     // Step 3: Update accounts with the created ATA for subsequent calls
     let result = mollusk.process_instruction(&create_idempotent_ix, &accounts);
@@ -197,24 +181,12 @@ fn success_idempotent_on_existing_ata() {
         &[Check::err(ProgramError::Custom(0))], // Should fail because account already exists (system program error)
     );
 
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Regular Create on existing ATA correctly failed");
-    }
-
     // Step 5: Try CreateIdempotent again on existing ATA - should succeed (core idempotent behavior)
     mollusk.process_and_validate_instruction(
         &create_idempotent_ix,
         &updated_accounts,
         &[Check::success()],
     );
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!(
-            "✓ Second CreateIdempotent on existing ATA succeeded (idempotent behavior verified)"
-        );
-    }
 
     // Step 6: Verify ATA properties are unchanged
     let final_result = mollusk.process_instruction(&create_idempotent_ix, &updated_accounts);
@@ -229,11 +201,6 @@ fn success_idempotent_on_existing_ata() {
     assert_eq!(final_ata.data.len(), 165); // SPL Token account size
     assert_eq!(final_ata.owner, token_program_id);
     assert!(final_ata.lamports > 0);
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ ATA properties verified unchanged after idempotent call");
-    }
 }
 
 #[test]
@@ -269,15 +236,6 @@ fn create_with_wrong_mint_fails() {
         "programs/token/target/deploy/pinocchio_token_program",
         &LOADER_V3,
     );
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("=== Starting create_with_wrong_mint_fails test ===");
-        eprintln!("Wallet: {}", wallet_address);
-        eprintln!("Correct mint: {}", token_mint_address);
-        eprintln!("Wrong mint: {}", wrong_mint_address);
-        eprintln!("Associated token address: {}", associated_token_address);
-    }
 
     // Step 1: Create and initialize the correct mint
     let mut accounts = create_test_mint(
@@ -316,11 +274,6 @@ fn create_with_wrong_mint_fails() {
             solana_program::program_error::ProgramError::InvalidInstructionData,
         )],
     );
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Create with wrong mint correctly failed");
-    }
 }
 
 #[test]
@@ -354,15 +307,6 @@ fn create_with_mismatch_fails() {
         "programs/token/target/deploy/pinocchio_token_program",
         &LOADER_V3,
     );
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("=== Starting create_with_mismatch_fails test ===");
-        eprintln!("Correct wallet: {}", correct_wallet);
-        eprintln!("Wrong wallet: {}", wrong_wallet);
-        eprintln!("Token mint: {}", token_mint_address);
-        eprintln!("Associated token address: {}", associated_token_address);
-    }
 
     // Step 1: Create and initialize mint
     let mut accounts = create_test_mint(
@@ -401,11 +345,6 @@ fn create_with_mismatch_fails() {
             solana_program::program_error::ProgramError::InvalidInstructionData,
         )],
     );
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Create with wrong wallet correctly failed");
-    }
 }
 
 #[test]
@@ -449,30 +388,12 @@ fn fail_account_exists_with_wrong_owner() {
         6,
     );
 
+    let data = create_mollusk_token_account_data(&token_mint_address, &wrong_owner, 0);
+
     // Create a token account at the ATA address but with wrong owner
     let wrong_token_account = Account {
         lamports: 1_000_000_000,
-        data: {
-            let mut data = [0u8; 165]; // SPL Token account size (no extensions)
-                                       // Initialize as a basic token account structure with wrong owner
-                                       // Mint (32 bytes)
-            data[0..32].copy_from_slice(&token_mint_address.to_bytes());
-            // Owner (32 bytes) - this is the wrong owner!
-            data[32..64].copy_from_slice(&wrong_owner.to_bytes());
-            // Amount (8 bytes) - 0
-            data[64..72].copy_from_slice(&0u64.to_le_bytes());
-            // Delegate option (36 bytes) - None
-            data[72] = 0; // COption::None
-                          // State (1 byte) - Initialized
-            data[108] = 1; // AccountState::Initialized
-                           // Is native option (12 bytes) - None
-            data[109] = 0; // COption::None
-                           // Delegated amount (8 bytes) - 0
-            data[121..129].copy_from_slice(&0u64.to_le_bytes());
-            // Close authority option (36 bytes) - None
-            data[129] = 0; // COption::None
-            data.to_vec()
-        },
+        data,
         owner: token_program_id,
         executable: false,
         rent_epoch: 0,
@@ -545,31 +466,13 @@ fn fail_non_ata() {
         6,
     );
 
+    let data = create_mollusk_token_account_data(&token_mint_address, &wallet_address, 0);
+
     // Create a valid token account but at a non-ATA address
     let token_account_balance = 3_500_880; // Standard rent for token account with extension
     let valid_token_account = Account {
         lamports: token_account_balance,
-        data: {
-            let mut data = [0u8; 165]; // SPL Token account size (no extensions)
-                                       // Initialize as a properly structured token account
-                                       // Mint (32 bytes)
-            data[0..32].copy_from_slice(&token_mint_address.to_bytes());
-            // Owner (32 bytes) - correct owner
-            data[32..64].copy_from_slice(&wallet_address.to_bytes());
-            // Amount (8 bytes) - 0
-            data[64..72].copy_from_slice(&0u64.to_le_bytes());
-            // Delegate option (36 bytes) - None
-            data[72] = 0; // COption::None
-                          // State (1 byte) - Initialized
-            data[108] = 1; // AccountState::Initialized
-                           // Is native option (12 bytes) - None
-            data[109] = 0; // COption::None
-                           // Delegated amount (8 bytes) - 0
-            data[121..129].copy_from_slice(&0u64.to_le_bytes());
-            // Close authority option (36 bytes) - None
-            data[129] = 0; // COption::None
-            data.to_vec()
-        },
+        data,
         owner: token_program_id,
         executable: false,
         rent_epoch: 0,

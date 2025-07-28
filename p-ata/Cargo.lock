@@ -3222,6 +3222,7 @@ dependencies = [
  "solana-seed-derivable",
  "solana-signature",
  "solana-signer",
+ "solana-system-interface 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "solana-sysvar",
  "spl-associated-token-account",
  "spl-associated-token-account-client",

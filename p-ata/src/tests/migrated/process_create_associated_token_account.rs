@@ -1,100 +1,24 @@
-//! Migrated test for process_create_associated_token_account functionality using mollusk and pinocchio
+//! Migrated test for process_create_associated_token_account functionality using mollusk
 
 use {
     crate::tests::test_utils::{
-        build_create_ata_instruction, create_mollusk_base_accounts,
-        create_mollusk_base_accounts_with_token, setup_mollusk_with_programs, NATIVE_LOADER_ID,
+        build_create_ata_instruction, calculate_account_rent,
+        create_mollusk_base_accounts_with_token, create_test_mint, setup_mollusk_with_programs,
+        NATIVE_LOADER_ID,
     },
     mollusk_svm::{result::Check, Mollusk},
     solana_instruction::{AccountMeta, Instruction},
     solana_program::program_error::ProgramError,
-    solana_program::system_instruction,
     solana_pubkey::Pubkey,
-    solana_sdk::{account::Account, signature::Keypair, signer::Signer, system_program, sysvar},
+    solana_sdk::{account::Account, signature::Keypair, signer::Signer, sysvar},
+    solana_system_interface::program as system_program,
     spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
-    std::{eprintln, vec::Vec},
+    std::vec::Vec,
 };
 
 use mollusk_svm::program::loader_keys::LOADER_V3;
 
-/// Create a test mint and return accounts with it initialized
-pub(crate) fn create_test_mint(
-    mollusk: &Mollusk,
-    mint_account: &Keypair,
-    mint_authority: &Keypair,
-    payer: &Keypair,
-    token_program: &Pubkey,
-    decimals: u8,
-) -> Vec<(Pubkey, Account)> {
-    let mint_space = 82; // Standard SPL Token mint size
-    let rent_lamports = 1_461_600; // Standard rent for mint account
-
-    let create_mint_ix = system_instruction::create_account(
-        &payer.pubkey(),
-        &mint_account.pubkey(),
-        rent_lamports,
-        mint_space,
-        token_program,
-    );
-
-    let mut accounts = create_mollusk_base_accounts_with_token(payer, token_program);
-
-    // Add the mint account (uninitialized, owned by system program initially)
-    accounts.push((
-        mint_account.pubkey(),
-        Account::new(0, 0, &system_program::id()),
-    ));
-
-    // Add mint authority as signer
-    accounts.push((
-        mint_authority.pubkey(),
-        Account::new(1_000_000, 0, &system_program::id()),
-    ));
-
-    mollusk.process_and_validate_instruction(&create_mint_ix, &accounts, &[Check::success()]);
-
-    // Initialize mint
-    let init_mint_ix = spl_token::instruction::initialize_mint(
-        token_program,
-        &mint_account.pubkey(),
-        &mint_authority.pubkey(),
-        Some(&mint_authority.pubkey()),
-        decimals,
-    )
-    .unwrap();
-
-    // Update accounts with created mint account
-    let result = mollusk.process_instruction(&create_mint_ix, &accounts);
-    let created_mint = result
-        .resulting_accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-        .map(|(_, account)| account.clone())
-        .expect("Mint account should be created");
-
-    accounts
-        .iter_mut()
-        .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-        .map(|(_, account)| *account = created_mint);
-
-    mollusk.process_and_validate_instruction(&init_mint_ix, &accounts, &[Check::success()]);
-
-    // Update accounts with initialized mint
-    let mint_result = mollusk.process_instruction(&init_mint_ix, &accounts);
-    let initialized_mint = mint_result
-        .resulting_accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-        .map(|(_, account)| account.clone())
-        .expect("Initialized mint should exist");
-
-    accounts
-        .iter_mut()
-        .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-        .map(|(_, account)| *account = initialized_mint);
-
-    accounts
-}
+const SPL_TOKEN_ACCOUNT_SIZE: usize = 165;
 
 #[test]
 fn process_create_associated_token_account() {
@@ -113,14 +37,6 @@ fn process_create_associated_token_account() {
     );
 
     let mollusk = setup_mollusk_with_programs(&token_program_id);
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("=== Starting process_create_associated_token_account test ===");
-        eprintln!("Wallet: {}", wallet_address);
-        eprintln!("Token mint: {}", token_mint_address);
-        eprintln!("Associated token address: {}", associated_token_address);
-    }
 
     // Step 1: Create and initialize mint
     let mut accounts = create_test_mint(
@@ -170,14 +86,6 @@ fn process_create_associated_token_account() {
     assert_eq!(created_account.owner, token_program_id);
     // Should have minimum rent-exempt lamports
     assert!(created_account.lamports > 0);
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Associated token account created successfully");
-        eprintln!("Account size: {}", created_account.data.len());
-        eprintln!("Account owner: {}", created_account.owner);
-        eprintln!("Account lamports: {}", created_account.lamports);
-    }
 }
 
 #[test]
@@ -369,26 +277,6 @@ fn process_create_associated_token_account_with_invalid_rent_sysvar() {
     );
 }
 
-/// Helper function to calculate expected token account balance using mollusk's rent
-fn calculate_token_account_balance() -> u64 {
-    let mollusk = Mollusk::default();
-    // For SPL Token standard account (165 bytes)
-    let spl_token_account_size = 165;
-    let balance = mollusk.sysvars.rent.minimum_balance(spl_token_account_size);
-
-    // Debug: print the calculated values
-    eprintln!(
-        "DEBUG: SPL Token account size: {}, rent: {}",
-        spl_token_account_size, balance
-    );
-    eprintln!(
-        "DEBUG: Token-2022 size: 170, rent: {}",
-        mollusk.sysvars.rent.minimum_balance(170)
-    );
-
-    balance
-}
-
 #[test]
 fn test_create_with_fewer_lamports() {
     let ata_program_id = spl_associated_token_account::id();
@@ -429,23 +317,12 @@ fn test_create_with_fewer_lamports() {
         6,
     );
 
-    let expected_token_account_balance = calculate_token_account_balance();
+    let expected_token_account_balance = calculate_account_rent(SPL_TOKEN_ACCOUNT_SIZE);
 
     // Use rent-exempt amount for 0 data (like the original test)
     let insufficient_lamports = mollusk.sysvars.rent.minimum_balance(0);
-    eprintln!(
-        "DEBUG: insufficient_lamports (rent for 0 data): {}",
-        insufficient_lamports
-    );
 
     // Add associated token address with insufficient lamports (enough for 0 data but not token account)
-    let payer_initial_lamports = 10_000_000_000u64; // 10 SOL, should be plenty
-    eprintln!("DEBUG: payer_initial_lamports: {}", payer_initial_lamports);
-    eprintln!(
-        "DEBUG: required missing lamports: {}",
-        expected_token_account_balance - insufficient_lamports
-    );
-
     accounts.extend([
         (
             wallet_address,
@@ -477,14 +354,6 @@ fn test_create_with_fewer_lamports() {
         .find(|(pubkey, _)| *pubkey == associated_token_address)
         .map(|(_, account)| account)
         .expect("ATA should be created");
-
-    eprintln!("DEBUG: created_ata.lamports: {}", created_ata.lamports);
-    eprintln!(
-        "DEBUG: expected_token_account_balance: {}",
-        expected_token_account_balance
-    );
-    eprintln!("DEBUG: created_ata.data.len(): {}", created_ata.data.len());
-    eprintln!("DEBUG: created_ata.owner: {}", created_ata.owner);
 
     assert_eq!(created_ata.lamports, expected_token_account_balance);
     assert_eq!(created_ata.owner, token_program_id);
@@ -530,7 +399,7 @@ fn test_create_with_excess_lamports() {
         6,
     );
 
-    let expected_token_account_balance = calculate_token_account_balance();
+    let expected_token_account_balance = calculate_account_rent(SPL_TOKEN_ACCOUNT_SIZE);
     let excess_lamports = expected_token_account_balance + 1; // More than needed
 
     // Add associated token address with excess lamports
@@ -650,7 +519,7 @@ fn test_create_associated_token_account_using_legacy_implicit_instruction() {
         .map(|(_, account)| account)
         .expect("ATA should be created with legacy instruction");
 
-    let expected_token_account_balance = calculate_token_account_balance();
+    let expected_token_account_balance = calculate_account_rent(SPL_TOKEN_ACCOUNT_SIZE);
     assert_eq!(created_ata.lamports, expected_token_account_balance);
     assert_eq!(created_ata.owner, token_program_id);
     assert!(created_ata.data.len() > 0); // Should have token account data

@@ -37,10 +37,11 @@ pub struct AccountLayout {
 
 #[cfg(test)]
 use {
-    mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
+    mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey as SolanaPubkey,
-    solana_sdk::{account::Account, signature::Keypair, signer::Signer, system_program, sysvar},
+    solana_sdk::{account::Account, signature::Keypair, signer::Signer, sysvar},
+    solana_system_interface::{instruction as system_instruction, program as system_program},
 };
 
 /// Common mollusk setup with ATA program and token program
@@ -130,6 +131,24 @@ pub fn create_mollusk_base_accounts_with_token(
             rent_epoch: 0,
         },
     ));
+
+    accounts
+}
+
+/// Create standard base accounts with token program and wallet
+#[cfg(test)]
+pub fn create_mollusk_base_accounts_with_token_and_wallet(
+    payer: &Keypair,
+    wallet: &SolanaPubkey,
+    token_program_id: &SolanaPubkey,
+) -> Vec<(SolanaPubkey, Account)> {
+    // Start with the standard base accounts (payer, system program, rent sysvar, token program)
+    let mut accounts = create_mollusk_base_accounts_with_token(payer, token_program_id);
+
+    // Add the wallet account with zero lamports, owned by the system program. This is
+    // frequently required by tests that reference the wallet but previously had to push it
+    // manually.
+    accounts.push((*wallet, Account::new(0, 0, &system_program::id())));
 
     accounts
 }
@@ -299,6 +318,17 @@ pub fn validate_token_account_structure(
     data[108] != 0
 }
 
+/// Calculate the rent-exempt lamports required
+pub fn calculate_account_rent(len: usize) -> u64 {
+    // Mollusk embeds a `Rent` sysvar instance that mirrors Solana’s
+    // runtime parameters, so we reuse it rather than hard-coding the
+    // constant.
+    mollusk_svm::Mollusk::default()
+        .sysvars
+        .rent
+        .minimum_balance(len)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::processor::is_spl_token_program;
@@ -443,4 +473,86 @@ mod tests {
         assert_eq!(mint_data[44], 6); // decimals
         assert_eq!(mint_data[45], 1); // initialized
     }
+}
+
+#[cfg(test)]
+/// Creates and initializes a mint account with the given parameters.
+/// Returns a vector of accounts including the initialized mint and all necessary
+/// base accounts for testing.
+pub fn create_test_mint(
+    mollusk: &Mollusk,
+    mint_account: &Keypair,
+    mint_authority: &Keypair,
+    payer: &Keypair,
+    token_program: &SolanaPubkey,
+    decimals: u8,
+) -> Vec<(SolanaPubkey, Account)> {
+    // Standard SPL-Token mint size and rent figure used in the original
+    // tests. If these ever change, only this helper needs updating.
+    let mint_space = 82u64;
+    let rent_lamports = 1_461_600u64;
+
+    let create_mint_ix = system_instruction::create_account(
+        &payer.pubkey(),
+        &mint_account.pubkey(),
+        rent_lamports,
+        mint_space,
+        token_program,
+    );
+
+    // Base accounts plus token program account.
+    let mut accounts = create_mollusk_base_accounts_with_token(payer, token_program);
+
+    // Uninitialised mint account + mint authority signer.
+    accounts.push((
+        mint_account.pubkey(),
+        Account::new(0, 0, &system_program::id()),
+    ));
+    accounts.push((
+        mint_authority.pubkey(),
+        Account::new(1_000_000, 0, &system_program::id()),
+    ));
+
+    // Create the mint account on-chain.
+    mollusk.process_and_validate_instruction(&create_mint_ix, &accounts, &[Check::success()]);
+
+    // Initialise it.
+    let init_mint_ix = spl_token::instruction::initialize_mint(
+        token_program,
+        &mint_account.pubkey(),
+        &mint_authority.pubkey(),
+        Some(&mint_authority.pubkey()),
+        decimals,
+    )
+    .unwrap();
+
+    // Refresh the mint account data after creation.
+    if let Some((_, acct)) = mollusk
+        .process_instruction(&create_mint_ix, &accounts)
+        .resulting_accounts
+        .into_iter()
+        .find(|(pk, _)| *pk == mint_account.pubkey())
+    {
+        accounts
+            .iter_mut()
+            .find(|(pk, _)| *pk == mint_account.pubkey())
+            .map(|(_, a)| *a = acct);
+    }
+
+    mollusk.process_and_validate_instruction(&init_mint_ix, &accounts, &[Check::success()]);
+
+    // Final refresh so callers see the initialised state.
+    if let Some((_, acct)) = mollusk
+        .process_instruction(&init_mint_ix, &accounts)
+        .resulting_accounts
+        .into_iter()
+        .find(|(pk, _)| *pk == mint_account.pubkey())
+    {
+        accounts
+            .iter_mut()
+            .find(|(pk, _)| *pk == mint_account.pubkey())
+            .map(|(_, a)| *a = acct);
+    }
+
+    accounts
 }

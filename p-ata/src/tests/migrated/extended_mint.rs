@@ -1,17 +1,16 @@
-//! Migrated test for extended mint functionality with token-2022 transfer fees using mollusk and pinocchio
+//! Migrated test for extended mint functionality with token-2022 transfer fees using mollusk
 
 use {
     crate::tests::test_utils::{
-        build_create_ata_instruction, create_mollusk_base_accounts_with_token,
+        build_create_ata_instruction, create_mollusk_base_accounts_with_token_and_wallet,
         setup_mollusk_with_programs,
     },
     mollusk_svm::result::Check,
-    solana_program::system_instruction,
     solana_pubkey::Pubkey,
     solana_sdk::{
         account::Account, program_error::ProgramError, signature::Keypair, signer::Signer,
-        system_program,
     },
+    solana_system_interface::{instruction as system_instruction, program as system_program},
     spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
     spl_token_2022::{
         extension::{transfer_fee, ExtensionType, StateWithExtensionsOwned},
@@ -34,14 +33,6 @@ fn test_associated_token_account_with_transfer_fees() {
 
     let mollusk = setup_mollusk_with_programs(&token_program_id);
 
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("=== Starting test_associated_token_account_with_transfer_fees ===");
-        eprintln!("Wallet sender: {}", wallet_address_sender);
-        eprintln!("Wallet receiver: {}", wallet_address_receiver);
-        eprintln!("Token mint: {}", token_mint_address);
-    }
-
     // Step 1: Create the mint account
     let space =
         ExtensionType::try_calculate_account_len::<Mint>(&[ExtensionType::TransferFeeConfig])
@@ -56,7 +47,11 @@ fn test_associated_token_account_with_transfer_fees() {
         &token_program_id,
     );
 
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &token_program_id);
+    let mut accounts = create_mollusk_base_accounts_with_token_and_wallet(
+        &payer,
+        &wallet_address_sender,
+        &token_program_id,
+    );
 
     // Add the mint account (uninitialized, owned by system program initially)
     accounts.push((
@@ -71,11 +66,6 @@ fn test_associated_token_account_with_transfer_fees() {
     ));
 
     mollusk.process_and_validate_instruction(&create_mint_ix, &accounts, &[Check::success()]);
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Mint account created");
-    }
 
     // Step 2: Initialize transfer fee config
     let maximum_fee = 100;
@@ -107,11 +97,6 @@ fn test_associated_token_account_with_transfer_fees() {
 
     mollusk.process_and_validate_instruction(&init_transfer_fee_ix, &accounts, &[Check::success()]);
 
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Transfer fee config initialized");
-    }
-
     // Step 3: Initialize mint
     let init_mint_ix = spl_token_2022::instruction::initialize_mint(
         &token_program_id,
@@ -137,11 +122,6 @@ fn test_associated_token_account_with_transfer_fees() {
         .map(|(_, account)| *account = fee_mint);
 
     mollusk.process_and_validate_instruction(&init_mint_ix, &accounts, &[Check::success()]);
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Mint initialized");
-    }
 
     // Step 4: Create associated token addresses
     let associated_token_address_sender = get_associated_token_address_with_program_id(
@@ -197,11 +177,6 @@ fn test_associated_token_account_with_transfer_fees() {
 
     mollusk.process_and_validate_instruction(&create_sender_ix, &accounts, &[Check::success()]);
 
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Sender associated token account created");
-    }
-
     // Step 6: Create receiver's associated token account
     let create_receiver_ix = build_create_ata_instruction(
         ata_program_id,
@@ -234,11 +209,6 @@ fn test_associated_token_account_with_transfer_fees() {
 
     mollusk.process_and_validate_instruction(&create_receiver_ix, &accounts, &[Check::success()]);
 
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Receiver associated token account created");
-    }
-
     // Step 7: Mint tokens to sender
     let sender_amount = 50 * maximum_fee;
 
@@ -267,11 +237,6 @@ fn test_associated_token_account_with_transfer_fees() {
         .map(|(_, account)| *account = receiver_ata);
 
     mollusk.process_and_validate_instruction(&mint_to_ix, &accounts, &[Check::success()]);
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Tokens minted to sender");
-    }
 
     // Step 8: Test insufficient funds transfer (should fail)
     let insufficient_transfer_ix = transfer_fee::instruction::transfer_checked_with_fee(
@@ -307,11 +272,6 @@ fn test_associated_token_account_with_transfer_fees() {
         &accounts,
         &[Check::err(ProgramError::Custom(1))], // InsufficientFunds
     );
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Insufficient funds transfer correctly failed");
-    }
 
     // Step 9: Test successful transfer with fees
     let transfer_amount = 500;
@@ -361,12 +321,4 @@ fn test_associated_token_account_with_transfer_fees() {
     let receiver_state =
         StateWithExtensionsOwned::<TokenAccount>::unpack(final_receiver.data.clone()).unwrap();
     assert_eq!(receiver_state.base.amount, transfer_amount - fee);
-
-    #[cfg(feature = "test-debug")]
-    {
-        eprintln!("✓ Transfer with fees completed successfully");
-        eprintln!("Sender final amount: {}", sender_state.base.amount);
-        eprintln!("Receiver final amount: {}", receiver_state.base.amount);
-        eprintln!("Fee collected: {}", fee);
-    }
 }

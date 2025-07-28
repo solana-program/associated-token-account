@@ -46,11 +46,6 @@ BENCH_ITERATIONS=1 cargo bench
 
 ### "Best run" numbers (ideal bumps) *as of 2025-07-28, ad6fbac*
 
-"optimum args" are:
-- `bump`
-- for Token-2022, `token_account_len` passed in (after `bump`)
-- for `create` tests other than `create_idemp`, `rent` passed in as an optional additional account
-
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |
 |-----------------------|--------:|------:|---------:|------------------:|
 | create_idempotent     |   3669  |  1805 |    1806  |              1805 |
@@ -63,7 +58,25 @@ BENCH_ITERATIONS=1 cargo bench
 | recover_multisig      |      0  |  8550 |    8550  |              8550 |
 | worst_case_create     |  19864  | 15187 |    3415  |              3313 |
 
+### Average 10,000 random wallet runs *as of 2025-07-28, ad6fbac*
+
+| Test                  | SPL ATA | p-ata | bump arg | all optimizations |
+|-----------------------|--------:|------:|---------:|------------------:|
+| create_idempotent     |  4914   |  3743 |     3264 |              3743 |
+| create                | 14194   |  6654 |     3741 |              3731 |
+| create_token2022      | 16057   |  9366 |     6613 |              6354 |
+| create_topup          | 17317   |  6534 |     3749 |              3550 |
+| create_topup_no_cap   | 17287   |  9169 |     6409 |              6229 |
+| create_extended       | 19420   | 11441 |     8834 |              8467 |
+| recover_nested        | 17066   | 12409 |    13279 |             13279 |
+| recover_multisig      |     0   | 13185 |    12660 |             12660 |
+
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.
+
+"optimum args" are:
+- `bump`
+- for Token-2022, `token_account_len` passed in (after `bump`)
+- for `create` tests other than `create_idemp`, `rent` passed in as an optional additional account
 
 To benchmark (and run a set of failure tests and byte-for-byte equivalence tests) from the /p-ata directory:
 

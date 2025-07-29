@@ -80,59 +80,34 @@ fn build_create_ix(
 
 /// Creates mint account data with specified decimals
 fn create_mint_data(decimals: u8) -> Vec<u8> {
-    const MINT_ACCOUNT_SIZE: usize = 82;
-    let mut data = [0u8; MINT_ACCOUNT_SIZE];
-    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
-    data[44] = decimals;
-    data[45] = 1; // is_initialized = 1
-    data.to_vec()
+    crate::tests::test_utils::create_mollusk_mint_data(decimals)
 }
 
-/// Create base accounts needed for all tests
+/// Create base accounts needed for all tests using shared helpers
 fn create_base_accounts(
     payer: &Keypair,
     wallet: &Pubkey,
     mint: &Pubkey,
     token_program: &Pubkey,
 ) -> Vec<(Pubkey, Account)> {
-    vec![
-        (
-            payer.pubkey(),
-            Account::new(1_000_000_000, 0, &system_program::id()),
-        ),
-        (*wallet, Account::new(0, 0, &system_program::id())),
-        (
-            *mint,
-            Account {
-                lamports: 1_461_600,
-                data: create_mint_data(6),
-                owner: *token_program,
-                executable: false,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            system_program::id(),
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: NATIVE_LOADER_ID,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            *token_program,
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: LOADER_V3,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        (sysvar::rent::id(), Account::new(1009200, 17, &sysvar::id())),
-    ]
+    let mut accounts = crate::tests::test_utils::create_mollusk_base_accounts_with_token_and_wallet(
+        payer,
+        wallet,
+        token_program,
+    );
+
+    accounts.push((
+        *mint,
+        Account {
+            lamports: 1_461_600,
+            data: create_mint_data(6),
+            owner: *token_program,
+            executable: false,
+            rent_epoch: 0,
+        },
+    ));
+
+    accounts
 }
 
 #[test]

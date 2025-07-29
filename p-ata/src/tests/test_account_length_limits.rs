@@ -9,7 +9,7 @@ use {
     std::{vec, vec::Vec},
 };
 
-const MAX_SANE_ACCOUNT_LENGTH: u16 = 2048;
+use crate::entrypoint::MAX_SANE_ACCOUNT_LENGTH;
 
 const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
     5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
@@ -18,18 +18,7 @@ const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
 
 /// Creates mint account data with specified decimals
 fn create_mint_data(decimals: u8) -> Vec<u8> {
-    const MINT_ACCOUNT_SIZE: usize = 82;
-    let mut data = [0u8; MINT_ACCOUNT_SIZE];
-    // state = 1 (Initialized)
-    data[0..4].copy_from_slice(&1u32.to_le_bytes());
-    // mint_authority = default (all zeros)
-    // data[4..36] already zeroed
-    // decimals
-    data[44] = decimals;
-    // is_initialized = 1
-    data[45] = 1;
-    // supply already zeroed (bytes 46..50)
-    data.to_vec()
+    crate::tests::test_utils::create_mollusk_mint_data(decimals)
 }
 
 /// Creates instruction data for account creation with specified account length

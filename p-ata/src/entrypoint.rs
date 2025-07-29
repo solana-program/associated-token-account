@@ -10,7 +10,7 @@ use {
 
 /// An arbitrary maximum limit to prevent accounts which are expensive
 /// to work with (i.e. u16::MAX) from being created for others.
-const MAX_SANE_ACCOUNT_LENGTH: u16 = 2048;
+pub const MAX_SANE_ACCOUNT_LENGTH: u16 = 2048;
 
 program_entrypoint!(process_instruction);
 no_allocator!();

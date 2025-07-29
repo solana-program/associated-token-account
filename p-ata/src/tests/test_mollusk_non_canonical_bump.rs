@@ -2,17 +2,10 @@ use {
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
-    solana_sdk::{
-        account::Account, program_error::ProgramError, signature::Keypair, signer::Signer,
-    },
+    solana_sdk::{program_error::ProgramError, signature::Keypair, signer::Signer},
     solana_sdk_ids::{system_program, sysvar},
-    std::{vec, vec::Vec},
+    std::vec::Vec,
 };
-
-const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
-    5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
-    101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
-]);
 
 /// Find a wallet such that its canonical off-curve bump equals `target_canonical` and also
 /// has at least one lower off-curve bump. Returns:
@@ -25,6 +18,7 @@ fn find_wallet_pair(
     ata_program_id: &Pubkey,
 ) -> (Pubkey, Pubkey, Pubkey) {
     assert!(canonical_bump > sub_bump);
+    // as long as each number is >=250,
     for _ in 0..40_000 {
         let wallet = Pubkey::new_unique();
 
@@ -76,38 +70,6 @@ fn build_create_ix(
         accounts,
         data: Vec::from([0u8, bump]), // discriminator 0 (Create) + bump
     }
-}
-
-/// Creates mint account data with specified decimals
-fn create_mint_data(decimals: u8) -> Vec<u8> {
-    crate::tests::test_utils::create_mollusk_mint_data(decimals)
-}
-
-/// Create base accounts needed for all tests using shared helpers
-fn create_base_accounts(
-    payer: &Keypair,
-    wallet: &Pubkey,
-    mint: &Pubkey,
-    token_program: &Pubkey,
-) -> Vec<(Pubkey, Account)> {
-    let mut accounts = crate::tests::test_utils::create_mollusk_base_accounts_with_token_and_wallet(
-        payer,
-        wallet,
-        token_program,
-    );
-
-    accounts.push((
-        *mint,
-        Account {
-            lamports: 1_461_600,
-            data: create_mint_data(6),
-            owner: *token_program,
-            executable: false,
-            rent_epoch: 0,
-        },
-    ));
-
-    accounts
 }
 
 #[test]
@@ -166,12 +128,13 @@ fn test_rejects_suboptimal_bump() {
                 token_program_id,
             );
 
-            let mut accounts =
-                create_base_accounts(&payer, &wallet, &mint_pubkey, &token_program_id);
-            accounts.push((
+            let accounts = crate::tests::test_utils::create_ata_test_accounts(
+                &payer,
                 sub_addr,
-                Account::new(0, 0, &system_program::id()), // ATA account (will be created)
-            ));
+                wallet,
+                mint_pubkey,
+                token_program_id,
+            );
 
             mollusk.process_and_validate_instruction(
                 &ix_fail,
@@ -205,12 +168,13 @@ fn test_rejects_suboptimal_bump() {
                 token_program_id,
             );
 
-            let mut accounts =
-                create_base_accounts(&payer, &wallet, &mint_pubkey, &token_program_id);
-            accounts.push((
+            let accounts = crate::tests::test_utils::create_ata_test_accounts(
+                &payer,
                 canonical_addr,
-                Account::new(0, 0, &system_program::id()), // ATA account (will be created)
-            ));
+                wallet,
+                mint_pubkey,
+                token_program_id,
+            );
 
             mollusk.process_and_validate_instruction(&ix_ok, &accounts, &[Check::success()]);
         }

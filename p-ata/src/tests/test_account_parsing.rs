@@ -10,7 +10,7 @@ use crate::tests::test_utils::AccountLayout;
 /// Create test AccountInfo instances.
 fn make_test_accounts(count: usize) -> Vec<AccountInfo> {
     let mut account_data: Vec<AccountLayout> = Vec::with_capacity(count);
-    
+
     for i in 0..count {
         account_data.push(AccountLayout {
             borrow_state: 0b_1111_1111,
@@ -27,11 +27,11 @@ fn make_test_accounts(count: usize) -> Vec<AccountInfo> {
 
     // Leak the data to ensure it lives for the duration of the test
     let leaked_data = account_data.leak();
-    
+
     // Create AccountInfo instances using safe transmute
     // This is safe because:
     // 1. AccountLayout is designed to have identical layout to internal Account struct
-    // 2. We're just changing the pointer type, not the data representation  
+    // 2. We're just changing the pointer type, not the data representation
     // 3. We verify the sizes match at compile time in test_utils.rs
     leaked_data
         .iter_mut()

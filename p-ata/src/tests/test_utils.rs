@@ -19,7 +19,7 @@ use {
     spl_token_metadata_interface::state::TokenMetadata,
 };
 
-use std::{vec, vec::Vec};
+use std::{string::String, vec, vec::Vec};
 
 pub const SPL_TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 
@@ -342,204 +342,6 @@ pub fn calculate_account_rent(len: usize) -> u64 {
         .minimum_balance(len)
 }
 
-/// Create mint data with specific extensions using token-2022's official methods
-pub fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8> {
-    use spl_token_2022::extension::{BaseStateWithExtensionsMut, ExtensionType};
-    use std::string::String;
-    use std::{vec, vec::Vec};
-
-    // Check for variable-length extensions we must size manually
-    let has_variable_length = extension_types
-        .iter()
-        .any(|ext| matches!(ext, ExtensionType::TokenMetadata));
-
-    let required_size = if has_variable_length {
-        // Calculate length for all sized extensions first
-        let mut sized_exts: Vec<ExtensionType> = extension_types
-            .iter()
-            .copied()
-            .filter(|e| !matches!(e, ExtensionType::TokenMetadata))
-            .collect();
-
-        let mut required_size =
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&sized_exts)
-                .expect("calc len for sized subset");
-
-        // Add a generous buffer for the variable-length TokenMetadata TLV entry
-        if extension_types
-            .iter()
-            .any(|e| matches!(e, ExtensionType::TokenMetadata))
-        {
-            const TOKEN_METADATA_VALUE_LEN_ESTIMATE: usize = 500;
-            required_size += TOKEN_METADATA_VALUE_LEN_ESTIMATE + 4; // value + TLV header
-        }
-        required_size
-    } else {
-        ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(extension_types)
-            .expect("Failed to calculate account length")
-    };
-
-    let mut data = vec![0u8; required_size];
-
-    let mut mint = match PodStateWithExtensionsMut::<PodMint>::unpack_uninitialized(&mut data) {
-        Ok(mint) => mint,
-        Err(e) => panic!(
-            "Failed to unpack mint for extensions {:?}: {:?}",
-            extension_types, e
-        ),
-    };
-
-    mint.base.mint_authority = Default::default();
-    mint.base.supply = 0u64.into();
-    mint.base.decimals = 6;
-    mint.base.is_initialized = true.into();
-    mint.base.freeze_authority = Default::default();
-
-    for extension_type in extension_types {
-        match extension_type {
-            ExtensionType::TransferFeeConfig => {
-                let extension = mint
-                    .init_extension::<TransferFeeConfig>(true)
-                    .expect("Failed to init TransferFeeConfig");
-                extension.transfer_fee_config_authority = Default::default();
-                extension.withdraw_withheld_authority = Default::default();
-                extension.withheld_amount = 0u64.into();
-            }
-            ExtensionType::NonTransferable => {
-                mint.init_extension::<NonTransferable>(true)
-                    .expect("Failed to init NonTransferable");
-            }
-            ExtensionType::TransferHook => {
-                let extension = mint
-                    .init_extension::<TransferHook>(true)
-                    .expect("Failed to init TransferHook");
-                extension.authority = Default::default();
-                extension.program_id = Default::default();
-            }
-            ExtensionType::Pausable => {
-                let extension = mint
-                    .init_extension::<PausableConfig>(true)
-                    .expect("Failed to init PausableConfig");
-                extension.authority = Default::default();
-                extension.paused = false.into();
-            }
-            ExtensionType::DefaultAccountState => {
-                let extension = mint
-                    .init_extension::<DefaultAccountState>(true)
-                    .expect("Failed to init DefaultAccountState");
-                extension.state = spl_token_2022::state::AccountState::Initialized.into();
-            }
-            ExtensionType::InterestBearingConfig => {
-                let extension = mint
-                    .init_extension::<InterestBearingConfig>(true)
-                    .expect("Failed to init InterestBearingConfig");
-                extension.rate_authority = Default::default();
-                extension.initialization_timestamp = 0i64.into();
-                extension.pre_update_average_rate = 0i16.into();
-                extension.last_update_timestamp = 0i64.into();
-                extension.current_rate = 0i16.into();
-            }
-            ExtensionType::MetadataPointer => {
-                let extension = mint
-                    .init_extension::<MetadataPointer>(true)
-                    .expect("Failed to init MetadataPointer");
-                extension.authority = Default::default();
-                extension.metadata_address = Default::default();
-            }
-            ExtensionType::GroupPointer => {
-                let extension = mint
-                    .init_extension::<GroupPointer>(true)
-                    .expect("Failed to init GroupPointer");
-                extension.authority = Default::default();
-                extension.group_address = Default::default();
-            }
-            ExtensionType::GroupMemberPointer => {
-                if let Ok(extension) = mint.init_extension::<spl_token_2022::extension::group_member_pointer::GroupMemberPointer>(true) {
-                    extension.authority = Some(solana_pubkey::Pubkey::new_unique()).try_into().unwrap();
-                    extension.member_address = Some(solana_pubkey::Pubkey::new_unique()).try_into().unwrap();
-                } else {
-                    return Vec::new();
-                }
-            }
-            ExtensionType::MintCloseAuthority => {
-                let extension = mint
-                    .init_extension::<MintCloseAuthority>(true)
-                    .expect("Failed to init MintCloseAuthority");
-                extension.close_authority = Default::default();
-            }
-            ExtensionType::PermanentDelegate => {
-                let extension = mint
-                    .init_extension::<PermanentDelegate>(true)
-                    .expect("Failed to init PermanentDelegate");
-                extension.delegate = Default::default();
-            }
-            ExtensionType::ScaledUiAmount => {
-                let extension = mint
-                    .init_extension::<spl_token_2022::extension::scaled_ui_amount::ScaledUiAmountConfig>(true)
-                    .expect("Failed to init ScaledUiAmount");
-                *extension = Default::default();
-                extension.multiplier = spl_token_2022::extension::scaled_ui_amount::PodF64::from(1.0);
-                extension.new_multiplier = spl_token_2022::extension::scaled_ui_amount::PodF64::from(1.0);
-            }
-            ExtensionType::TokenMetadata => {
-                let metadata = TokenMetadata {
-                    update_authority: Default::default(),
-                    mint: solana_pubkey::Pubkey::new_unique(),
-                    name: String::from("Test"),
-                    symbol: String::from("TEST"),
-                    uri: String::from("https://example.com/token.json"),
-                    additional_metadata: vec![],
-                };
-                mint.init_variable_len_extension(&metadata, false)
-                    .expect("Failed to init TokenMetadata");
-            }
-            ExtensionType::ConfidentialTransferMint => {
-                let extension = mint
-                    .init_extension::<spl_token_2022::extension::confidential_transfer::ConfidentialTransferMint>(true)
-                    .expect("Failed to init ConfidentialTransferMint");
-                extension.authority = Default::default();
-                extension.auto_approve_new_accounts = false.into();
-                extension.auditor_elgamal_pubkey = Default::default();
-            }
-            ExtensionType::ConfidentialTransferFeeConfig => {
-                let extension = mint
-                    .init_extension::<spl_token_2022::extension::confidential_transfer_fee::ConfidentialTransferFeeConfig>(true)
-                    .expect("Failed to init ConfidentialTransferFeeConfig");
-                extension.authority = Default::default();
-                extension.withdraw_withheld_authority_elgamal_pubkey = Default::default();
-                extension.harvest_to_mint_enabled = false.into();
-                extension.withheld_amount = Default::default();
-            }
-            ExtensionType::TokenGroup => {
-                if let Ok(extension) = mint.init_extension::<TokenGroup>(true) {
-                    *extension = TokenGroup {
-                        update_authority: Default::default(),
-                        mint: solana_pubkey::Pubkey::new_unique(),
-                        size: 0u64.into(),
-                        max_size: 100u64.into(),
-                    };
-                } else {
-                    return Vec::new();
-                }
-            }
-            ExtensionType::TokenGroupMember => {
-                if let Ok(extension) = mint.init_extension::<TokenGroupMember>(true) {
-                    *extension = TokenGroupMember {
-                        mint: solana_pubkey::Pubkey::new_unique(),
-                        group: solana_pubkey::Pubkey::new_unique(),
-                        member_number: 0u64.into(),
-                    };
-                } else {
-                    return Vec::new();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    data
-}
-
 #[cfg(test)]
 mod tests {
     use crate::processor::is_spl_token_program;
@@ -760,4 +562,63 @@ pub fn create_test_mint(
     }
 
     accounts
+}
+
+/// Create standard ATA test accounts with all required program accounts
+#[cfg(test)]
+pub fn create_ata_test_accounts(
+    payer: &Keypair,
+    ata_address: SolanaPubkey,
+    wallet: SolanaPubkey,
+    mint: SolanaPubkey,
+    token_program: SolanaPubkey,
+) -> Vec<(SolanaPubkey, Account)> {
+    vec![
+        (
+            payer.pubkey(),
+            Account::new(1_000_000_000, 0, &system_program::id()), // Payer with 1 SOL
+        ),
+        (
+            ata_address,
+            Account::new(0, 0, &system_program::id()), // ATA account (will be created)
+        ),
+        (
+            wallet,
+            Account::new(0, 0, &system_program::id()), // Wallet account
+        ),
+        (
+            mint,
+            Account {
+                lamports: 1_461_600,
+                data: create_mollusk_mint_data(6),
+                owner: token_program,
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+        (
+            system_program::id(),
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: NATIVE_LOADER_ID,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        (
+            token_program,
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: LOADER_V3,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        (
+            sysvar::rent::id(),
+            Account::new(1009200, 17, &sysvar::id()), // Rent sysvar
+        ),
+    ]
 }

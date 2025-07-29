@@ -1,18 +1,6 @@
 use {
     crate::processor::calculate_account_size_from_mint_extensions,
-    solana_program_option::COption,
-    solana_pubkey::Pubkey,
-    spl_token_2022::extension::{
-        default_account_state::DefaultAccountState, group_pointer::GroupPointer,
-        interest_bearing_mint::InterestBearingConfig, metadata_pointer::MetadataPointer,
-        mint_close_authority::MintCloseAuthority, non_transferable::NonTransferable,
-        pausable::PausableConfig, permanent_delegate::PermanentDelegate,
-        transfer_fee::TransferFeeConfig, transfer_hook::TransferHook, BaseStateWithExtensionsMut,
-        ExtensionType, PodStateWithExtensionsMut,
-    },
-    spl_token_2022::pod::PodMint,
-    std::vec,
-    std::vec::Vec,
+    spl_token_2022::extension::ExtensionType, std::vec, std::vec::Vec,
 };
 
 #[cfg(feature = "test-debug")]
@@ -29,29 +17,14 @@ fn create_base_mint_data() -> Vec<u8> {
     data
 }
 
-/// Create mint data with specific extensions using token-2022's official methods
-fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Vec<u8> {
-    super::test_utils::create_mint_data_with_extensions(extension_types)
-}
-
-/// Calculate expected account size using token-2022's official method
-fn calculate_expected_account_size(mint_extensions: &[ExtensionType]) -> usize {
-    let mut account_extensions =
-        ExtensionType::get_required_init_account_extensions(mint_extensions);
-
-    // ATA always includes ImmutableOwner, so include it in our comparison
-    if !account_extensions.contains(&ExtensionType::ImmutableOwner) {
-        account_extensions.push(ExtensionType::ImmutableOwner);
-    }
-
-    ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&account_extensions)
-        .expect("Failed to calculate account length")
-}
+use crate::tests::test_extension_utils::{
+    calculate_expected_ata_data_size, create_mint_data_with_extensions,
+};
 
 #[test]
 fn test_no_extensions() {
     let mint_data = create_base_mint_data();
-    let expected_size = calculate_expected_account_size(&[]);
+    let expected_size = calculate_expected_ata_data_size(&[]);
 
     let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
@@ -65,7 +38,7 @@ fn test_no_extensions() {
 fn test_transfer_fee_config() {
     let extensions = vec![ExtensionType::TransferFeeConfig];
     let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_account_size(&extensions);
+    let expected_size = calculate_expected_ata_data_size(&extensions);
 
     let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
@@ -79,7 +52,7 @@ fn test_transfer_fee_config() {
 fn test_transfer_hook() {
     let extensions = vec![ExtensionType::TransferHook];
     let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_account_size(&extensions);
+    let expected_size = calculate_expected_ata_data_size(&extensions);
 
     let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
@@ -93,7 +66,7 @@ fn test_transfer_hook() {
 fn test_pausable_config() {
     let extensions = vec![ExtensionType::Pausable];
     let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_account_size(&extensions);
+    let expected_size = calculate_expected_ata_data_size(&extensions);
 
     let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
@@ -116,7 +89,7 @@ fn test_extensions_without_account_data() {
 
     for extension in extensions {
         let mint_data = create_mint_data_with_extensions(&vec![extension]);
-        let expected_size = calculate_expected_account_size(&vec![extension]);
+        let expected_size = calculate_expected_ata_data_size(&vec![extension]);
 
         let result = calculate_account_size_from_mint_extensions(&mint_data);
         assert_eq!(
@@ -126,7 +99,7 @@ fn test_extensions_without_account_data() {
             extension
         );
 
-        let base_size_with_immutable_owner = calculate_expected_account_size(&[]);
+        let base_size_with_immutable_owner = calculate_expected_ata_data_size(&[]);
         assert_eq!(
             expected_size, base_size_with_immutable_owner,
             "Extension {:?} should not add to account size",
@@ -144,7 +117,7 @@ fn test_multiple_extensions_with_account_data() {
     ];
 
     let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_account_size(&extensions);
+    let expected_size = calculate_expected_ata_data_size(&extensions);
 
     let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
@@ -165,7 +138,7 @@ fn test_mixed_extensions() {
     ];
 
     let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_account_size(&extensions);
+    let expected_size = calculate_expected_ata_data_size(&extensions);
 
     let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
@@ -206,7 +179,7 @@ fn test_unsupported_extensions_return_none() {
 fn test_non_transferable_extension() {
     let extensions = vec![ExtensionType::NonTransferable];
     let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_account_size(&extensions);
+    let expected_size = calculate_expected_ata_data_size(&extensions);
 
     let result = calculate_account_size_from_mint_extensions(&mint_data);
     assert_eq!(
@@ -222,7 +195,7 @@ fn test_empty_extension_data() {
     mint_data.extend_from_slice(&[0u8, 0u8, 0u8, 0u8]);
 
     let result = calculate_account_size_from_mint_extensions(&mint_data);
-    let expected_size = calculate_expected_account_size(&[]);
+    let expected_size = calculate_expected_ata_data_size(&[]);
     assert_eq!(
         result,
         Some(expected_size),
@@ -350,7 +323,7 @@ fn test_token_metadata_variable_length() {
     eprintln!("Inline parser result: {:?}", inline_size);
 
     // TokenMetadata is mint-only, so account size should be base + ImmutableOwner
-    let expected_account_size = calculate_expected_account_size(&[ExtensionType::ImmutableOwner]);
+    let expected_account_size = calculate_expected_ata_data_size(&[ExtensionType::ImmutableOwner]);
 
     assert_eq!(
         inline_size,
@@ -363,17 +336,8 @@ fn test_token_metadata_variable_length() {
 }
 
 fn test_extension_combination(extensions: &[ExtensionType], description: &str) {
-    let mint_data = create_mint_data_with_extensions(extensions);
-    let expected_size = calculate_expected_account_size(extensions);
-    let result = calculate_account_size_from_mint_extensions(&mint_data);
-
-    assert_eq!(
-        result,
-        Some(expected_size),
-        "Extension combination failed: {}. Extensions: {:?}",
-        description,
-        extensions
-    );
+    crate::tests::test_extension_utils::test_extension_combination_helper(extensions, description)
+        .unwrap();
 }
 
 #[test]
@@ -414,7 +378,7 @@ fn test_systematic_extension_verification() {
             | ExtensionType::GroupPointer
             | ExtensionType::GroupMemberPointer
             | ExtensionType::MintCloseAuthority => {
-                let expected_size = calculate_expected_account_size(&extensions);
+                let expected_size = calculate_expected_ata_data_size(&extensions);
                 assert_eq!(
                     result,
                     Some(expected_size),

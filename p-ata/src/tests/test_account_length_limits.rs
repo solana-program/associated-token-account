@@ -2,24 +2,12 @@ use {
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
-    solana_sdk::{
-        account::Account, program_error::ProgramError, signature::Keypair, signer::Signer,
-    },
+    solana_sdk::{program_error::ProgramError, signature::Keypair, signer::Signer},
     solana_sdk_ids::{system_program, sysvar},
     std::{vec, vec::Vec},
 };
 
 use crate::entrypoint::MAX_SANE_ACCOUNT_LENGTH;
-
-const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
-    5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
-    101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
-]);
-
-/// Creates mint account data with specified decimals
-fn create_mint_data(decimals: u8) -> Vec<u8> {
-    crate::tests::test_utils::create_mollusk_mint_data(decimals)
-}
 
 /// Creates instruction data for account creation with specified account length
 fn create_instruction_data_with_length(discriminator: u8, bump: u8, account_len: u16) -> Vec<u8> {
@@ -72,54 +60,13 @@ fn test_account_length_at_max_sane_limit_succeeds() {
         data: instruction_data,
     };
 
-    let accounts = vec![
-        (
-            payer.pubkey(),
-            Account::new(1_000_000_000, 0, &system_program::id()), // Payer with 1 SOL
-        ),
-        (
-            ata_address,
-            Account::new(0, 0, &system_program::id()), // ATA account (will be created)
-        ),
-        (
-            wallet,
-            Account::new(0, 0, &system_program::id()), // Wallet account
-        ),
-        (
-            mint,
-            Account {
-                lamports: 1_461_600,
-                data: create_mint_data(6),
-                owner: token_program,
-                executable: false,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            system_program::id(),
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: NATIVE_LOADER_ID,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            token_program,
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: LOADER_V3,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            sysvar::rent::id(),
-            Account::new(1009200, 17, &sysvar::id()), // Rent sysvar
-        ),
-    ];
+    let accounts = crate::tests::test_utils::create_ata_test_accounts(
+        &payer,
+        ata_address,
+        wallet,
+        mint,
+        token_program,
+    );
 
     mollusk.process_and_validate_instruction(&instruction, &accounts, &[Check::success()]);
 }
@@ -169,54 +116,13 @@ fn test_account_length_over_max_sane_limit_fails() {
         data: instruction_data,
     };
 
-    let accounts = vec![
-        (
-            payer.pubkey(),
-            Account::new(1_000_000_000, 0, &system_program::id()), // Payer with 1 SOL
-        ),
-        (
-            ata_address,
-            Account::new(0, 0, &system_program::id()), // ATA account (will be created)
-        ),
-        (
-            wallet,
-            Account::new(0, 0, &system_program::id()), // Wallet account
-        ),
-        (
-            mint,
-            Account {
-                lamports: 1_461_600,
-                data: create_mint_data(6),
-                owner: token_program,
-                executable: false,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            system_program::id(),
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: NATIVE_LOADER_ID,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            token_program,
-            Account {
-                lamports: 0,
-                data: Vec::new(),
-                owner: LOADER_V3,
-                executable: true,
-                rent_epoch: 0,
-            },
-        ),
-        (
-            sysvar::rent::id(),
-            Account::new(1009200, 17, &sysvar::id()), // Rent sysvar
-        ),
-    ];
+    let accounts = crate::tests::test_utils::create_ata_test_accounts(
+        &payer,
+        ata_address,
+        wallet,
+        mint,
+        token_program,
+    );
 
     mollusk.process_and_validate_instruction(
         &instruction,
@@ -282,54 +188,13 @@ fn test_account_length_boundary_values() {
             data: instruction_data,
         };
 
-        let accounts = vec![
-            (
-                payer.pubkey(),
-                Account::new(1_000_000_000, 0, &system_program::id()), // Payer with 1 SOL
-            ),
-            (
-                ata_address,
-                Account::new(0, 0, &system_program::id()), // ATA account (will be created)
-            ),
-            (
-                wallet,
-                Account::new(0, 0, &system_program::id()), // Wallet account
-            ),
-            (
-                mint,
-                Account {
-                    lamports: 1_461_600,
-                    data: create_mint_data(6),
-                    owner: token_program,
-                    executable: false,
-                    rent_epoch: 0,
-                },
-            ),
-            (
-                system_program::id(),
-                Account {
-                    lamports: 0,
-                    data: Vec::new(),
-                    owner: NATIVE_LOADER_ID,
-                    executable: true,
-                    rent_epoch: 0,
-                },
-            ),
-            (
-                token_program,
-                Account {
-                    lamports: 0,
-                    data: Vec::new(),
-                    owner: LOADER_V3,
-                    executable: true,
-                    rent_epoch: 0,
-                },
-            ),
-            (
-                sysvar::rent::id(),
-                Account::new(1009200, 17, &sysvar::id()), // Rent sysvar
-            ),
-        ];
+        let accounts = crate::tests::test_utils::create_ata_test_accounts(
+            &payer,
+            ata_address,
+            wallet,
+            mint,
+            token_program,
+        );
 
         if length <= MAX_SANE_ACCOUNT_LENGTH {
             mollusk.process_and_validate_instruction(&instruction, &accounts, &[Check::success()]);

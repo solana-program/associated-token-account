@@ -5,6 +5,7 @@ mod test_account_validation;
 mod test_address_derivation;
 mod test_extension_size_exhaustive;
 mod test_extension_size_validation;
+mod test_extension_utils;
 mod test_instruction_builders;
 mod test_mollusk_non_canonical_bump;
 mod test_utils;

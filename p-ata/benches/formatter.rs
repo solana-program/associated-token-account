@@ -21,7 +21,7 @@ pub fn get_all_optimizations_variant(base_test: BaseTestType) -> Option<TestVari
         BaseTestType::Create | BaseTestType::CreateTopup | BaseTestType::CreateTopupNoCap => {
             Some(TestVariant::RENT_BUMP)
         }
-        BaseTestType::CreateIdempotent => Some(TestVariant::BASE),
+        BaseTestType::CreateIdempotent => Some(TestVariant::BUMP),
         BaseTestType::CreateToken2022 | BaseTestType::CreateExtended => {
             Some(TestVariant::RENT_BUMP_LEN)
         }

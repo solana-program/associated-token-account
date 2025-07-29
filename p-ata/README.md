@@ -40,11 +40,11 @@ Set `BENCH_ITERATIONS` to average a number of runs. If only 1 iteration is used,
 BENCH_ITERATIONS=1 cargo bench
 ```
 
-### "Best run" numbers (ideal bumps) *as of 2025-07-28, ad6fbac*
+### "Best run" numbers (ideal bumps) *as of 2025-07-29*
 
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |
 |-----------------------|--------:|------:|---------:|------------------:|
-| create_idempotent     |   3669  |  1805 |    1806  |              1806 |
+| create_idempotent     |   3669  |  1779 |     638  |               638 |
 | create                |  12364  |  4976 |    3415  |              3313 |
 | create_token2022      |  14692  |  7778 |    6217  |              6084 |
 | create_topup          |  15817  |  4842 |    3281  |              3179 |
@@ -54,11 +54,11 @@ BENCH_ITERATIONS=1 cargo bench
 | recover_multisig      |      0  |  8550 |    8550  |              8550 |
 | worst_case_create     |  19864  | 15187 |    3415  |              3313 |
 
-### Average 10,000 random wallet runs *as of 2025-07-28, ad6fbac*
+### Average 10,000 random wallet runs *as of 2025-07-29*
 
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |
 |-----------------------|--------:|------:|---------:|------------------:|
-| create_idempotent     |  4914   |  3743 |     3264 |              3264 |
+| create_idempotent     |  4914   |  3283 |     1009 |              1009 |
 | create                | 14194   |  6654 |     3741 |              3731 |
 | create_token2022      | 16057   |  9366 |     6613 |              6354 |
 | create_topup          | 17317   |  6534 |     3749 |              3550 |

@@ -220,31 +220,50 @@ pub(crate) fn check_idempotent_account(
     token_program: &AccountInfo,
     idempotent: bool,
     program_id: &Pubkey,
+    maybe_bump: Option<u8>,
 ) -> Result<bool, ProgramError> {
     if idempotent && associated_token_account.is_owned_by(token_program.key()) {
         let ata_state = get_token_account(associated_token_account)?;
 
-        // validation is the point of CreateIdempotent,
-        // so these checks should not be optimized out
         validate_token_account_owner(ata_state, wallet.key())?;
         validate_token_account_mint(ata_state, mint_account.key())?;
 
-        // Also validate that the account is at the canonical ATA address
-        // Prevents idempotent operations from succeeding with non-canonical addresses
-        let (canonical_address, _bump) = derive_canonical_ata_pda(
-            wallet.key(),
-            token_program.key(),
-            mint_account.key(),
-            program_id,
-        );
+        match maybe_bump {
+            Some(bump) => {
+                let seeds: &[&[u8]; 3] = &[
+                    wallet.key().as_ref(),
+                    token_program.key().as_ref(),
+                    mint_account.key().as_ref(),
+                ];
+                let (verified_address, verified_bump) =
+                    ensure_no_better_canonical_address_and_bump(seeds, program_id, bump);
 
-        if canonical_address != *associated_token_account.key() {
-            return Err(ProgramError::InvalidSeeds);
+                let canonical_address = verified_address
+                    .unwrap_or_else(|| derive_address::<3>(seeds, Some(verified_bump), program_id));
+
+                if !is_off_curve(&canonical_address)
+                    || canonical_address != *associated_token_account.key()
+                {
+                    return Err(ProgramError::InvalidSeeds);
+                }
+            }
+            None => {
+                let (canonical_address, _bump) = derive_canonical_ata_pda(
+                    wallet.key(),
+                    token_program.key(),
+                    mint_account.key(),
+                    program_id,
+                );
+
+                if canonical_address != *associated_token_account.key() {
+                    return Err(ProgramError::InvalidSeeds);
+                }
+            }
         }
 
-        return Ok(true); // Account exists and is valid
+        return Ok(true);
     }
-    Ok(false) // Need to create account
+    Ok(false)
 }
 
 /// Compute the required space (in bytes) for the associated token account.
@@ -430,6 +449,7 @@ pub(crate) fn process_create_associated_token_account(
         create_accounts.token_program,
         idempotent,
         program_id,
+        maybe_bump,
     )? {
         return Ok(());
     }

@@ -357,7 +357,7 @@ pub fn test_extension_combination_helper(
     description: &str,
 ) -> Result<(), String> {
     use crate::{
-        processor::calculate_account_size_from_mint_extensions,
+        size::calculate_account_size_from_mint_extensions,
         tests::test_extension_utils::create_mint_data_with_extensions,
     };
 

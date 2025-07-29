@@ -1,5 +1,5 @@
 use {
-    crate::processor::{parse_create_accounts, parse_recover_accounts},
+    crate::{processor::parse_create_accounts, recover::parse_recover_accounts},
     pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey},
 };
 

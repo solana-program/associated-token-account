@@ -1,5 +1,5 @@
 use {
-    crate::processor::calculate_account_size_from_mint_extensions,
+    crate::size::calculate_account_size_from_mint_extensions,
     spl_token_2022::extension::ExtensionType, std::vec, std::vec::Vec,
 };
 

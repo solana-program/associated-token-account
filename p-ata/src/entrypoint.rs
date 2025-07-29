@@ -1,7 +1,8 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::processor::{process_create_associated_token_account, process_recover_nested},
+    crate::processor::process_create_associated_token_account,
+    crate::recover::process_recover_nested,
     pinocchio::{
         account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
         program_error::ProgramError, pubkey::Pubkey, ProgramResult,

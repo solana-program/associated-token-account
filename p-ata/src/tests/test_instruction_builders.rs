@@ -1,7 +1,10 @@
 use {
-    crate::processor::{
-        build_initialize_account3_data, build_transfer_data, CLOSE_ACCOUNT_DISCM,
-        INITIALIZE_ACCOUNT_3_DISCM, INITIALIZE_IMMUTABLE_OWNER_DISCM, TRANSFER_CHECKED_DISCM,
+    crate::{
+        processor::{
+            build_initialize_account3_data, build_transfer_data, INITIALIZE_ACCOUNT_3_DISCM,
+            INITIALIZE_IMMUTABLE_OWNER_DISCM, TRANSFER_CHECKED_DISCM,
+        },
+        recover::CLOSE_ACCOUNT_DISCM,
     },
     pinocchio::pubkey::Pubkey,
     std::collections::HashSet,

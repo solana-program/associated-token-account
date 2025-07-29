@@ -1,5 +1,5 @@
 #[allow(unexpected_cfgs)]
-use {crate::processor::calculate_account_size_from_mint_extensions, std::vec::Vec};
+use {crate::size::calculate_account_size_from_mint_extensions, std::vec::Vec};
 
 #[cfg(feature = "test-debug")]
 use std::eprintln;

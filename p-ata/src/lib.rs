@@ -3,6 +3,8 @@
 mod account;
 mod entrypoint;
 mod processor;
+mod recover;
+mod size;
 
 #[cfg(test)]
 extern crate std;

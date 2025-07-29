@@ -1,14 +1,13 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::account::create_pda_account,
+    crate::{account::create_pda_account, size::get_token_account_size},
     core::mem::MaybeUninit,
     pinocchio::{
         account_info::AccountInfo,
         cpi,
-        instruction::{AccountMeta, Instruction, Seed, Signer},
+        instruction::{AccountMeta, Instruction},
         msg,
-        program::invoke_signed,
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
@@ -16,10 +15,7 @@ use {
     },
     pinocchio_pubkey::derive_address,
     spl_token_interface::state::{
-        account::Account as TokenAccount,
-        mint::Mint,
-        multisig::{Multisig, MAX_SIGNERS},
-        Transmutable,
+        account::Account as TokenAccount, mint::Mint, multisig::Multisig, Transmutable,
     },
 };
 
@@ -28,17 +24,12 @@ use pinocchio::syscalls::sol_curve_validate_point;
 
 pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
 pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
-pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
 pub const TRANSFER_CHECKED_DISCM: u8 = 12;
-pub const GET_ACCOUNT_DATA_SIZE_DISCM: u8 = 21;
-pub const MINT_BASE_SIZE: usize = 82;
-pub const MINT_WITH_TYPE_SIZE: usize = MINT_BASE_SIZE + 1;
 
 // Token-2022 AccountType::Account discriminator value
 const ACCOUNTTYPE_ACCOUNT: u8 = 2;
 
 pub const INITIALIZE_IMMUTABLE_OWNER_DATA: [u8; 1] = [INITIALIZE_IMMUTABLE_OWNER_DISCM];
-pub const CLOSE_ACCOUNT_DATA: [u8; 1] = [CLOSE_ACCOUNT_DISCM];
 
 // Compile-time verifications
 const _: () = assert!(
@@ -57,90 +48,6 @@ pub struct CreateAccounts<'a> {
     pub system_program: &'a AccountInfo,
     pub token_program: &'a AccountInfo,
     pub rent_sysvar: Option<&'a AccountInfo>,
-}
-
-/// Parsed Recover accounts for recover operations
-pub struct RecoverNestedAccounts<'a> {
-    pub nested_associated_token_account: &'a AccountInfo,
-    pub nested_mint: &'a AccountInfo,
-    pub destination_associated_token_account: &'a AccountInfo,
-    pub owner_associated_token_account: &'a AccountInfo,
-    pub owner_mint: &'a AccountInfo,
-    pub wallet: &'a AccountInfo,
-    pub token_program: &'a AccountInfo,
-}
-
-/// ExtensionType, exactly as Token-2022, with additional planned extension.
-#[repr(u16)]
-#[allow(dead_code)]
-pub enum ExtensionType {
-    /// Used as padding if the account size would otherwise be 355, same as a
-    /// multisig
-    Uninitialized,
-    /// Includes transfer fee rate info and accompanying authorities to withdraw
-    /// and set the fee
-    TransferFeeConfig,
-    /// Includes withheld transfer fees
-    TransferFeeAmount,
-    /// Includes an optional mint close authority
-    MintCloseAuthority,
-    /// Auditor configuration for confidential transfers
-    ConfidentialTransferMint,
-    /// State for confidential transfers
-    ConfidentialTransferAccount,
-    /// Specifies the default Account::state for new Accounts
-    DefaultAccountState,
-    /// Indicates that the Account owner authority cannot be changed
-    ImmutableOwner,
-    /// Require inbound transfers to have memo
-    MemoTransfer,
-    /// Indicates that the tokens from this mint can't be transferred
-    NonTransferable,
-    /// Tokens accrue interest over time,
-    InterestBearingConfig,
-    /// Locks privileged token operations from happening via CPI
-    CpiGuard,
-    /// Includes an optional permanent delegate
-    PermanentDelegate,
-    /// Indicates that the tokens in this account belong to a non-transferable
-    /// mint
-    NonTransferableAccount,
-    /// Mint requires a CPI to a program implementing the "transfer hook"
-    /// interface
-    TransferHook,
-    /// Indicates that the tokens in this account belong to a mint with a
-    /// transfer hook
-    TransferHookAccount,
-    /// Includes encrypted withheld fees and the encryption public that they are
-    /// encrypted under
-    ConfidentialTransferFeeConfig,
-    /// Includes confidential withheld transfer fees
-    ConfidentialTransferFeeAmount,
-    /// Mint contains a pointer to another account (or the same account) that
-    /// holds metadata
-    MetadataPointer,
-    /// Mint contains token-metadata
-    TokenMetadata,
-    /// Mint contains a pointer to another account (or the same account) that
-    /// holds group configurations
-    GroupPointer,
-    /// Mint contains token group configurations
-    TokenGroup,
-    /// Mint contains a pointer to another account (or the same account) that
-    /// holds group member configurations
-    GroupMemberPointer,
-    /// Mint contains token group member configurations
-    TokenGroupMember,
-    /// Mint allowing the minting and burning of confidential tokens
-    ConfidentialMintBurn,
-    /// Tokens whose UI amount is scaled by a given amount
-    ScaledUiAmount,
-    /// Tokens where minting / burning / transferring can be paused
-    Pausable,
-    /// Indicates that the account belongs to a pausable mint
-    PausableAccount,
-    /// PLANNED next Token-2022 extension (0 account length)
-    PlannedZeroAccountDataLengthExtension,
 }
 
 /// Derive ATA PDA from wallet, token program, and mint.
@@ -167,152 +74,6 @@ pub(crate) fn is_spl_token_program(program_id: &Pubkey) -> bool {
     const SPL_TOKEN_PROGRAM_ID: Pubkey =
         pinocchio_pubkey::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
     *program_id == SPL_TOKEN_PROGRAM_ID
-}
-
-/// Check if the given program ID is Token-2022
-#[inline(always)]
-pub(crate) fn is_token_2022_program(program_id: &Pubkey) -> bool {
-    const TOKEN_2022_PROGRAM_ID: Pubkey =
-        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-    *program_id == TOKEN_2022_PROGRAM_ID
-}
-
-/// Calculate token account size by parsing mint extension data inline.
-/// This avoids the expensive CPI call to GetAccountDataSize for most cases.
-/// Returns None if unknown extensions are found.
-#[inline(always)]
-pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> Option<usize> {
-    const TOKEN_ACCOUNT_LEN: usize = 165;
-    const ACCOUNT_TYPE_OFFSET: usize = 165; // Account type discriminator position
-    const BASE_TOKEN_2022_ACCOUNT_SIZE: usize = TOKEN_ACCOUNT_LEN + 5;
-
-    // Invalid/failed mint creation)
-    if mint_data.is_empty() {
-        return None;
-    }
-
-    // Fast-path: no mint extensions → no additional account extensions either
-    if mint_data.len() <= ACCOUNT_TYPE_OFFSET {
-        return Some(BASE_TOKEN_2022_ACCOUNT_SIZE);
-    }
-
-    let data_len = mint_data.len();
-    let mut account_extensions_size = 0usize;
-    // Start cursor after the account-type discriminator byte
-    let mut cursor = ACCOUNT_TYPE_OFFSET + 1;
-
-    // SAFETY: cursor is always verified to be within the slice before deref
-    while cursor + 4 <= data_len {
-        // Read 4-byte TLV header (little-endian: [type: u16 | length: u16])
-        let header =
-            unsafe { core::ptr::read_unaligned(mint_data.as_ptr().add(cursor) as *const u32) };
-        let extension_type_raw = (header & 0xFFFF) as u16;
-        let length = (header >> 16) as u16;
-
-        // TypeEnd / Uninitialized ends the TLV list
-        if extension_type_raw == 0 {
-            break;
-        }
-
-        let extension_type =
-            if extension_type_raw <= ExtensionType::PlannedZeroAccountDataLengthExtension as u16 {
-                // SAFETY: ExtensionType is repr(u16) and we've validated the value is in range
-                unsafe { core::mem::transmute::<u16, ExtensionType>(extension_type_raw) }
-            } else {
-                // Unknown extension type - fall back to CPI
-                return None;
-            };
-
-        // Based on token-2022's get_required_init_account_extensions
-        match extension_type {
-            ExtensionType::TransferFeeConfig => {
-                // TransferFeeConfig → needs TransferFeeAmount (8 bytes data + 4 TLV)
-                account_extensions_size += 4 + 8;
-            }
-            ExtensionType::NonTransferable => {
-                // NonTransferable → NonTransferableAccount (0 bytes data + 4 TLV)
-                account_extensions_size += 4;
-            }
-            ExtensionType::TransferHook => {
-                // TransferHook → TransferHookAccount (1 byte data + 4 TLV)
-                account_extensions_size += 4 + 1;
-            }
-            ExtensionType::Pausable => {
-                // Pausable → PausableAccount (0 bytes data + 4 TLV)
-                account_extensions_size += 4;
-            }
-            // All other known extensions
-            _ => {
-                // No account-side data required
-            }
-        }
-
-        cursor += 4 + length as usize;
-    }
-
-    Some(BASE_TOKEN_2022_ACCOUNT_SIZE + account_extensions_size)
-}
-
-/// Get the required account size for a mint using inline parsing first,
-/// falling back to GetAccountDataSize CPI only when necessary.
-/// Returns the account size in bytes.
-#[inline(always)]
-pub(crate) fn get_token_account_size(
-    mint_account: &AccountInfo,
-    token_program: &AccountInfo,
-) -> Result<usize, ProgramError> {
-    if is_spl_token_program(token_program.key()) {
-        return Ok(TokenAccount::LEN);
-    }
-
-    // Token mint has no extensions other than ImmutableOwner
-    // (this assumes any future token program has ImmutableOwner)
-    if !token_mint_has_extensions(mint_account) {
-        return Ok(TokenAccount::LEN + 5);
-    }
-
-    if is_token_2022_program(token_program.key()) {
-        // Try inline parsing first for Token-2022
-        let mint_data = unsafe { mint_account.borrow_data_unchecked() };
-        if let Some(size) = calculate_account_size_from_mint_extensions(mint_data) {
-            return Ok(size);
-        }
-    }
-
-    // Fallback to CPI for unknown/variable-length extensions or unknown token programs
-    // ImmutableOwner extension is required for Token-2022 Associated Token Accounts
-    let instruction_data = [GET_ACCOUNT_DATA_SIZE_DISCM, 7u8, 0u8]; // [7, 0] = ImmutableOwner as u16
-
-    let get_size_metas = &[AccountMeta {
-        pubkey: mint_account.key(),
-        is_writable: false,
-        is_signer: false,
-    }];
-
-    let get_size_ix = Instruction {
-        program_id: token_program.key(),
-        accounts: get_size_metas,
-        data: &instruction_data,
-    };
-
-    cpi::invoke(&get_size_ix, &[mint_account])?;
-    let return_data = cpi::get_return_data().ok_or(ProgramError::InvalidAccountData)?;
-
-    // `try_into` as this could be an unknown token program;
-    // it must error if it doesn't give us [u8; 8]
-    Ok(u64::from_le_bytes(
-        return_data
-            .as_slice()
-            .try_into()
-            .map_err(|_| ProgramError::InvalidAccountData)?,
-    ) as usize)
-}
-
-/// Check if a Token-2022 mint has extensions by examining its data length
-#[inline(always)]
-pub(crate) fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
-    // If mint data is larger than base + type, it has extensions
-    mint_account.data_len() > MINT_WITH_TYPE_SIZE
 }
 
 /// Check if account data represents an initialized token account.
@@ -422,29 +183,6 @@ pub(crate) fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
         core::ptr::copy_nonoverlapping(amount.to_le_bytes().as_ptr(), data_ptr.add(1), 8);
         *data_ptr.add(9) = decimals;
         data.assume_init()
-    }
-}
-
-/// Parse and validate the standard Recover account layout.
-#[inline(always)]
-pub(crate) fn parse_recover_accounts(
-    accounts: &[AccountInfo],
-) -> Result<RecoverNestedAccounts, ProgramError> {
-    if accounts.len() < 7 {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    }
-
-    // SAFETY: account len already checked
-    unsafe {
-        Ok(RecoverNestedAccounts {
-            nested_associated_token_account: accounts.get_unchecked(0),
-            nested_mint: accounts.get_unchecked(1),
-            destination_associated_token_account: accounts.get_unchecked(2),
-            owner_associated_token_account: accounts.get_unchecked(3),
-            owner_mint: accounts.get_unchecked(4),
-            wallet: accounts.get_unchecked(5),
-            token_program: accounts.get_unchecked(6),
-        })
     }
 }
 
@@ -759,196 +497,4 @@ pub(crate) fn process_create_associated_token_account(
             )
         }
     }
-}
-
-/// Accounts:
-/// [0] nested_associated_token_account
-/// [1] nested_mint
-/// [2] destination_associated_token_account
-/// [3] owner_associated_token_account
-/// [4] owner_mint
-/// [5] wallet
-/// [6] token_program
-/// [7..] multisig signer accounts
-pub(crate) fn process_recover_nested(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
-) -> ProgramResult {
-    let recover_accounts = parse_recover_accounts(accounts)?;
-
-    let (owner_associated_token_address, bump) = derive_canonical_ata_pda(
-        recover_accounts.wallet.key(),
-        recover_accounts.token_program.key(),
-        recover_accounts.owner_mint.key(),
-        program_id,
-    );
-
-    if owner_associated_token_address != *recover_accounts.owner_associated_token_account.key() {
-        msg!("Error: Owner associated address does not match seed derivation");
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    let (nested_associated_token_address, _) = derive_canonical_ata_pda(
-        recover_accounts.owner_associated_token_account.key(),
-        recover_accounts.token_program.key(),
-        recover_accounts.nested_mint.key(),
-        program_id,
-    );
-    if nested_associated_token_address != *recover_accounts.nested_associated_token_account.key() {
-        msg!("Error: Nested associated address does not match seed derivation");
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    let (destination_associated_token_address, _) = derive_canonical_ata_pda(
-        recover_accounts.wallet.key(),
-        recover_accounts.token_program.key(),
-        recover_accounts.nested_mint.key(),
-        program_id,
-    );
-    if destination_associated_token_address
-        != *recover_accounts.destination_associated_token_account.key()
-    {
-        msg!("Error: Destination associated address does not match seed derivation");
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    // Validate that the owner ATA exists and is a valid token account
-    let _owner_token_account = get_token_account(recover_accounts.owner_associated_token_account)?;
-
-    // Handle multisig case
-    if !recover_accounts.wallet.is_signer() {
-        // Multisig case: must be token-program owned
-        if !recover_accounts
-            .wallet
-            .is_owned_by(recover_accounts.token_program.key())
-        {
-            return Err(ProgramError::MissingRequiredSignature);
-        }
-
-        let wallet_data_slice = unsafe { recover_accounts.wallet.borrow_data_unchecked() };
-        let multisig_state: &Multisig = unsafe {
-            spl_token_interface::state::load::<Multisig>(wallet_data_slice)
-                .map_err(|_| ProgramError::InvalidAccountData)?
-        };
-
-        let signer_infos = &accounts[7..];
-
-        let mut num_signers = 0;
-        let mut matched = [false; MAX_SIGNERS as usize];
-
-        for signer in signer_infos.iter() {
-            for (position, key) in multisig_state.signers[0..multisig_state.n as usize]
-                .iter()
-                .enumerate()
-            {
-                if key == signer.key() && !matched[position] {
-                    if !signer.is_signer() {
-                        return Err(ProgramError::MissingRequiredSignature);
-                    }
-                    matched[position] = true;
-                    num_signers += 1;
-                }
-            }
-        }
-
-        if num_signers < multisig_state.m {
-            return Err(ProgramError::MissingRequiredSignature);
-        }
-    }
-
-    let amount_to_recover =
-        get_token_account(recover_accounts.nested_associated_token_account)?.amount();
-
-    let nested_mint_decimals = unsafe { get_mint_unchecked(recover_accounts.nested_mint).decimals };
-
-    let transfer_data = build_transfer_data(amount_to_recover, nested_mint_decimals);
-
-    let transfer_metas = &[
-        AccountMeta {
-            pubkey: recover_accounts.nested_associated_token_account.key(),
-            is_writable: true,
-            is_signer: false,
-        },
-        AccountMeta {
-            pubkey: recover_accounts.nested_mint.key(),
-            is_writable: false,
-            is_signer: false,
-        },
-        AccountMeta {
-            pubkey: recover_accounts.destination_associated_token_account.key(),
-            is_writable: true,
-            is_signer: false,
-        },
-        AccountMeta {
-            pubkey: recover_accounts.owner_associated_token_account.key(),
-            is_writable: false,
-            is_signer: true,
-        },
-    ];
-
-    let ix_transfer = Instruction {
-        program_id: recover_accounts.token_program.key(),
-        accounts: transfer_metas,
-        data: &transfer_data,
-    };
-
-    let pda_seeds_raw: &[&[u8]] = &[
-        recover_accounts.wallet.key().as_ref(),
-        recover_accounts.token_program.key().as_ref(),
-        recover_accounts.owner_mint.key().as_ref(),
-        &[bump],
-    ];
-    let pda_seed_array: [Seed<'_>; 4] = [
-        Seed::from(pda_seeds_raw[0]),
-        Seed::from(pda_seeds_raw[1]),
-        Seed::from(pda_seeds_raw[2]),
-        Seed::from(pda_seeds_raw[3]),
-    ];
-    let pda_signer = Signer::from(&pda_seed_array);
-
-    invoke_signed(
-        &ix_transfer,
-        &[
-            recover_accounts.nested_associated_token_account,
-            recover_accounts.nested_mint,
-            recover_accounts.destination_associated_token_account,
-            recover_accounts.owner_associated_token_account,
-        ],
-        &[pda_signer.clone()],
-    )?;
-
-    let close_metas = &[
-        AccountMeta {
-            pubkey: recover_accounts.nested_associated_token_account.key(),
-            is_writable: true,
-            is_signer: false,
-        },
-        AccountMeta {
-            pubkey: recover_accounts.wallet.key(),
-            is_writable: true,
-            is_signer: false,
-        },
-        AccountMeta {
-            pubkey: recover_accounts.owner_associated_token_account.key(),
-            is_writable: false,
-            is_signer: true,
-        },
-    ];
-
-    let ix_close = Instruction {
-        program_id: recover_accounts.token_program.key(),
-        accounts: close_metas,
-        data: &CLOSE_ACCOUNT_DATA,
-    };
-
-    invoke_signed(
-        &ix_close,
-        &[
-            recover_accounts.nested_associated_token_account,
-            recover_accounts.wallet,
-            recover_accounts.owner_associated_token_account,
-        ],
-        &[pda_signer],
-    )?;
-    Ok(())
 }

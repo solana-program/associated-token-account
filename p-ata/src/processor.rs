@@ -238,12 +238,17 @@ pub(crate) fn check_idempotent_account(
                 let (verified_address, verified_bump) =
                     ensure_no_better_canonical_address_and_bump(seeds, program_id, bump);
 
-                let canonical_address = verified_address
+                let maybe_canonical_address = verified_address
                     .unwrap_or_else(|| derive_address::<3>(seeds, Some(verified_bump), program_id));
 
-                if !is_off_curve(&canonical_address)
-                    || canonical_address != *associated_token_account.key()
+                // We must check that the actual derived address is off-curve,
+                // since it will not fail downstream as in Create paths.
+                // Potential problem if skipping this is demonstrated in
+                // tests/test_mollusk_oncurve_attack.rs
+                if !is_off_curve(&maybe_canonical_address)
+                    || maybe_canonical_address != *associated_token_account.key()
                 {
+                    msg!("PROGRAM: addresses don't match");
                     return Err(ProgramError::InvalidSeeds);
                 }
             }

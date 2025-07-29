@@ -61,7 +61,7 @@ fn create_with_a_lamport_with_idempotent() {
         wallet_address,
         token_mint_address,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
 
     let result =
@@ -88,7 +88,7 @@ fn create_with_a_lamport_with_idempotent() {
         wallet_address,
         token_mint_address,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
 
     // Update accounts with the created ATA
@@ -158,7 +158,7 @@ fn success_idempotent_on_existing_ata() {
         wallet_address,
         token_mint_address,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
 
     mollusk.process_and_validate_instruction(&create_idempotent_ix, &accounts, &[Check::success()]);
@@ -281,7 +281,7 @@ fn create_with_wrong_mint_fails() {
         wallet_address,
         token_mint_address, // Using the correct mint, but ATA address is for wrong mint
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
 
     // This should fail because the derived ATA address doesn't match the provided address
@@ -353,7 +353,7 @@ fn create_with_mismatch_fails() {
         wrong_wallet, // Wrong wallet!
         token_mint_address,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
 
     // This should fail because the wallet doesn't match the ATA derivation
@@ -438,7 +438,7 @@ fn fail_account_exists_with_wrong_owner() {
         wallet_address,
         token_mint_address,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
 
     // Should fail with IllegalOwner error (P-ATA returns different error type than original)
@@ -518,7 +518,7 @@ fn fail_non_ata() {
         wallet_address,
         token_mint_address,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
 
     // Replace the ATA address with the non-ATA account address

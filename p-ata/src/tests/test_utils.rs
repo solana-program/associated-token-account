@@ -173,8 +173,8 @@ pub enum CreateAtaInstructionType {
         bump: Option<u8>,
         account_len: Option<u16>,
     },
-    /// The `CreateIdempotent` instruction.
-    CreateIdempotent,
+    /// The `CreateIdempotent` instruction, which can optionally include a bump seed.
+    CreateIdempotent { bump: Option<u8> },
 }
 
 /// Build a create associated token account instruction with a given discriminator
@@ -209,7 +209,13 @@ pub fn build_create_ata_instruction(
             }
             data
         }
-        CreateAtaInstructionType::CreateIdempotent => vec![1],
+        CreateAtaInstructionType::CreateIdempotent { bump } => {
+            let mut data = vec![1]; // Discriminator for CreateIdempotent
+            if let Some(b) = bump {
+                data.push(b);
+            }
+            data
+        }
     };
 
     Instruction {

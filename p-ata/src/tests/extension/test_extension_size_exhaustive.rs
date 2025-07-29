@@ -4,7 +4,7 @@ use {crate::size::calculate_account_size_from_mint_extensions, std::vec::Vec};
 #[cfg(feature = "test-debug")]
 use std::eprintln;
 
-use crate::tests::test_extension_utils::{
+use crate::tests::extension::test_extension_utils::{
     calculate_expected_ata_data_size, create_mint_data_with_extensions, get_extensions_by_category,
     is_valid_extension_combination, ExtensionCategory,
 };

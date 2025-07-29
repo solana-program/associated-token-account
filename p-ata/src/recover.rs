@@ -2,7 +2,8 @@
 
 use {
     crate::processor::{
-        build_transfer_data, derive_canonical_ata_pda, get_mint_unchecked, get_token_account,
+        build_transfer_data, derive_canonical_ata_pda, ensure_no_better_canonical_address_and_bump,
+        get_mint_unchecked, get_token_account, is_off_curve,
     },
     pinocchio::{
         account_info::AccountInfo,
@@ -13,6 +14,7 @@ use {
         pubkey::Pubkey,
         ProgramResult,
     },
+    pinocchio_pubkey::derive_address,
     spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS},
 };
 
@@ -65,38 +67,96 @@ pub(crate) fn parse_recover_accounts(
 pub(crate) fn process_recover_nested(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
+    bumps: Option<(u8, u8, u8)>,
 ) -> ProgramResult {
     let recover_accounts = parse_recover_accounts(accounts)?;
 
-    let (owner_associated_token_address, bump) = derive_canonical_ata_pda(
-        recover_accounts.wallet.key(),
-        recover_accounts.token_program.key(),
-        recover_accounts.owner_mint.key(),
-        program_id,
-    );
+    let (owner_associated_token_address, owner_bump) = match bumps {
+        Some((owner_bump, _, _)) => {
+            let address = derive_address::<3>(
+                &[
+                    recover_accounts.wallet.key().as_ref(),
+                    recover_accounts.token_program.key().as_ref(),
+                    recover_accounts.owner_mint.key().as_ref(),
+                ],
+                Some(owner_bump),
+                program_id,
+            );
+            (address, owner_bump)
+        }
+        None => derive_canonical_ata_pda(
+            recover_accounts.wallet.key(),
+            recover_accounts.token_program.key(),
+            recover_accounts.owner_mint.key(),
+            program_id,
+        ),
+    };
 
     if owner_associated_token_address != *recover_accounts.owner_associated_token_account.key() {
         msg!("Error: Owner associated address does not match seed derivation");
         return Err(ProgramError::InvalidSeeds);
     }
 
-    let (nested_associated_token_address, _) = derive_canonical_ata_pda(
-        recover_accounts.owner_associated_token_account.key(),
-        recover_accounts.token_program.key(),
-        recover_accounts.nested_mint.key(),
-        program_id,
-    );
+    let nested_associated_token_address = match bumps {
+        Some((_, nested_bump, _)) => derive_address::<3>(
+            &[
+                recover_accounts
+                    .owner_associated_token_account
+                    .key()
+                    .as_ref(),
+                recover_accounts.token_program.key().as_ref(),
+                recover_accounts.nested_mint.key().as_ref(),
+            ],
+            Some(nested_bump),
+            program_id,
+        ),
+        None => {
+            let (address, _) = derive_canonical_ata_pda(
+                recover_accounts.owner_associated_token_account.key(),
+                recover_accounts.token_program.key(),
+                recover_accounts.nested_mint.key(),
+                program_id,
+            );
+            address
+        }
+    };
     if nested_associated_token_address != *recover_accounts.nested_associated_token_account.key() {
         msg!("Error: Nested associated address does not match seed derivation");
         return Err(ProgramError::InvalidSeeds);
     }
 
-    let (destination_associated_token_address, _) = derive_canonical_ata_pda(
-        recover_accounts.wallet.key(),
-        recover_accounts.token_program.key(),
-        recover_accounts.nested_mint.key(),
-        program_id,
-    );
+    let destination_associated_token_address = match bumps {
+        Some((_, _, destination_bump)) => {
+            let seeds: &[&[u8]; 3] = &[
+                recover_accounts.wallet.key().as_ref(),
+                recover_accounts.token_program.key().as_ref(),
+                recover_accounts.nested_mint.key().as_ref(),
+            ];
+            let (verified_address, verified_bump) =
+                ensure_no_better_canonical_address_and_bump(seeds, program_id, destination_bump);
+
+            let canonical_address = verified_address
+                .unwrap_or_else(|| derive_address::<3>(seeds, Some(verified_bump), program_id));
+
+            if !is_off_curve(&canonical_address)
+                || canonical_address != *recover_accounts.destination_associated_token_account.key()
+            {
+                msg!("Error: Destination address is not canonical or on-curve");
+                return Err(ProgramError::InvalidSeeds);
+            }
+
+            canonical_address
+        }
+        None => {
+            let (address, _) = derive_canonical_ata_pda(
+                recover_accounts.wallet.key(),
+                recover_accounts.token_program.key(),
+                recover_accounts.nested_mint.key(),
+                program_id,
+            );
+            address
+        }
+    };
     if destination_associated_token_address
         != *recover_accounts.destination_associated_token_account.key()
     {
@@ -188,7 +248,7 @@ pub(crate) fn process_recover_nested(
         recover_accounts.wallet.key().as_ref(),
         recover_accounts.token_program.key().as_ref(),
         recover_accounts.owner_mint.key().as_ref(),
-        &[bump],
+        &[owner_bump],
     ];
     let pda_seed_array: [Seed<'_>; 4] = [
         Seed::from(pda_seeds_raw[0]),

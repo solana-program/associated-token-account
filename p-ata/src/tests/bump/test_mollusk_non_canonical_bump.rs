@@ -1,6 +1,7 @@
 use {
+    super::test_bump_utils::setup_mollusk_for_bump_tests,
     crate::tests::test_utils::{build_create_ata_instruction, CreateAtaInstructionType},
-    mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
+    mollusk_svm::result::Check,
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
     solana_sdk::{program_error::ProgramError, signature::Keypair, signer::Signer},
@@ -45,7 +46,10 @@ fn find_wallet_pair(
             return (wallet, canonical_addr, sub_addr);
         }
     }
-    panic!("Failed to find wallet for canonical {canonical_bump} / sub {sub_bump}");
+    panic!(
+        "Failed to find wallet for canonical {} / sub {} after {} attempts",
+        canonical_bump, sub_bump, MAX_FIND_ATTEMPTS
+    );
 }
 
 #[test]
@@ -65,17 +69,7 @@ fn test_rejects_suboptimal_bump() {
         (254u8, 250u8),
     ];
 
-    let mut mollusk = Mollusk::default();
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_for_bump_tests(&token_program_id);
 
     let mut wallet_infos = Vec::new();
     for &(canonical, sub) in &pairs {

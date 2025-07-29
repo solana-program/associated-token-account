@@ -30,7 +30,17 @@ pub fn process_instruction(
             let idempotent = match *discriminator {
                 0 => false,
                 1 => true,
-                2 => return process_recover_nested(program_id, accounts),
+                2 => {
+                    return match instruction_data {
+                        [] => process_recover_nested(program_id, accounts, None),
+                        [owner_bump, nested_bump, destination_bump] => process_recover_nested(
+                            program_id,
+                            accounts,
+                            Some((*owner_bump, *nested_bump, *destination_bump)),
+                        ),
+                        _ => Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
+                    }
+                }
                 _ => return Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
             };
 

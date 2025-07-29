@@ -902,6 +902,21 @@ impl CommonTestCaseBuilder {
     fn build_instruction_data(config: &TestCaseConfig, variant: TestVariant, bump: u8) -> Vec<u8> {
         let mut data = vec![config.instruction_discriminator];
 
+        // Special handling for RecoverNested/RecoverMultisig bump variants
+        if (matches!(
+            config.base_test,
+            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
+        )) && variant.bump_arg
+        {
+            // For recover operations with bump optimization, we need 3 bumps:
+            // owner_bump, nested_bump, destination_bump
+            // We'll use the provided bump as the owner_bump and calculate the others
+            data.push(bump); // owner_bump (already calculated)
+            data.push(bump); // nested_bump (use same for test simplicity)
+            data.push(bump); // destination_bump (use same for test simplicity)
+            return data;
+        }
+
         // If token_account_len_arg is specified, we MUST also include bump (P-ATA requirement)
         if variant.bump_arg || variant.token_account_len_arg {
             data.push(bump);

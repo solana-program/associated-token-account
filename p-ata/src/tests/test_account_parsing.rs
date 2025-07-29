@@ -3,42 +3,50 @@ use {
     pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey},
 };
 
-use std::{mem, ptr, vec::Vec};
+use std::{ptr, vec::Vec};
 
 use crate::tests::test_utils::AccountLayout;
 
-/// Produce an `AccountInfo` instance by byte-copying from an `AccountLayout`.
-/// `AccountInfo` members are private, so this is the only way.
-fn make_test_account(seed: u8) -> AccountInfo {
-    let layout = AccountLayout {
-        borrow_state: 0,
-        is_signer: 0,
-        is_writable: 0,
-        executable: 0,
-        resize_delta: 0,
-        key: Pubkey::from([seed; 32]),
-        owner: Pubkey::from([seed.wrapping_add(1); 32]),
-        lamports: 0,
-        data_len: 0,
-    };
-
-    let mut info_uninit = mem::MaybeUninit::<AccountInfo>::uninit();
-    unsafe {
-        let src_ptr = &layout as *const AccountLayout as *const u8;
-        let dst_ptr = info_uninit.as_mut_ptr() as *mut u8;
-        let copy_len = core::cmp::min(
-            mem::size_of::<AccountLayout>(),
-            mem::size_of::<AccountInfo>(),
-        );
-        ptr::copy_nonoverlapping(src_ptr, dst_ptr, copy_len);
-        info_uninit.assume_init()
+/// Create test AccountInfo instances.
+fn make_test_accounts(count: usize) -> Vec<AccountInfo> {
+    let mut account_data: Vec<AccountLayout> = Vec::with_capacity(count);
+    
+    for i in 0..count {
+        account_data.push(AccountLayout {
+            borrow_state: 0b_1111_1111,
+            is_signer: 0,
+            is_writable: 0,
+            executable: 0,
+            resize_delta: 0,
+            key: Pubkey::from([i as u8; 32]),
+            owner: Pubkey::from([(i as u8).wrapping_add(1); 32]),
+            lamports: 0,
+            data_len: 0,
+        });
     }
+
+    // Leak the data to ensure it lives for the duration of the test
+    let leaked_data = account_data.leak();
+    
+    // Create AccountInfo instances using safe transmute
+    // This is safe because:
+    // 1. AccountLayout is designed to have identical layout to internal Account struct
+    // 2. We're just changing the pointer type, not the data representation  
+    // 3. We verify the sizes match at compile time in test_utils.rs
+    leaked_data
+        .iter_mut()
+        .map(|layout| unsafe {
+            // Convert AccountLayout pointer to AccountInfo
+            // This transmutes &mut AccountLayout -> AccountInfo (which contains *mut Account)
+            std::mem::transmute::<*mut AccountLayout, AccountInfo>(layout)
+        })
+        .collect()
 }
 
 #[test]
 fn test_parse_create_accounts_success_without_rent() {
     // Exactly 6 accounts – rent sysvar should be `None`.
-    let accounts: Vec<AccountInfo> = (0..6).map(make_test_account).collect();
+    let accounts = make_test_accounts(6);
 
     let parsed = parse_create_accounts(&accounts).unwrap();
 
@@ -57,7 +65,7 @@ fn test_parse_create_accounts_success_without_rent() {
 #[test]
 fn test_parse_create_accounts_success_with_rent() {
     // 7 accounts – index 6 is rent sysvar.
-    let accounts: Vec<AccountInfo> = (10..17).map(|s| make_test_account(s as u8)).collect();
+    let accounts = make_test_accounts(7);
     assert_eq!(accounts.len(), 7);
 
     let parsed = parse_create_accounts(&accounts).unwrap();
@@ -68,7 +76,7 @@ fn test_parse_create_accounts_success_with_rent() {
 
 #[test]
 fn test_parse_create_accounts_error_insufficient() {
-    let accounts: Vec<AccountInfo> = (0..5).map(make_test_account).collect();
+    let accounts = make_test_accounts(5);
     assert!(matches!(
         parse_create_accounts(&accounts),
         Err(ProgramError::NotEnoughAccountKeys)
@@ -77,7 +85,7 @@ fn test_parse_create_accounts_error_insufficient() {
 
 #[test]
 fn test_parse_recover_accounts_success() {
-    let accounts: Vec<AccountInfo> = (30..37).map(|s| make_test_account(s as u8)).collect();
+    let accounts = make_test_accounts(7);
     assert_eq!(accounts.len(), 7);
 
     let parsed = parse_recover_accounts(&accounts).unwrap();
@@ -99,7 +107,7 @@ fn test_parse_recover_accounts_success() {
 
 #[test]
 fn test_parse_recover_accounts_error_insufficient() {
-    let accounts: Vec<AccountInfo> = (0..6).map(make_test_account).collect();
+    let accounts = make_test_accounts(6);
     assert!(matches!(
         parse_recover_accounts(&accounts),
         Err(ProgramError::NotEnoughAccountKeys)

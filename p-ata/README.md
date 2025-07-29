@@ -67,8 +67,8 @@ BENCH_ITERATIONS=1 cargo bench
 | create_token2022      | 16057   |  9366 |     6613 |              6354 |
 | create_topup          | 17317   |  6534 |     3749 |              3550 |
 | create_topup_no_cap   | 17287   |  9169 |     6409 |              6229 |
-| create_extended       | 19420   | 11441 |     8834 |              8467 |
-| recover_nested        | 17066   | 12409 |    13279 |             13279 |
+| create_extended       | 19420   | 11441 |     8735 |              8459 |
+| recover_nested        | 17066   | 12409 |    12538 |             12538 |
 | recover_multisig      |     0   | 13185 |    12660 |             12660 |
 
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.

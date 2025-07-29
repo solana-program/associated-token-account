@@ -89,7 +89,7 @@ impl StandardAccountSet {
 
     /// Configure the ATA as a top-up account (has some lamports but not rent-exempt).
     ///
-    /// Used for create-account-prefunded tests.
+    /// Used for create-prefunded-account tests.
     ///
     /// **Call-order requirement**: must be invoked before any helper that converts the ATA into a
     /// fully-initialized token account (e.g. `with_existing_ata`).

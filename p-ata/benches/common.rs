@@ -773,8 +773,8 @@ pub struct AtaImplementation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AtaVariant {
-    PAtaLegacy,    // P-ATA without create-account-prefunded
-    PAtaPrefunded, // P-ATA with create-account-prefunded
+    PAtaLegacy,    // P-ATA without create-prefunded-account
+    PAtaPrefunded, // P-ATA with create-prefunded-account
     SplAta,        // Original SPL ATA
 }
 
@@ -1465,7 +1465,7 @@ impl BaseTestType {
     #[allow(dead_code)]
     pub fn required_pata_variant(&self) -> AtaVariant {
         match self {
-            Self::CreateTopup => AtaVariant::PAtaPrefunded, // Uses create-account-prefunded feature
+            Self::CreateTopup => AtaVariant::PAtaPrefunded, // Uses create-prefunded-account feature
             Self::CreateTopupNoCap => AtaVariant::PAtaLegacy, // Uses standard P-ATA without the feature
             _ => AtaVariant::PAtaLegacy,                      // All other tests use standard P-ATA
         }

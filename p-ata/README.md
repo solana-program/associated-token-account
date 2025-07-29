@@ -12,7 +12,7 @@ p-ata (pinocchio-ata) is a drop-in replacement for SPL ATA. Following in the foo
 
 ## New Features (not available in SPL ATA)
 - `RecoverNested` works with multisig accounts (satisfying #24)
-- `CreatePrefundedAccount` is supported for cheaper calls of p-ata's `Create` when the account rent has been topped up in advance. Conditional on [SIMD-312](https://github.com/solana-foundation/solana-improvement-documents/pull/312), but alternative code is provided if `not(feature = "create-account-prefunded")`. Enabling this feature saves this flow ~2500 CUs (Compute Units). Currently this PR patches in branches with `CreatePrefundedAccount` support in `agave`, `system`, `pinocchio`, and `mollusk`.
+- `CreatePrefundedAccount` is supported for cheaper calls of p-ata's `Create` when the account rent has been topped up in advance. Conditional on [SIMD-312](https://github.com/solana-foundation/solana-improvement-documents/pull/312), but alternative code is provided if `not(feature = "create-prefunded-account")`. Enabling this feature saves this flow ~2500 CUs (Compute Units). Currently this PR patches in branches with `CreatePrefundedAccount` support in `agave`, `system`, `pinocchio`, and `mollusk`.
 - In descending order of significance,`bump`, `rent`, and `token_account_len` can be passed in by client to save compute.
 
 ## Notable Performance Improvements

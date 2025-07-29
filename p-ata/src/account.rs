@@ -9,10 +9,10 @@ use {
     pinocchio_system::instructions::CreateAccount,
 };
 
-#[cfg(feature = "create-account-prefunded")]
-use pinocchio_system::instructions::CreateAccountPrefunded;
+#[cfg(feature = "create-prefunded-account")]
+use pinocchio_system::instructions::CreatePrefundedAccount;
 
-#[cfg(not(feature = "create-account-prefunded"))]
+#[cfg(not(feature = "create-prefunded-account"))]
 use pinocchio_system::instructions::{Allocate, Assign, Transfer};
 
 /// Create a PDA account, given:
@@ -45,9 +45,9 @@ pub(crate) fn create_pda_account(
     let required_lamports = rent.minimum_balance(space).max(1);
 
     if current_lamports > 0 {
-        #[cfg(feature = "create-account-prefunded")]
+        #[cfg(feature = "create-prefunded-account")]
         {
-            CreateAccountPrefunded {
+            CreatePrefundedAccount {
                 from: payer,
                 to: pda,
                 lamports: required_lamports.saturating_sub(current_lamports),
@@ -56,7 +56,7 @@ pub(crate) fn create_pda_account(
             }
             .invoke_signed(&[signer])?;
         }
-        #[cfg(not(feature = "create-account-prefunded"))]
+        #[cfg(not(feature = "create-prefunded-account"))]
         {
             if required_lamports > current_lamports {
                 Transfer {

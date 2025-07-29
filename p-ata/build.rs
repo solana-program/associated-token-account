@@ -227,7 +227,7 @@ mod builder {
         println!("cargo:warning=Building P-ATA prefunded variant...");
 
         let output = Command::new("cargo")
-            .args(["build-sbf", "--features", "create-account-prefunded"])
+            .args(["build-sbf", "--features", "create-prefunded-account"])
             .current_dir(manifest_dir)
             .output()
             .expect("Failed to execute cargo build-sbf for P-ATA prefunded");

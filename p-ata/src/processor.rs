@@ -655,7 +655,7 @@ pub(crate) fn ensure_no_better_canonical_address_and_bump(
     // This saves significant compute units while still preventing non-canonical addresses
     let mut better_bump = 255;
     while better_bump > hint_bump {
-        let maybe_better_address = derive_address::<3>(seeds, better_bump, program_id);
+        let maybe_better_address = derive_address::<3>(seeds, Some(better_bump), program_id);
         if is_off_curve(&maybe_better_address) {
             return (Some(maybe_better_address), better_bump);
         }
@@ -826,8 +826,10 @@ pub(crate) fn process_recover_nested(
         }
 
         let wallet_data_slice = unsafe { recover_accounts.wallet.borrow_data_unchecked() };
-        let multisig_state: &Multisig =
-            unsafe { spl_token_interface::state::load::<Multisig>(wallet_data_slice)? };
+        let multisig_state: &Multisig = unsafe {
+            spl_token_interface::state::load::<Multisig>(wallet_data_slice)
+                .map_err(|_| ProgramError::InvalidAccountData)?
+        };
 
         let signer_infos = &accounts[7..];
 

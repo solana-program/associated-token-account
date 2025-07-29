@@ -4,7 +4,7 @@ use {
     crate::tests::test_utils::{
         build_create_ata_instruction, calculate_account_rent,
         create_mollusk_base_accounts_with_token, create_test_mint, setup_mollusk_with_programs,
-        NATIVE_LOADER_ID,
+        CreateAtaInstructionType, NATIVE_LOADER_ID,
     },
     mollusk_svm::{result::Check, Mollusk},
     solana_instruction::{AccountMeta, Instruction},
@@ -67,6 +67,10 @@ fn process_create_associated_token_account() {
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
 
     mollusk.process_and_validate_instruction(&create_ix, &accounts, &[Check::success()]);
@@ -111,6 +115,10 @@ fn process_create_associated_token_account_with_invalid_mint() {
         wallet_address,
         invalid_mint_address,
         token_program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
 
     // Include the invalid mint account but with invalid/empty data
@@ -342,6 +350,10 @@ fn test_create_with_fewer_lamports() {
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
 
     // Process instruction - program should add the missing lamports
@@ -422,6 +434,10 @@ fn test_create_with_excess_lamports() {
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
 
     // Process instruction - program should preserve excess lamports (not steal them)

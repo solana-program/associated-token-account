@@ -178,7 +178,7 @@ pub fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Ve
                     extension.authority = Some(solana_pubkey::Pubkey::new_unique()).try_into().unwrap();
                     extension.member_address = Some(solana_pubkey::Pubkey::new_unique()).try_into().unwrap();
                 } else {
-                    return Vec::new();
+                    panic!("Failed to init GroupMemberPointer");
                 }
             }
             ExtensionType::MintCloseAuthority => {
@@ -239,7 +239,7 @@ pub fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Ve
                         max_size: 100u64.into(),
                     };
                 } else {
-                    return Vec::new();
+                    panic!("Failed to init TokenGroup");
                 }
             }
             ExtensionType::TokenGroupMember => {
@@ -250,7 +250,7 @@ pub fn create_mint_data_with_extensions(extension_types: &[ExtensionType]) -> Ve
                         member_number: 0u64.into(),
                     };
                 } else {
-                    return Vec::new();
+                    panic!("Failed to init TokenGroupMember");
                 }
             }
             _ => {}

@@ -2,8 +2,8 @@
 
 use {
     crate::tests::test_utils::{
-        build_create_ata_instruction, build_create_idempotent_ata_instruction,
-        create_mollusk_token_account_data, create_test_mint, setup_mollusk_with_programs,
+        build_create_ata_instruction, create_mollusk_token_account_data, create_test_mint,
+        setup_mollusk_with_programs, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
@@ -61,6 +61,7 @@ fn create_with_a_lamport_with_idempotent() {
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     let result =
@@ -80,13 +81,14 @@ fn create_with_a_lamport_with_idempotent() {
     assert_eq!(created_ata.executable, false);
 
     // Step 3: Try with idempotent instruction on already created ATA - should also succeed
-    let create_idempotent_ix = build_create_idempotent_ata_instruction(
+    let create_idempotent_ix = build_create_ata_instruction(
         ata_program_id,
         payer.pubkey(),
         associated_token_address,
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     // Update accounts with the created ATA
@@ -149,13 +151,14 @@ fn success_idempotent_on_existing_ata() {
     ]);
 
     // Step 2: Create ATA with CreateIdempotent (first time) - should succeed
-    let create_idempotent_ix = build_create_idempotent_ata_instruction(
+    let create_idempotent_ix = build_create_ata_instruction(
         ata_program_id,
         payer.pubkey(),
         associated_token_address,
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     mollusk.process_and_validate_instruction(&create_idempotent_ix, &accounts, &[Check::success()]);
@@ -183,6 +186,10 @@ fn success_idempotent_on_existing_ata() {
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
 
     mollusk.process_and_validate_instruction(
@@ -267,13 +274,14 @@ fn create_with_wrong_mint_fails() {
     ]);
 
     // Step 2: Create an associated token account using correct mint but wrong derived address
-    let create_idempotent_ix = build_create_idempotent_ata_instruction(
+    let create_idempotent_ix = build_create_ata_instruction(
         ata_program_id,
         payer.pubkey(),
         associated_token_address,
         wallet_address,
         token_mint_address, // Using the correct mint, but ATA address is for wrong mint
         token_program_id,
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     // This should fail because the derived ATA address doesn't match the provided address
@@ -338,13 +346,14 @@ fn create_with_mismatch_fails() {
     ]);
 
     // Step 2: Try to create ATA with wrong wallet
-    let create_idempotent_ix = build_create_idempotent_ata_instruction(
+    let create_idempotent_ix = build_create_ata_instruction(
         ata_program_id,
         payer.pubkey(),
         associated_token_address,
         wrong_wallet, // Wrong wallet!
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     // This should fail because the wallet doesn't match the ATA derivation
@@ -422,13 +431,14 @@ fn fail_account_exists_with_wrong_owner() {
     ]);
 
     // Try to create idempotent ATA - should fail because existing account has wrong owner
-    let create_idempotent_ix = build_create_idempotent_ata_instruction(
+    let create_idempotent_ix = build_create_ata_instruction(
         ata_program_id,
         payer.pubkey(),
         associated_token_address,
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     // Should fail with IllegalOwner error (P-ATA returns different error type than original)
@@ -497,7 +507,7 @@ fn fail_non_ata() {
     ]);
 
     // Try to create idempotent ATA but pass the non-ATA account address
-    let mut create_idempotent_ix = build_create_idempotent_ata_instruction(
+    let mut create_idempotent_ix = build_create_ata_instruction(
         ata_program_id,
         payer.pubkey(),
         get_associated_token_address_with_program_id(
@@ -508,6 +518,7 @@ fn fail_non_ata() {
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     // Replace the ATA address with the non-ATA account address

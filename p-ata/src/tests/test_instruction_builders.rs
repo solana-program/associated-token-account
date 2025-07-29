@@ -4,6 +4,7 @@ use {
         INITIALIZE_ACCOUNT_3_DISCM, INITIALIZE_IMMUTABLE_OWNER_DISCM, TRANSFER_CHECKED_DISCM,
     },
     pinocchio::pubkey::Pubkey,
+    std::collections::HashSet,
     test_case::test_case,
 };
 
@@ -32,6 +33,7 @@ fn test_build_initialize_account3_data_different_owners() {
 #[test_case(0, 0; "zero_amount_zero_decimals")]
 #[test_case(1000, 6; "typical_amount")]
 #[test_case(u64::MAX, 18; "max_amount_max_decimals")]
+#[test_case(u64::MAX, u8::MAX; "max_amount_max_decimals_u8")]
 #[test_case(123456789, 9; "random_values")]
 fn test_build_transfer_data(amount: u64, decimals: u8) {
     let data = build_transfer_data(amount, decimals);
@@ -72,40 +74,21 @@ fn test_instruction_data_deterministic() {
 
 #[test]
 fn test_discriminator_uniqueness() {
-    let unique_discriminators = [
+    let discriminators = [
         INITIALIZE_ACCOUNT_3_DISCM,
         INITIALIZE_IMMUTABLE_OWNER_DISCM,
         TRANSFER_CHECKED_DISCM,
         CLOSE_ACCOUNT_DISCM,
     ];
 
-    for (i, &disc1) in unique_discriminators.iter().enumerate() {
-        for (j, &disc2) in unique_discriminators.iter().enumerate() {
-            if i != j {
-                assert_ne!(disc1, disc2, "Discriminators must be unique");
-            }
-        }
+    let mut unique_discriminators = HashSet::new();
+    for &d in &discriminators {
+        unique_discriminators.insert(d);
     }
-}
 
-#[test]
-fn test_build_transfer_data_zero_values() {
-    let data = build_transfer_data(0, 0);
-
-    assert_eq!(data[0], TRANSFER_CHECKED_DISCM);
-    for &byte in &data[1..9] {
-        assert_eq!(byte, 0);
-    }
-    assert_eq!(data[9], 0);
-}
-
-#[test]
-fn test_build_transfer_data_max_values() {
-    let data = build_transfer_data(u64::MAX, u8::MAX);
-
-    assert_eq!(data[0], TRANSFER_CHECKED_DISCM);
-    for &byte in &data[1..9] {
-        assert_eq!(byte, 255);
-    }
-    assert_eq!(data[9], 255);
+    assert_eq!(
+        discriminators.len(),
+        unique_discriminators.len(),
+        "All discriminators must be unique"
+    );
 }

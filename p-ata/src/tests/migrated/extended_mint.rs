@@ -3,7 +3,7 @@
 use {
     crate::tests::test_utils::{
         build_create_ata_instruction, create_mollusk_base_accounts_with_token_and_wallet,
-        setup_mollusk_with_programs,
+        setup_mollusk_with_programs, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_pubkey::Pubkey,
@@ -143,6 +143,10 @@ fn test_associated_token_account_with_transfer_fees() {
         wallet_address_sender,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
 
     // Update accounts with initialized mint
@@ -185,6 +189,10 @@ fn test_associated_token_account_with_transfer_fees() {
         wallet_address_receiver,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
 
     // Update accounts with created sender ATA

@@ -1,4 +1,5 @@
 use {
+    crate::tests::test_utils::{build_create_ata_instruction, CreateAtaInstructionType},
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
@@ -18,8 +19,9 @@ fn find_wallet_pair(
     ata_program_id: &Pubkey,
 ) -> (Pubkey, Pubkey, Pubkey) {
     assert!(canonical_bump > sub_bump);
+    const MAX_FIND_ATTEMPTS: u32 = 40_000;
     // as long as each number is >=250,
-    for _ in 0..40_000 {
+    for _ in 0..MAX_FIND_ATTEMPTS {
         let wallet = Pubkey::new_unique();
 
         let (canonical_addr, bump) = Pubkey::find_program_address(
@@ -46,32 +48,6 @@ fn find_wallet_pair(
     panic!("Failed to find wallet for canonical {canonical_bump} / sub {sub_bump}");
 }
 
-/// Construct a create instruction for a given ATA address & bump.
-fn build_create_ix(
-    ata_program_id: Pubkey,
-    ata_address: Pubkey,
-    bump: u8,
-    payer: Pubkey,
-    wallet: Pubkey,
-    mint: Pubkey,
-    token_program: Pubkey,
-) -> Instruction {
-    let mut accounts = Vec::with_capacity(7);
-    accounts.push(AccountMeta::new(payer, true));
-    accounts.push(AccountMeta::new(ata_address, false));
-    accounts.push(AccountMeta::new_readonly(wallet, false));
-    accounts.push(AccountMeta::new_readonly(mint, false));
-    accounts.push(AccountMeta::new_readonly(system_program::id(), false));
-    accounts.push(AccountMeta::new_readonly(token_program, false));
-    accounts.push(AccountMeta::new_readonly(sysvar::rent::id(), false));
-
-    Instruction {
-        program_id: ata_program_id,
-        accounts,
-        data: Vec::from([0u8, bump]), // discriminator 0 (Create) + bump
-    }
-}
-
 #[test]
 fn test_rejects_suboptimal_bump() {
     let ata_program_id = spl_associated_token_account::id();
@@ -89,6 +65,18 @@ fn test_rejects_suboptimal_bump() {
         (254u8, 250u8),
     ];
 
+    let mut mollusk = Mollusk::default();
+    mollusk.add_program(
+        &ata_program_id,
+        "target/deploy/pinocchio_ata_program",
+        &LOADER_V3,
+    );
+    mollusk.add_program(
+        &token_program_id,
+        "programs/token/target/deploy/pinocchio_token_program",
+        &LOADER_V3,
+    );
+
     let mut wallet_infos = Vec::new();
     for &(canonical, sub) in &pairs {
         let (wallet, canonical_addr, sub_addr) = find_wallet_pair(
@@ -104,28 +92,17 @@ fn test_rejects_suboptimal_bump() {
     for (wallet, canonical_bump, canonical_addr, sub_bump, sub_addr) in wallet_infos {
         // Test 1: Sub-optimal should fail
         {
-            let mut mollusk = Mollusk::default();
-
-            mollusk.add_program(
-                &ata_program_id,
-                "target/deploy/pinocchio_ata_program",
-                &LOADER_V3,
-            );
-
-            mollusk.add_program(
-                &token_program_id,
-                "programs/token/target/deploy/pinocchio_token_program",
-                &LOADER_V3,
-            );
-
-            let ix_fail = build_create_ix(
+            let ix_fail = build_create_ata_instruction(
                 ata_program_id,
-                sub_addr,
-                sub_bump,
                 payer.pubkey(),
+                sub_addr,
                 wallet,
                 mint_pubkey,
                 token_program_id,
+                CreateAtaInstructionType::Create {
+                    bump: Some(sub_bump),
+                    account_len: None,
+                },
             );
 
             let accounts = crate::tests::test_utils::create_ata_test_accounts(
@@ -144,28 +121,17 @@ fn test_rejects_suboptimal_bump() {
         }
 
         {
-            let mut mollusk = Mollusk::default();
-
-            mollusk.add_program(
-                &ata_program_id,
-                "target/deploy/pinocchio_ata_program",
-                &LOADER_V3,
-            );
-
-            mollusk.add_program(
-                &token_program_id,
-                "programs/token/target/deploy/pinocchio_token_program",
-                &LOADER_V3,
-            );
-
-            let ix_ok = build_create_ix(
+            let ix_ok = build_create_ata_instruction(
                 ata_program_id,
-                canonical_addr,
-                canonical_bump,
                 payer.pubkey(),
+                canonical_addr,
                 wallet,
                 mint_pubkey,
                 token_program_id,
+                CreateAtaInstructionType::Create {
+                    bump: Some(canonical_bump),
+                    account_len: None,
+                },
             );
 
             let accounts = crate::tests::test_utils::create_ata_test_accounts(

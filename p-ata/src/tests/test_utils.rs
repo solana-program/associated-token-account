@@ -166,7 +166,18 @@ pub fn create_mollusk_base_accounts_with_token_and_wallet(
     accounts
 }
 
-/// Build standard create associated token account instruction
+/// The type of ATA creation instruction to build.
+pub enum CreateAtaInstructionType {
+    /// The standard `Create` instruction, which can optionally include a bump seed and account length.
+    Create {
+        bump: Option<u8>,
+        account_len: Option<u16>,
+    },
+    /// The `CreateIdempotent` instruction.
+    CreateIdempotent,
+}
+
+/// Build a create associated token account instruction with a given discriminator
 #[cfg(test)]
 pub fn build_create_ata_instruction(
     ata_program_id: SolanaPubkey,
@@ -175,6 +186,7 @@ pub fn build_create_ata_instruction(
     wallet: SolanaPubkey,
     mint: SolanaPubkey,
     token_program: SolanaPubkey,
+    instruction_type: CreateAtaInstructionType,
 ) -> Instruction {
     let accounts = [
         AccountMeta::new(payer, true),
@@ -186,37 +198,24 @@ pub fn build_create_ata_instruction(
         AccountMeta::new_readonly(sysvar::rent::id(), false),
     ];
 
-    Instruction {
-        program_id: ata_program_id,
-        accounts: accounts.to_vec(),
-        data: [0u8].to_vec(), // discriminator 0 (Create)
-    }
-}
-
-/// Build create idempotent associated token account instruction
-#[cfg(test)]
-pub fn build_create_idempotent_ata_instruction(
-    ata_program_id: SolanaPubkey,
-    payer: SolanaPubkey,
-    ata_address: SolanaPubkey,
-    wallet: SolanaPubkey,
-    mint: SolanaPubkey,
-    token_program: SolanaPubkey,
-) -> Instruction {
-    let accounts = [
-        AccountMeta::new(payer, true),
-        AccountMeta::new(ata_address, false),
-        AccountMeta::new_readonly(wallet, false),
-        AccountMeta::new_readonly(mint, false),
-        AccountMeta::new_readonly(system_program::id(), false),
-        AccountMeta::new_readonly(token_program, false),
-        AccountMeta::new_readonly(sysvar::rent::id(), false),
-    ];
+    let data = match instruction_type {
+        CreateAtaInstructionType::Create { bump, account_len } => {
+            let mut data = vec![0]; // Discriminator for Create
+            if let Some(b) = bump {
+                data.push(b);
+                if let Some(len) = account_len {
+                    data.extend_from_slice(&len.to_le_bytes());
+                }
+            }
+            data
+        }
+        CreateAtaInstructionType::CreateIdempotent => vec![1],
+    };
 
     Instruction {
         program_id: ata_program_id,
         accounts: accounts.to_vec(),
-        data: [1u8].to_vec(), // discriminator 1 (CreateIdempotent)
+        data,
     }
 }
 
@@ -263,18 +262,9 @@ pub fn create_mollusk_mint_data(decimals: u8) -> Vec<u8> {
 
 /// Create valid token account data for testing
 pub fn create_token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
-    let mut data = vec![0u8; TokenAccount::LEN];
-
-    // Set mint (first 32 bytes)
-    data[0..32].copy_from_slice(mint.as_ref());
-    // Set owner (bytes 32-64)
-    data[32..64].copy_from_slice(owner.as_ref());
-    // Set amount (bytes 64-72)
-    data[64..72].copy_from_slice(&amount.to_le_bytes());
-    // Set state to initialized (byte 108)
-    data[108] = 1;
-
-    data
+    let mollusk_mint = SolanaPubkey::new_from_array(*mint);
+    let mollusk_owner = SolanaPubkey::new_from_array(*owner);
+    create_mollusk_token_account_data(&mollusk_mint, &mollusk_owner, amount)
 }
 
 /// Create valid multisig data for testing

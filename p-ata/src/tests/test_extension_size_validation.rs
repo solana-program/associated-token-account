@@ -35,45 +35,34 @@ fn test_no_extensions() {
 }
 
 #[test]
-fn test_transfer_fee_config() {
-    let extensions = vec![ExtensionType::TransferFeeConfig];
-    let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_ata_data_size(&extensions);
+fn test_single_extensions() {
+    let extensions_to_test = vec![
+        (
+            ExtensionType::TransferFeeConfig,
+            "TransferFeeConfig should add TransferFeeAmount extension to account size",
+        ),
+        (
+            ExtensionType::TransferHook,
+            "TransferHook should add TransferHookAccount extension to account size",
+        ),
+        (
+            ExtensionType::Pausable,
+            "PausableConfig should add PausableAccount extension to account size",
+        ),
+        (
+            ExtensionType::NonTransferable,
+            "NonTransferable should be supported",
+        ),
+    ];
 
-    let result = calculate_account_size_from_mint_extensions(&mint_data);
-    assert_eq!(
-        result,
-        Some(expected_size),
-        "TransferFeeConfig should add TransferFeeAmount extension to account size"
-    );
-}
+    for (extension, description) in extensions_to_test {
+        let extensions = vec![extension];
+        let mint_data = create_mint_data_with_extensions(&extensions);
+        let expected_size = calculate_expected_ata_data_size(&extensions);
 
-#[test]
-fn test_transfer_hook() {
-    let extensions = vec![ExtensionType::TransferHook];
-    let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_ata_data_size(&extensions);
-
-    let result = calculate_account_size_from_mint_extensions(&mint_data);
-    assert_eq!(
-        result,
-        Some(expected_size),
-        "TransferHook should add TransferHookAccount extension to account size"
-    );
-}
-
-#[test]
-fn test_pausable_config() {
-    let extensions = vec![ExtensionType::Pausable];
-    let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_ata_data_size(&extensions);
-
-    let result = calculate_account_size_from_mint_extensions(&mint_data);
-    assert_eq!(
-        result,
-        Some(expected_size),
-        "PausableConfig should add PausableAccount extension to account size"
-    );
+        let result = calculate_account_size_from_mint_extensions(&mint_data);
+        assert_eq!(result, Some(expected_size), "{}", description);
+    }
 }
 
 #[test]
@@ -148,6 +137,15 @@ fn test_mixed_extensions() {
     );
 }
 
+fn create_mint_with_unsupported_extension(extension_type: u16) -> Vec<u8> {
+    let mut mint_data = create_base_mint_data();
+    mint_data.resize(170, 0);
+    mint_data[165] = 1; // AccountType::Mint
+    mint_data[166..168].copy_from_slice(&extension_type.to_le_bytes());
+    mint_data[168..170].copy_from_slice(&[0u8, 0u8]);
+    mint_data
+}
+
 #[test]
 fn test_unsupported_extensions_return_none() {
     // These extensions should cause our function to return None (fall back to CPI)
@@ -156,37 +154,15 @@ fn test_unsupported_extensions_return_none() {
         30, 420,
     ];
 
-    for extension in unsupported_extensions {
-        let mut mint_data = create_base_mint_data();
-        mint_data.resize(170, 0);
-
-        mint_data[165] = 1; // AccountType::Mint
-
-        let extension_type = extension as u16;
-        mint_data[166..168].copy_from_slice(&extension_type.to_le_bytes());
-        mint_data[168..170].copy_from_slice(&[0u8, 0u8]);
-
+    for &extension_type in &unsupported_extensions {
+        let mint_data = create_mint_with_unsupported_extension(extension_type);
         let result = calculate_account_size_from_mint_extensions(&mint_data);
         assert_eq!(
             result, None,
             "Unsupported extension {:?} should return None",
-            extension
+            extension_type
         );
     }
-}
-
-#[test]
-fn test_non_transferable_extension() {
-    let extensions = vec![ExtensionType::NonTransferable];
-    let mint_data = create_mint_data_with_extensions(&extensions);
-    let expected_size = calculate_expected_ata_data_size(&extensions);
-
-    let result = calculate_account_size_from_mint_extensions(&mint_data);
-    assert_eq!(
-        result,
-        Some(expected_size),
-        "NonTransferable should be supported"
-    );
 }
 
 #[test]
@@ -205,41 +181,42 @@ fn test_empty_extension_data() {
 
 #[test]
 fn test_extension_combinations_comprehensive() {
-    // Extensions that require account-side data (should affect our calculation)
-    let account_affecting_extensions = vec![
-        ExtensionType::TransferFeeConfig, // +12 bytes (TLV + TransferFeeAmount)
-        ExtensionType::NonTransferable,   // +4 bytes (TLV + NonTransferableAccount)
-        ExtensionType::TransferHook,      // +5 bytes (TLV + TransferHookAccount)
-        ExtensionType::Pausable,          // +4 bytes (TLV + PausableAccount)
+    let account_affecting_extensions = [
+        ExtensionType::TransferFeeConfig,
+        ExtensionType::NonTransferable,
+        ExtensionType::TransferHook,
+        ExtensionType::Pausable,
     ];
 
-    // Extensions that don't require account-side data (should not affect our calculation)
-    let mint_only_extensions = vec![
+    let mint_only_extensions = [
         ExtensionType::DefaultAccountState,
         ExtensionType::InterestBearingConfig,
         ExtensionType::MetadataPointer,
         ExtensionType::GroupPointer,
         ExtensionType::GroupMemberPointer,
-        ExtensionType::TransferFeeConfig, // affects both mint and account
     ];
 
-    for (i, ext1) in account_affecting_extensions.iter().enumerate() {
-        for ext2 in account_affecting_extensions.iter().skip(i + 1) {
-            let extensions = vec![*ext1, *ext2];
+    // Test combinations of two account-affecting extensions
+    for i in 0..account_affecting_extensions.len() {
+        for j in i + 1..account_affecting_extensions.len() {
+            let extensions = vec![
+                account_affecting_extensions[i],
+                account_affecting_extensions[j],
+            ];
             test_extension_combination(&extensions, "Two account-affecting extensions");
         }
     }
 
-    for account_ext in &account_affecting_extensions {
-        for mint_ext in &mint_only_extensions {
-            if account_ext != mint_ext {
-                let extensions = vec![*account_ext, *mint_ext];
-                test_extension_combination(&extensions, "Account-affecting + mint-only extension");
-            }
+    // Test combinations of one account-affecting and one mint-only extension
+    for &account_ext in &account_affecting_extensions {
+        for &mint_ext in &mint_only_extensions {
+            let extensions = vec![account_ext, mint_ext];
+            test_extension_combination(&extensions, "Account-affecting + mint-only extension");
         }
     }
 
-    let three_ext_combinations = vec![
+    // Test a few larger combinations
+    let large_combinations = [
         vec![
             ExtensionType::TransferFeeConfig,
             ExtensionType::NonTransferable,
@@ -250,23 +227,6 @@ fn test_extension_combinations_comprehensive() {
             ExtensionType::Pausable,
             ExtensionType::DefaultAccountState,
         ],
-        vec![
-            ExtensionType::NonTransferable,
-            ExtensionType::TransferHook,
-            ExtensionType::Pausable,
-        ],
-        vec![
-            ExtensionType::TransferFeeConfig,
-            ExtensionType::InterestBearingConfig,
-            ExtensionType::MetadataPointer,
-        ],
-    ];
-
-    for extensions in three_ext_combinations {
-        test_extension_combination(&extensions, "Three extension combination");
-    }
-
-    let large_combinations = vec![
         vec![
             ExtensionType::TransferFeeConfig,
             ExtensionType::NonTransferable,
@@ -282,14 +242,12 @@ fn test_extension_combinations_comprehensive() {
         ],
     ];
 
-    for extensions in large_combinations {
-        test_extension_combination(&extensions, "Large extension combination");
+    for extensions in &large_combinations {
+        test_extension_combination(extensions, "Large extension combination");
     }
 }
 
-#[test]
-fn test_token_metadata_variable_length() {
-    // Create a simple mint data with manually constructed TokenMetadata TLV
+fn create_mint_with_mock_token_metadata() -> Vec<u8> {
     let mut mint_data = std::vec![0u8; 82 + 32]; // Base mint (82) + some extension space
 
     // Set up basic mint structure
@@ -309,6 +267,13 @@ fn test_token_metadata_variable_length() {
     mint_data[tlv_offset + 2..tlv_offset + 4].copy_from_slice(&[20u8, 0]); // Length: 20 bytes
                                                                            // Mock 20 bytes of metadata content
     mint_data[tlv_offset + 4..tlv_offset + 24].copy_from_slice(&[1u8; 20]);
+    mint_data
+}
+
+#[test]
+fn test_token_metadata_variable_length() {
+    // Create a simple mint data with manually constructed TokenMetadata TLV
+    let mint_data = create_mint_with_mock_token_metadata();
 
     #[cfg(feature = "test-debug")]
     eprintln!(

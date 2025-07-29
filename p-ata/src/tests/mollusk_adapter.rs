@@ -20,7 +20,11 @@ use {
     std::collections::BTreeMap,
 };
 
-#[allow(dead_code)]
+#[allow(dead_code, clippy::all, unsafe_code)]
+// This function is the primary bridge between the solana_program_test environment
+// and the pinocchio-based p-ata program. `unsafe` relies on the assumption that
+// the memory layouts of `solana_program::AccountInfo` and
+// `pinocchio::account_info::AccountInfo` are identical.
 fn process_instruction(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -334,17 +338,19 @@ impl MolluskProgramTest {
     }
 }
 
-/// Mollusk-based equivalent of program_test_2022
-pub fn mollusk_program_test_2022(token_mint_address: Pubkey) -> MolluskProgramTest {
-    let mut mollusk = Mollusk::default();
-
-    // Add our p-ata program with the SPL ATA program ID (like the original wrapper)
+fn setup_mollusk_with_p_ata(mollusk: &mut Mollusk) {
     let program_id = spl_associated_token_account::id();
     mollusk.add_program(
         &program_id,
         "target/deploy/pinocchio_ata_program",
         &loader_keys::LOADER_V3,
     );
+}
+
+/// Mollusk-based equivalent of program_test_2022
+pub fn mollusk_program_test_2022(token_mint_address: Pubkey) -> MolluskProgramTest {
+    let mut mollusk = Mollusk::default();
+    setup_mollusk_with_p_ata(&mut mollusk);
 
     // Add required programs
     mollusk.add_program(
@@ -364,14 +370,7 @@ pub fn mollusk_program_test_2022(token_mint_address: Pubkey) -> MolluskProgramTe
 /// Mollusk-based equivalent of program_test
 pub fn mollusk_program_test(token_mint_address: Pubkey) -> MolluskProgramTest {
     let mut mollusk = Mollusk::default();
-
-    // Add our p-ata program with the SPL ATA program ID (like the original wrapper)
-    let program_id = spl_associated_token_account::id();
-    mollusk.add_program(
-        &program_id,
-        "target/deploy/pinocchio_ata_program",
-        &loader_keys::LOADER_V3,
-    );
+    setup_mollusk_with_p_ata(&mut mollusk);
 
     // Add required programs - use p-token for non-2022 tests
     mollusk.add_program(

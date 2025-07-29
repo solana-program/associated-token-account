@@ -4,6 +4,7 @@ use {
     crate::tests::test_utils::{
         build_create_ata_instruction, calculate_account_rent,
         create_mollusk_base_accounts_with_token, setup_mollusk_with_programs,
+        CreateAtaInstructionType,
     },
     mollusk_svm::{result::Check, Mollusk},
     solana_pubkey::Pubkey,
@@ -86,6 +87,10 @@ fn success_create() {
         wallet_address,
         token_mint_address,
         token_program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
 
     let mint_result = mollusk.process_instruction(&init_mint_ix, &accounts);

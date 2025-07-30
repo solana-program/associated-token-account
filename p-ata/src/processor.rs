@@ -64,8 +64,13 @@ pub struct CreateAccounts<'a> {
 
 /// Derive canonical ATA PDA from wallet, token program, and mint.
 ///
-/// This is the least efficient derivation method as it searches from bump 255
-/// downward until an off-curve address is found. Use only when no bump hint is available.
+/// This is the least efficient derivation method, as it searches from bump
+/// 255 downward until an off-curve address is found. Use only when no bump hint
+/// is available in the instruction data.
+///
+/// An alternative was considered that used a loop with `derive_address` +
+/// `is_off_curve` instead of `find_program_address`, but though it saved ~30 CUs
+/// (1%) when bump happened to be `255`, it added more CUs on average.
 ///
 /// ## Returns
 ///

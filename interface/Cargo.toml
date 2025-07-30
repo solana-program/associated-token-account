@@ -11,7 +11,7 @@ edition = "2021"
 borsh = ["dep:borsh"]
 
 [dependencies]
-borsh = { version = "1", optional = true }
+borsh = { version = "1", optional = true, features = ["unstable__schema"] }
 solana-instruction = { version = "2.2.1", features = ["std"] }
 solana-pubkey = { version = "2.2.1", features = ["curve25519"] }
 

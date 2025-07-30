@@ -152,7 +152,7 @@ pub(crate) fn process_recover_nested(
             if !is_off_curve(&canonical_address)
                 || canonical_address != *recover_accounts.destination_associated_token_account.key()
             {
-                msg!("Error: Destination address is not canonical or on-curve");
+                msg!("Error: Destination address is not canonical or is on-curve");
                 return Err(ProgramError::InvalidSeeds);
             }
 

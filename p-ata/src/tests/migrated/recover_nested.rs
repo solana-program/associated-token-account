@@ -1,4 +1,4 @@
-//! Migrated test for recover_nested functionality using mollusk
+//! Migrated test for recover_nested functionality using mollusk.
 
 use {
     crate::tests::test_utils::{

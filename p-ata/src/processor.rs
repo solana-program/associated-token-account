@@ -404,8 +404,6 @@ pub(crate) fn create_and_initialize_ata(
 /// - **On-chain (Solana)**: Uses `sol_curve_validate_point` syscall
 /// - **Tests**: Uses curve25519-dalek to replicate on-chain behavior  
 /// - **Other builds**: Returns `false`
-///
-/// Off-curve addresses are required for PDAs to prevent key collision attacks.
 #[inline(always)]
 pub(crate) fn is_off_curve(_address: &Pubkey) -> bool {
     #[cfg(target_os = "solana")]

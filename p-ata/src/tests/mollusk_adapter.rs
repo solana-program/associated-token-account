@@ -1,5 +1,8 @@
 //! An adapter that allows the original solana_program_test to run against the p-ata program
 //! using Mollusk and pinocchio.
+//!
+//! The SPL ATA unit tests have been rewritten for Mollusk in ./migrated; however, this file
+//! allows the original tests to run against the p-ata program without a single modification.
 
 use {
     crate::entrypoint::process_instruction as pinocchio_process_instruction,

@@ -17,7 +17,7 @@ fn create_base_mint_data() -> Vec<u8> {
     data
 }
 
-use crate::tests::extension::test_extension_utils::{
+use crate::tests::extension_size::test_extension_utils::{
     calculate_expected_ata_data_size, create_mint_data_with_extensions,
 };
 
@@ -301,7 +301,7 @@ fn test_token_metadata_variable_length() {
 }
 
 fn test_extension_combination(extensions: &[ExtensionType], description: &str) {
-    crate::tests::extension::test_extension_utils::test_extension_combination_helper(
+    crate::tests::extension_size::test_extension_utils::test_extension_combination_helper(
         extensions,
         description,
     )

@@ -9,14 +9,58 @@ use {
     },
 };
 
-/// An arbitrary maximum limit to prevent accounts which are expensive
-/// to work with (i.e. u16::MAX) from being created for others.
-pub const MAX_SANE_ACCOUNT_LENGTH: u16 = 2048;
+/// Maximum allowed account `known_account_data_length` to prevent creation
+/// of accounts that are expensive to work with. This mitigates potential
+/// attacks where callers could create very large, expensive-to-work-with
+/// accounts for others.
+///
+/// Any token program requiring a larger length must rely on CPI calls to
+/// determine the account length and cannot pass in `known_account_data_length`.
+pub const MAX_SANE_ACCOUNT_LENGTH: u16 = 1024;
 
 program_entrypoint!(process_instruction);
 no_allocator!();
 nostd_panic_handler!();
 
+/// Main instruction processor for the p-ATA program.
+///
+/// ## Instruction Format
+///
+/// ### Create ATA (Non-Idempotent) - Discriminator: 0 or Empty
+/// ```
+/// [0] or []                     -> compute bump and ATA account data length on-chain  
+/// [0, bump]                     -> use provided bump, compute ATA account data length
+/// [0, bump, len_low, len_high]  -> use provided bump and ATA account data length
+/// ```
+///
+/// ### Create ATA (Idempotent) - Discriminator: 1  
+/// ```
+/// [1]                           -> compute bump and ATA account data length on-chain
+/// [1, bump]                     -> use provided bump, compute ATA account data length  
+/// [1, bump, len_low, len_high]  -> use provided bump and ATA account data length
+/// ```
+///
+/// ### Recover Nested ATA - Discriminator: 2
+/// ```
+/// [2]                                      -> compute all bumps on-chain
+/// [2, owner_bump, nested_bump, dest_bump]  -> use provided bumps
+/// ```
+///
+/// ## Account Layout (Create)
+/// ```
+/// [0] payer                    (signer, writable) - pays for account creation (and rent if applicable)
+/// [1] associated_token_account (writable)         - account to create  
+/// [2] wallet                   (signer)           - token account owner
+/// [3] mint                                        - token mint account
+/// [4] system_program                              - system program
+/// [5] token_program                               - token program
+/// [6] rent_sysvar              (optional)         - rent sysvar (for optimization)
+/// ```
+///
+/// ## Security
+///
+/// - All bump hints are validated for canonicality
+/// - `token_account_len` is bounded by `MAX_SANE_ACCOUNT_LENGTH`
 #[inline(always)]
 pub fn process_instruction(
     program_id: &Pubkey,

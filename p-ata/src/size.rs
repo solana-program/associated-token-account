@@ -1,5 +1,14 @@
-//! Helpers for determining the necessary associated token account
-//! data length.
+//! Helpers for determining the necessary associated token account data length.
+//!
+//! In particular, this module provides efficient account size calculation for
+//! extended mints by:
+//!
+//! 1. **Inline Extension Parsing**: For Token-2022, analyzes mint extension data
+//!    directly to compute required account extensions, avoiding expensive CPI
+//!    calls when possible
+//! 2. **Fallback CPI**: Uses GetAccountDataSize instruction for unknown extensions
+//!    or non-Token-2022 programs. Clients in these situations can always pass in
+//!    the account data length in instruction data to avoid excess compute.
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -98,15 +107,18 @@ pub(crate) fn is_token_2022_program(program_id: &Pubkey) -> bool {
 }
 
 /// Calculate token account size by parsing mint extension data inline.
-/// This avoids the expensive CPI call to GetAccountDataSize for Token-2022.
-/// Returns None if any unknown extensions are found.
+///
+/// ## Returns
+///
+/// - `Some(size)` - Successfully calculated account size in bytes
+/// - `None` - Unknown extension found, caller should fall back to CPI
 #[inline(always)]
 pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> Option<usize> {
     const TOKEN_ACCOUNT_LEN: usize = 165;
     const ACCOUNT_TYPE_OFFSET: usize = 165; // Account type discriminator position
     const BASE_TOKEN_2022_ACCOUNT_SIZE: usize = TOKEN_ACCOUNT_LEN + 5;
 
-    // Invalid/failed mint creation)
+    // Invalid/failed mint creation
     if mint_data.is_empty() {
         return None;
     }
@@ -186,7 +198,7 @@ pub(crate) fn get_token_account_size(
     }
 
     // Token mint has no extensions other than ImmutableOwner
-    // (this assumes any future token program has ImmutableOwner)
+    // Note: This assumes future token programs include ImmutableOwner extension.
     if !token_mint_has_extensions(mint_account) {
         return Ok(TokenAccount::LEN + 5);
     }

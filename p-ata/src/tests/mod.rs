@@ -8,7 +8,7 @@ pub mod test_utils;
 
 // Organized test modules
 pub mod bump;
-pub mod extension;
+pub mod extension_size;
 
 #[cfg(test)]
 pub(crate) use test_utils::*;

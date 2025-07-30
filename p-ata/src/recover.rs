@@ -55,23 +55,34 @@ pub(crate) fn parse_recover_accounts(
     }
 }
 
-/// Accounts:
-/// [0] nested_associated_token_account
-/// [1] nested_mint
-/// [2] destination_associated_token_account
-/// [3] owner_associated_token_account
-/// [4] owner_mint
-/// [5] wallet
-/// [6] token_program
-/// [7..] multisig signer accounts
+/// Transfer all tokens from a nested associated token account (an ATA created
+/// with another ATA as the wallet) to the canonical ATA and then closes the
+/// nested account to recover rent.
+///
+/// ## Account Layout
+/// ```
+/// [0] nested_associated_token_account  (writable) - source account to drain
+/// [1] nested_mint                                 - mint of tokens being recovered  
+/// [2] destination_associated_token_account (writable) - canonical destination ATA
+/// [3] owner_associated_token_account              - ATA that "owns" the nested ATA
+/// [4] owner_mint                                  - mint for the owner ATA  
+/// [5] wallet                           (signer)   - ultimate owner wallet
+/// [6] token_program                               - token program for operations
+/// [7..] multisig signer accounts       (signers)  - if wallet is multisig
+/// ```
+///
+/// - The owner ATA must properly derive the nested ATA
+/// - The wallet must properly derive the owner ATA and destination ATA
+/// - The nested mint must properly derive the nested ATA and destination ATA
+/// - If expected bumps are provided, the resulting destination ATA must be canonical
 pub(crate) fn process_recover_nested(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
-    bumps: Option<(u8, u8, u8)>,
+    expected_bumps: Option<(u8, u8, u8)>,
 ) -> ProgramResult {
     let recover_accounts = parse_recover_accounts(accounts)?;
 
-    let (owner_associated_token_address, owner_bump) = match bumps {
+    let (owner_associated_token_address, owner_bump) = match expected_bumps {
         Some((owner_bump, _, _)) => {
             let address = derive_address::<3>(
                 &[
@@ -97,7 +108,7 @@ pub(crate) fn process_recover_nested(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    let nested_associated_token_address = match bumps {
+    let nested_associated_token_address = match expected_bumps {
         Some((_, nested_bump, _)) => derive_address::<3>(
             &[
                 recover_accounts
@@ -125,7 +136,7 @@ pub(crate) fn process_recover_nested(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    let destination_associated_token_address = match bumps {
+    let destination_associated_token_address = match expected_bumps {
         Some((_, _, destination_bump)) => {
             let seeds: &[&[u8]; 3] = &[
                 recover_accounts.wallet.key().as_ref(),

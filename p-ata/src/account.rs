@@ -1,3 +1,6 @@
+//! Core account creation utilities for Program Derived Addresses (PDAs).
+//!
+//! This is the only code that uses the `CreatePrefundedAccount` instruction.
 use {
     pinocchio::{
         account_info::AccountInfo,
@@ -15,13 +18,26 @@ use pinocchio_system::instructions::CreatePrefundedAccount;
 #[cfg(not(feature = "create-prefunded-account"))]
 use pinocchio_system::instructions::{Allocate, Assign, Transfer};
 
-/// Create a PDA account, given:
-/// - payer: Account to deduct SOL from
-/// - rent: Rent sysvar account
-/// - space: size of the data field
-/// - owner: the program that will own the new account
-/// - pda: the address of the account to create (pre-derived by the caller)
-/// - pda_signer_seeds: full seed slice including the bump (wallet, token_program, mint, bump)
+/// Create a Program Derived Address (PDA) account.
+///
+/// ## Arguments
+///
+/// * `payer` - Account to deduct SOL from (must be signer and writable)
+/// * `rent` - Rent sysvar reference for minimum balance calculation  
+/// * `space` - Size of the account data field in bytes
+/// * `target_program_owner` - Program that will own the new account
+/// * `pda` - Pre-derived PDA address (account to create)
+/// * `pda_signer_seeds` - Complete seed array [wallet, token_program, mint, bump]
+///
+/// ## Behavior
+///
+/// - **Account has 0 lamports**: Uses `CreateAccount` instruction
+/// - **Account has >0 lamports**: Uses `CreatePrefundedAccount` instruction
+/// - **Account has >0 lamports (legacy)**: Uses `Transfer` + `Allocate` + `Assign` sequence
+///
+/// `pda_signer_seeds` must correctly derive `pda`, and `pda` must be empty
+/// and owned by the system program, or the system program instructions called
+/// by this function will fail.
 #[inline(always)]
 pub(crate) fn create_pda_account(
     payer: &AccountInfo,

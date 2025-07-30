@@ -1,3 +1,15 @@
+//! Core ATA creation and validation logic.
+//!
+//! This module handles the main Associated Token Account creation flow, including:
+//! - Account parsing and validation
+//! - Idempotent operation support
+//! - Bump seed validation and canonicalization
+//! - Account initialization for both Token and Token-2022 programs
+//! - Cross-program compatibility checks
+//!
+//! The processor supports optimization hints (bump seeds and account lengths) while
+//! maintaining strict security guarantees through canonical address validation.
+
 #![allow(unexpected_cfgs)]
 
 use {
@@ -50,11 +62,20 @@ pub struct CreateAccounts<'a> {
     pub rent_sysvar: Option<&'a AccountInfo>,
 }
 
-/// Derive ATA PDA from wallet, token program, and mint.
-/// This is the least efficient derivation method, used when no bump is provided.
-/// The address returned is guaranteed to be off-curve and canonical.
+/// Derive canonical ATA PDA from wallet, token program, and mint.
 ///
-/// Returns: (address, bump)
+/// This is the least efficient derivation method as it searches from bump 255
+/// downward until an off-curve address is found. Use only when no bump hint is available.
+///
+/// ## Returns
+///
+/// `(address, bump)` - The canonical PDA address and its bump seed
+///
+/// ## Guarantees
+///
+/// - The returned address is guaranteed to be off-curve (valid PDA)
+/// - The returned bump is the highest bump that produces an off-curve address
+/// - The address is deterministic and canonical across all implementations
 #[inline(always)]
 pub(crate) fn derive_canonical_ata_pda(
     wallet: &Pubkey,
@@ -212,6 +233,18 @@ pub(crate) fn parse_create_accounts(
 }
 
 /// Check if account already exists and is properly configured (idempotent check).
+///
+/// This function validates that an existing ATA account:
+/// 1. Is owned by the correct token program
+/// 2. Has the correct owner (wallet)
+/// 3. Has the correct mint
+/// 4. Uses the canonical PDA address, even when `expected_bump` is provided
+///
+/// ## Returns
+///
+/// * `Ok(true)` - Account exists and is properly configured (safe to skip creation)
+/// * `Ok(false)` - Account doesn't exist or is not token program owned (needs creation)  
+/// * `Err(_)` - Account exists but has invalid configuration (error condition)
 #[inline(always)]
 pub(crate) fn check_idempotent_account(
     associated_token_account: &AccountInfo,
@@ -220,7 +253,7 @@ pub(crate) fn check_idempotent_account(
     token_program: &AccountInfo,
     idempotent: bool,
     program_id: &Pubkey,
-    maybe_bump: Option<u8>,
+    expected_bump: Option<u8>,
 ) -> Result<bool, ProgramError> {
     if idempotent && associated_token_account.is_owned_by(token_program.key()) {
         let ata_state = get_token_account(associated_token_account)?;
@@ -228,7 +261,7 @@ pub(crate) fn check_idempotent_account(
         validate_token_account_owner(ata_state, wallet.key())?;
         validate_token_account_mint(ata_state, mint_account.key())?;
 
-        match maybe_bump {
+        match expected_bump {
             Some(bump) => {
                 let seeds: &[&[u8]; 3] = &[
                     wallet.key().as_ref(),
@@ -271,14 +304,26 @@ pub(crate) fn check_idempotent_account(
     Ok(false)
 }
 
-/// Compute the required space (in bytes) for the associated token account.
+/// Determine the required space (in bytes) for the associated token account.
+///
+/// Either uses a pre-computed account length hint or calls into the size
+/// calculation logic to determine the space needed. For extended accounts,
+/// passing in length can save significant compute units.
+///
+/// ## Arguments
+///
+/// * `known_token_account_len` - Optional pre-computed account length
+///
+/// ## Returns
+///
+/// The account size in bytes, or an error if size calculation fails.
 #[inline(always)]
 pub(crate) fn resolve_token_account_space(
     token_program: &AccountInfo,
     mint_account: &AccountInfo,
-    maybe_token_account_len: Option<usize>,
+    known_token_account_len: Option<usize>,
 ) -> Result<usize, ProgramError> {
-    match maybe_token_account_len {
+    match known_token_account_len {
         Some(len) => Ok(len),
         None => get_token_account_size(mint_account, token_program),
     }
@@ -352,8 +397,15 @@ pub(crate) fn create_and_initialize_ata(
     Ok(())
 }
 
-/// Check if a given address is off-curve using the sol_curve_validate_point syscall.
-/// Returns true if the address is off-curve (invalid as an Ed25519 point).
+/// Check if a given address is off-curve (not a valid Ed25519 curve point).
+///
+/// Returns `true` if the address is off-curve, `false` if on-curve.
+///
+/// - **On-chain (Solana)**: Uses `sol_curve_validate_point` syscall
+/// - **Tests**: Uses curve25519-dalek to replicate on-chain behavior  
+/// - **Other builds**: Returns `false`
+///
+/// Off-curve addresses are required for PDAs to prevent key collision attacks.
 #[inline(always)]
 pub(crate) fn is_off_curve(_address: &Pubkey) -> bool {
     #[cfg(target_os = "solana")]
@@ -402,28 +454,49 @@ pub(crate) fn is_off_curve(_address: &Pubkey) -> bool {
     }
 }
 
-/// Given a hint bump, return a guaranteed canonical bump.
-/// The bump is not guaranteed to be off-curve, but it is guaranteed that
-/// no better (greater) off-curve bump exists. This prevents callers
-/// from creating non-canonical associated token accounts by passing in
-/// sub-optimal bumps.
+/// Validate an expected bump and ensure no better canonical bump exists.
+///
+/// Given an expected bump, this function verifies that no higher bump value produces
+/// a valid (off-curve) PDA address. This prevents creation of non-canonical ATAs
+/// by rejecting sub-optimal bump seeds.
+///
+/// ## Arguments
+///
+/// * `seeds` - The PDA derivation seeds (wallet, token_program, mint)
+/// * `program_id` - The program ID for PDA derivation  
+/// * `expected_bump` - The bump value provided by the caller
+///
+/// ## Returns
+///
+/// * `(Some(address), bump)` - If a better bump was found, returns the canonical address and bump
+/// * `(None, expected_bump)` - If no better bump exists, returns the original expected_bump
+///
+/// ## Security
+///
+/// This function is critical for preventing PDA canonicality attacks. It ensures
+/// that only the highest valid bump can be used, maintaining deterministic
+/// address derivation across all clients.
 #[inline(always)]
 pub(crate) fn ensure_no_better_canonical_address_and_bump(
     seeds: &[&[u8]; 3],
     program_id: &Pubkey,
-    hint_bump: u8,
+    expected_bump: u8,
 ) -> (Option<Pubkey>, u8) {
-    // Optimization: Only verify no better bump exists, don't require hint_bump to be off-curve
-    // This saves significant compute units while still preventing non-canonical addresses
+    // Optimization: Only verify no better bump exists. Don't require expected_bump to
+    // yield an off-curve address. This saves significant compute units while still
+    // preventing non-canonical addresses.
+    //
+    // Caller must ensure that `expected_bump` is off-curve, either via downstream failure
+    // (i.e. syscalls that will fail) or by calling `is_off_curve`.
     let mut better_bump = 255;
-    while better_bump > hint_bump {
+    while better_bump > expected_bump {
         let maybe_better_address = derive_address::<3>(seeds, Some(better_bump), program_id);
         if is_off_curve(&maybe_better_address) {
             return (Some(maybe_better_address), better_bump);
         }
         better_bump -= 1;
     }
-    (None, hint_bump)
+    (None, expected_bump)
 }
 
 /// Accounts:
@@ -441,8 +514,8 @@ pub(crate) fn process_create_associated_token_account(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     idempotent: bool,
-    maybe_bump: Option<u8>,
-    maybe_token_account_len: Option<usize>,
+    expected_bump: Option<u8>,
+    known_token_account_len: Option<usize>,
 ) -> ProgramResult {
     let create_accounts = parse_create_accounts(accounts)?;
 
@@ -454,12 +527,12 @@ pub(crate) fn process_create_associated_token_account(
         create_accounts.token_program,
         idempotent,
         program_id,
-        maybe_bump,
+        expected_bump,
     )? {
         return Ok(());
     }
 
-    let (verified_associated_token_account_to_create, bump) = match maybe_bump {
+    let (verified_associated_token_account_to_create, bump) = match expected_bump {
         Some(provided_bump) => ensure_no_better_canonical_address_and_bump(
             &[
                 create_accounts.wallet.key().as_ref(),
@@ -491,7 +564,7 @@ pub(crate) fn process_create_associated_token_account(
     let space = resolve_token_account_space(
         create_accounts.token_program,
         create_accounts.mint,
-        maybe_token_account_len,
+        known_token_account_len,
     )?;
 
     match create_accounts.rent_sysvar {

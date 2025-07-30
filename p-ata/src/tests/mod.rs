@@ -1,5 +1,4 @@
 pub mod mollusk_adapter;
-pub mod test_account_length_limits;
 pub mod test_account_parsing;
 pub mod test_account_validation;
 pub mod test_address_derivation;
@@ -8,7 +7,7 @@ pub mod test_utils;
 
 // Organized test modules
 pub mod bump;
-pub mod extension_size;
+pub mod token_account_len;
 
 #[cfg(test)]
 pub(crate) use test_utils::*;

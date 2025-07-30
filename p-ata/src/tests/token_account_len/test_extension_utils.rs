@@ -358,7 +358,7 @@ pub fn test_extension_combination_helper(
 ) -> Result<(), String> {
     use crate::{
         size::calculate_account_size_from_mint_extensions,
-        tests::extension_size::test_extension_utils::create_mint_data_with_extensions,
+        tests::token_account_len::test_extension_utils::create_mint_data_with_extensions,
     };
 
     let mint_data = create_mint_data_with_extensions(extensions);

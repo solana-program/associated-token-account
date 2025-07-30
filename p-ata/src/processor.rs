@@ -75,12 +75,6 @@ pub struct CreateAccounts<'a> {
 /// ## Returns
 ///
 /// `(address, bump)` - The canonical PDA address and its bump seed
-///
-/// ## Guarantees
-///
-/// - The returned address is guaranteed to be off-curve (valid PDA)
-/// - The returned bump is the highest bump that produces an off-curve address
-/// - The address is deterministic and canonical across all implementations
 #[inline(always)]
 pub(crate) fn derive_canonical_ata_pda(
     wallet: &Pubkey,

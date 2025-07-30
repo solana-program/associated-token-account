@@ -66,7 +66,7 @@ BENCH_ITERATIONS=1 cargo bench
 | create_topup_no_cap   | 17287   |  9169 |     6409 |              6229 | no `CreateAccountPrefunded` |
 | create_extended       | 19420   | 11441 |     8735 |              8459 |  |
 | recover_nested        | 17066   | 12409 |     4411 |              4411 |  |
-| recover_multisig      |     0   | 13185 |     4849 |              4849 | hard-to-find bump |
+| recover_multisig      |   N/A   | 13185 |     4849 |              4849 | hard-to-find bump |
 
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.
 

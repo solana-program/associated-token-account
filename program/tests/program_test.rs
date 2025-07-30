@@ -1,7 +1,7 @@
 use {
     solana_program::pubkey::Pubkey,
-    solana_program_test::{ProgramTest, *},
-    spl_associated_token_account::{id, processor::process_instruction},
+    solana_program_test::ProgramTest,
+    spl_associated_token_account_interface::program::id,
 };
 
 #[allow(dead_code)]
@@ -9,7 +9,7 @@ pub fn program_test(token_mint_address: Pubkey) -> ProgramTest {
     let mut pc = ProgramTest::new(
         "spl_associated_token_account",
         id(),
-        processor!(process_instruction),
+        None,
     );
 
     // Add a token mint account
@@ -37,7 +37,7 @@ pub fn program_test_2022(token_mint_address: Pubkey) -> ProgramTest {
     let mut pc = ProgramTest::new(
         "spl_associated_token_account",
         id(),
-        processor!(process_instruction),
+        None,
     );
 
     // Add a token mint account

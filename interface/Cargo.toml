@@ -1,13 +1,17 @@
 [package]
-name = "spl-associated-token-account-client"
+name = "spl-associated-token-account-interface"
 version = "2.0.0"
-description = "Solana Program Library Associated Token Account Client"
+description = "Solana Program Library Associated Token Account Interface"
 authors = ["Anza Maintainers <maintainers@anza.xyz>"]
 repository = "https://github.com/solana-program/associated-token-account"
 license = "Apache-2.0"
 edition = "2021"
 
+[features]
+borsh = ["dep:borsh"]
+
 [dependencies]
+borsh = { version = "1", optional = true }
 solana-instruction = { version = "2.2.1", features = ["std"] }
 solana-pubkey = { version = "2.2.1", features = ["curve25519"] }
 

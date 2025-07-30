@@ -10,8 +10,10 @@ use {
         transaction::{Transaction, TransactionError},
     },
     solana_system_interface::instruction as system_instruction,
-    spl_associated_token_account::instruction::create_associated_token_account,
-    spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
+    spl_associated_token_account_interface::{
+        address::get_associated_token_address_with_program_id,
+        instruction::create_associated_token_account,
+    },
     spl_token_2022::{
         error::TokenError,
         extension::{

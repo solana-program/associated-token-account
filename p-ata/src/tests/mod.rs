@@ -21,4 +21,5 @@ mod migrated {
     pub mod spl_token_create;
 }
 
+// Original tests from /program/tests
 include!(concat!(env!("OUT_DIR"), "/generated_tests.rs"));

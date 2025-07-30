@@ -1,8 +1,8 @@
 use {
     crate::{
         processor::{
-            build_initialize_account3_data, build_transfer_data, INITIALIZE_ACCOUNT_3_DISCM,
-            INITIALIZE_IMMUTABLE_OWNER_DISCM, TRANSFER_CHECKED_DISCM,
+            build_initialize_account3_data, build_transfer_checked_data,
+            INITIALIZE_ACCOUNT_3_DISCM, INITIALIZE_IMMUTABLE_OWNER_DISCM, TRANSFER_CHECKED_DISCM,
         },
         recover::CLOSE_ACCOUNT_DISCM,
     },
@@ -39,7 +39,7 @@ fn test_build_initialize_account3_data_different_owners() {
 #[test_case(u64::MAX, u8::MAX; "max_amount_max_decimals_u8")]
 #[test_case(123456789, 9; "random_values")]
 fn test_build_transfer_data(amount: u64, decimals: u8) {
-    let data = build_transfer_data(amount, decimals);
+    let data = build_transfer_checked_data(amount, decimals);
 
     assert_eq!(data.len(), 10);
     assert_eq!(data[0], TRANSFER_CHECKED_DISCM);
@@ -55,7 +55,7 @@ fn test_build_transfer_data(amount: u64, decimals: u8) {
 fn test_build_transfer_data_endianness() {
     let amount = 0x0123456789abcdef_u64;
     let decimals = 6;
-    let data = build_transfer_data(amount, decimals);
+    let data = build_transfer_checked_data(amount, decimals);
 
     // Verify little-endian encoding
     let expected_bytes = amount.to_le_bytes();
@@ -70,8 +70,8 @@ fn test_instruction_data_deterministic() {
     let data2 = build_initialize_account3_data(&owner);
     assert_eq!(data1, data2);
 
-    let transfer1 = build_transfer_data(1000, 6);
-    let transfer2 = build_transfer_data(1000, 6);
+    let transfer1 = build_transfer_checked_data(1000, 6);
+    let transfer2 = build_transfer_checked_data(1000, 6);
     assert_eq!(transfer1, transfer2);
 }
 

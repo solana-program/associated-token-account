@@ -195,7 +195,7 @@ pub(crate) fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
 
 /// Build TransferChecked instruction data
 #[inline(always)]
-pub(crate) fn build_transfer_data(amount: u64, decimals: u8) -> [u8; 10] {
+pub(crate) fn build_transfer_checked_data(amount: u64, decimals: u8) -> [u8; 10] {
     let mut data = MaybeUninit::<[u8; 10]>::uninit();
     let data_ptr = data.as_mut_ptr() as *mut u8;
     // SAFETY: We initialize all 10 bytes before calling assume_init()

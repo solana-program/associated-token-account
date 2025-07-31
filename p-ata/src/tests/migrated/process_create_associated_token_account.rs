@@ -3,7 +3,8 @@
 use {
     crate::tests::test_utils::{
         build_create_ata_instruction, calculate_account_rent,
-        create_mollusk_base_accounts_with_token, create_test_mint, setup_mollusk_with_programs,
+        create_mollusk_base_accounts_with_token, create_test_mint, 
+        setup_mollusk_unified, MolluskAtaSetup, MolluskTokenSetup,
         CreateAtaInstructionType, NATIVE_LOADER_ID,
     },
     mollusk_svm::{result::Check, Mollusk},
@@ -36,7 +37,10 @@ fn process_create_associated_token_account() {
         &token_program_id,
     );
 
-    let mollusk = setup_mollusk_with_programs(&token_program_id);
+    let mollusk = setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(token_program_id),
+    );
 
     // Step 1: Create and initialize mint
     let mut accounts = create_test_mint(
@@ -106,7 +110,10 @@ fn process_create_associated_token_account_with_invalid_mint() {
         &token_program_id,
     );
 
-    let mollusk = setup_mollusk_with_programs(&token_program_id);
+    let mollusk = setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(token_program_id),
+    );
 
     let create_ix = build_create_ata_instruction(
         ata_program_id,
@@ -164,7 +171,10 @@ fn process_create_associated_token_account_with_invalid_system_program() {
         &token_program_id,
     );
 
-    let mollusk = setup_mollusk_with_programs(&token_program_id);
+    let mollusk = setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(token_program_id),
+    );
 
     // Create and initialize mint first
     let accounts = create_test_mint(
@@ -234,7 +244,10 @@ fn process_create_associated_token_account_with_invalid_rent_sysvar() {
         &token_program_id,
     );
 
-    let mollusk = setup_mollusk_with_programs(&token_program_id);
+    let mollusk = setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(token_program_id),
+    );
 
     // Create and initialize mint first
     let accounts = create_test_mint(

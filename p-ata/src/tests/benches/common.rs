@@ -1141,25 +1141,19 @@ impl BenchmarkRunner {
         (result, captured_text)
     }
 
+    /// Create mollusk instance with all ATA implementations loaded
+    /// Uses the unified setup function for all ATA implementations
     pub fn create_mollusk_for_all_ata_implementations(token_program_id: &Pubkey) -> Mollusk {
-        let mut mollusk = Mollusk::default();
-
-        for implementation in AtaImplementation::all().iter() {
-            mollusk.add_program(
-                &implementation.program_id,
-                implementation.binary_name,
-                &LOADER_V3,
-            );
-        }
-
-        mollusk.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
-
-        let token_2022_id = Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
-            "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-        ));
-        mollusk.add_program(&token_2022_id, "spl_token_2022", &LOADER_V3);
-
-        mollusk
+        use crate::tests::test_utils::{setup_mollusk_unified, MolluskAtaSetup, MolluskTokenSetup};
+        
+        // Convert from pinocchio Pubkey to solana Pubkey for unified function
+        let solana_token_program_id = solana_pubkey::Pubkey::new_from_array(token_program_id.to_bytes());
+        
+        // Use the unified setup to load all ATA implementations + token programs
+        setup_mollusk_unified(
+            MolluskAtaSetup::AllImplementations,
+            MolluskTokenSetup::WithToken2022(solana_token_program_id),
+        )
     }
 
     /// Create comparison result with compatibility checking

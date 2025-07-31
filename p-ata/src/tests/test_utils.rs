@@ -201,26 +201,105 @@ use {
     solana_system_interface::{instruction as system_instruction, program as system_program},
 };
 
-/// Common mollusk setup with ATA program and token program
+/// Configuration for ATA programs to load in Mollusk
 #[cfg(any(test, feature = "std"))]
-pub fn setup_mollusk_with_programs(token_program_id: &SolanaPubkey) -> Mollusk {
-    let ata_program_id = spl_associated_token_account::id();
+pub enum MolluskAtaSetup {
+    /// Load P-ATA as drop-in replacement using SPL ATA's program ID (for tests)
+    PAtaDropIn,
+    /// Load all ATA implementations for comparison (benchmarks)
+    AllImplementations,
+    /// Load a specific ATA program with custom binary name
+    Custom {
+        program_id: SolanaPubkey,
+        binary_name: &'static str,
+    },
+}
+
+/// Configuration for token programs to load in Mollusk
+#[cfg(any(test, feature = "std"))]
+pub enum MolluskTokenSetup {
+    /// Load just the specified token program
+    Single(SolanaPubkey),
+    /// Load the specified token program + Token-2022
+    WithToken2022(SolanaPubkey),
+}
+
+#[cfg(any(test, feature = "std"))]
+pub fn setup_mollusk_unified(
+    ata_setup: MolluskAtaSetup,
+    token_setup: MolluskTokenSetup,
+) -> Mollusk {
     let mut mollusk = Mollusk::default();
 
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
+    // Setup ATA programs based on configuration
+    match ata_setup {
+        MolluskAtaSetup::PAtaDropIn => {
+            // Load P-ATA binary using SPL ATA's program ID (drop-in replacement for tests)
+            let ata_program_id = spl_associated_token_account::id();
+            mollusk.add_program(
+                &ata_program_id,
+                "target/deploy/pinocchio_ata_program",
+                &LOADER_V3,
+            );
+        }
+        MolluskAtaSetup::AllImplementations => {
+            // Load all ATA implementations for comparison (benchmarks)
+            #[cfg(feature = "std")]
+            {
+                use crate::tests::benches::common::{AtaImplementation, BenchmarkSetup};
+                
+                let manifest_dir = env!("CARGO_MANIFEST_DIR");
+                let program_ids = BenchmarkSetup::load_program_ids(manifest_dir);
+                
+                let implementations = AtaImplementation::all();
+                for implementation in implementations.iter() {
+                    mollusk.add_program(
+                        &implementation.program_id,
+                        implementation.binary_name,
+                        &LOADER_V3,
+                    );
+                }
+            }
+        }
+        MolluskAtaSetup::Custom { program_id, binary_name } => {
+            // Load a custom ATA program with specified binary
+            mollusk.add_program(&program_id, binary_name, &LOADER_V3);
+        }
+    }
 
-    let program_path = if *token_program_id == spl_token_2022::id() {
-        "programs/token-2022/target/deploy/spl_token_2022"
-    } else {
-        "programs/token/target/deploy/pinocchio_token_program"
-    };
+    // Setup token programs based on configuration
+    match token_setup {
+        MolluskTokenSetup::Single(token_program_id) => {
+            let program_path = if token_program_id == spl_token_2022::id() {
+                "programs/token-2022/target/deploy/spl_token_2022"
+            } else {
+                "programs/token/target/deploy/pinocchio_token_program"
+            };
+            mollusk.add_program(&token_program_id, program_path, &LOADER_V3);
+        }
+        MolluskTokenSetup::WithToken2022(token_program_id) => {
+            // Load the specified token program
+            mollusk.add_program(&token_program_id, "pinocchio_token_program", &LOADER_V3);
+            
+            // Also load Token-2022
+            let token_2022_id = spl_token_2022::id();
+            mollusk.add_program(&token_2022_id, "programs/token-2022/target/deploy/spl_token_2022", &LOADER_V3);
+        }
+    }
 
-    mollusk.add_program(token_program_id, program_path, &LOADER_V3);
     mollusk
+}
+
+/// Common mollusk setup with ATA program and token program
+/// 
+/// DEPRECATED: Use setup_mollusk_unified() instead for better flexibility and maintainability
+#[cfg(any(test, feature = "std"))]
+#[deprecated(note = "Use setup_mollusk_unified() instead")]
+pub fn setup_mollusk_with_programs(token_program_id: &SolanaPubkey) -> Mollusk {
+    setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(*token_program_id),
+    )
 }
 
 /// Create standard base accounts needed for mollusk tests

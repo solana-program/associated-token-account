@@ -3,7 +3,6 @@
 use {
     crate::{
         error::AssociatedTokenAccountError,
-        instruction::AssociatedTokenAccountInstruction,
         tools::account::{create_pda_account, get_account_len},
     },
     borsh::BorshDeserialize,
@@ -18,7 +17,10 @@ use {
         sysvar::Sysvar,
     },
     solana_system_interface::program as system_program,
-    spl_associated_token_account_client::address::get_associated_token_address_and_bump_seed_internal,
+    spl_associated_token_account_interface::{
+        address::get_associated_token_address_and_bump_seed_internal,
+        instruction::AssociatedTokenAccountInstruction,
+    },
     spl_token_2022::{
         extension::{ExtensionType, StateWithExtensions},
         state::{Account, Mint},

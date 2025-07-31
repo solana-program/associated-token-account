@@ -6872,16 +6872,17 @@ dependencies = [
  "solana-program-test",
  "solana-sdk",
  "solana-system-interface",
- "spl-associated-token-account-client",
+ "spl-associated-token-account-interface",
  "spl-token",
  "spl-token-2022",
  "thiserror 2.0.12",
 ]
 
 [[package]]
-name = "spl-associated-token-account-client"
-version = "2.0.0"
+name = "spl-associated-token-account-interface"
+version = "1.0.0"
 dependencies = [
+ "borsh 1.5.7",
  "solana-instruction",
  "solana-pubkey",
  "solana-sdk-ids",

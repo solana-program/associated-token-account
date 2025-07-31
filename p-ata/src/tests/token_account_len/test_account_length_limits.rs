@@ -1,5 +1,7 @@
 use {
-    crate::tests::test_utils::{build_create_ata_instruction, CreateAtaInstructionType},
+    crate::tests::test_utils::{
+        build_create_ata_instruction, setup_mollusk_with_programs, CreateAtaInstructionType,
+    },
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
     solana_pubkey::Pubkey,
     solana_sdk::{program_error::ProgramError, signature::Keypair, signer::Signer},
@@ -19,18 +21,8 @@ fn test_account_length_too_small_cases() {
         (169, "just under Token-2022 minimum"),
     ];
 
-    let mut mollusk = Mollusk::default();
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
     let program_id = spl_associated_token_account::id();
-    mollusk.add_program(
-        &program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-    mollusk.add_program(
-        &spl_token_2022::id(),
-        "programs/token-2022/target/deploy/spl_token_2022",
-        &LOADER_V3,
-    );
 
     let wallet = Pubkey::new_unique();
     let mint = Pubkey::new_unique();
@@ -86,18 +78,8 @@ fn test_account_length_boundary_values() {
         (65535, "max over limit"),
     ];
 
-    let mut mollusk = Mollusk::default();
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
     let program_id = spl_associated_token_account::id();
-    mollusk.add_program(
-        &program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-    mollusk.add_program(
-        &spl_token_2022::id(),
-        "programs/token-2022/target/deploy/spl_token_2022",
-        &LOADER_V3,
-    );
 
     let wallet = Pubkey::new_unique();
     let mint = Pubkey::new_unique();

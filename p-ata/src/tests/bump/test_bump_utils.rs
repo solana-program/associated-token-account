@@ -2,6 +2,7 @@
 
 #[cfg(any(test, feature = "std"))]
 use {
+    crate::tests::test_utils::setup_mollusk_with_programs,
     curve25519_dalek::edwards::CompressedEdwardsY,
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     solana_program,
@@ -129,23 +130,7 @@ pub fn find_wallet_with_non_canonical_opportunity(
 /// Setup mollusk with both ATA and token programs for bump testing
 #[cfg(any(test, feature = "std"))]
 pub fn setup_mollusk_for_bump_tests(token_program_id: &Pubkey) -> Mollusk {
-    let ata_program_id = spl_associated_token_account::id();
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    let program_path = if *token_program_id == spl_token_2022::id() {
-        "programs/token-2022/target/deploy/spl_token_2022"
-    } else {
-        "programs/token/target/deploy/pinocchio_token_program"
-    };
-
-    mollusk.add_program(token_program_id, program_path, &LOADER_V3);
-    mollusk
+    setup_mollusk_with_programs(token_program_id)
 }
 
 #[cfg(any(test, feature = "std"))]

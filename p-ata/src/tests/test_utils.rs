@@ -247,10 +247,10 @@ pub fn setup_mollusk_unified(
             #[cfg(feature = "std")]
             {
                 use crate::tests::benches::common::{AtaImplementation, BenchmarkSetup};
-                
+
                 let manifest_dir = env!("CARGO_MANIFEST_DIR");
                 let program_ids = BenchmarkSetup::load_program_ids(manifest_dir);
-                
+
                 let implementations = AtaImplementation::all();
                 for implementation in implementations.iter() {
                     mollusk.add_program(
@@ -261,7 +261,10 @@ pub fn setup_mollusk_unified(
                 }
             }
         }
-        MolluskAtaSetup::Custom { program_id, binary_name } => {
+        MolluskAtaSetup::Custom {
+            program_id,
+            binary_name,
+        } => {
             // Load a custom ATA program with specified binary
             mollusk.add_program(&program_id, binary_name, &LOADER_V3);
         }
@@ -280,10 +283,14 @@ pub fn setup_mollusk_unified(
         MolluskTokenSetup::WithToken2022(token_program_id) => {
             // Load the specified token program
             mollusk.add_program(&token_program_id, "pinocchio_token_program", &LOADER_V3);
-            
+
             // Also load Token-2022
             let token_2022_id = spl_token_2022::id();
-            mollusk.add_program(&token_2022_id, "programs/token-2022/target/deploy/spl_token_2022", &LOADER_V3);
+            mollusk.add_program(
+                &token_2022_id,
+                "programs/token-2022/target/deploy/spl_token_2022",
+                &LOADER_V3,
+            );
         }
     }
 
@@ -291,10 +298,9 @@ pub fn setup_mollusk_unified(
 }
 
 /// Common mollusk setup with ATA program and token program
-/// 
-/// DEPRECATED: Use setup_mollusk_unified() instead for better flexibility and maintainability
+/// This wraps `setup_mollusk_unified` to load the P-ATA program, appropriate
+/// for all tests which are not comparing to SPL ATA.
 #[cfg(any(test, feature = "std"))]
-#[deprecated(note = "Use setup_mollusk_unified() instead")]
 pub fn setup_mollusk_with_programs(token_program_id: &SolanaPubkey) -> Mollusk {
     setup_mollusk_unified(
         MolluskAtaSetup::PAtaDropIn,

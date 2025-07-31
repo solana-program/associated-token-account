@@ -14,8 +14,6 @@ use {
     spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
 };
 
-use mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk};
-
 #[test]
 fn create_with_a_lamport_with_idempotent() {
     let ata_program_id = spl_associated_token_account::id();
@@ -238,21 +236,7 @@ fn create_with_wrong_mint_fails() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    // Add our p-ata program
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    // Add token program
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Step 1: Create and initialize the correct mint
     let mut accounts = create_test_mint(
@@ -312,19 +296,7 @@ fn create_with_mismatch_fails() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Step 1: Create and initialize mint
     let mut accounts = create_test_mint(
@@ -383,19 +355,7 @@ fn fail_account_exists_with_wrong_owner() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Create and initialize mint first
     let mut accounts = create_test_mint(
@@ -462,19 +422,7 @@ fn fail_non_ata() {
     // This is NOT the associated token address - it's a manually created account
     let non_ata_account = Keypair::new();
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Create and initialize mint first
     let mut accounts = create_test_mint(

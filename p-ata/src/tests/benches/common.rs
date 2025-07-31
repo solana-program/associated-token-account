@@ -4,10 +4,12 @@
 use {
     crate::tests::{
         benches::{account_templates::StandardAccountSet, constants},
+        setup_mollusk_unified,
         shared_constants::{
             EXTENDED_MINT_ACCOUNT_RENT_EXEMPT, MINT_ACCOUNT_RENT_EXEMPT, TOKEN_ACCOUNT_RENT_EXEMPT,
         },
         test_utils::{shared_constants, unified_builders},
+        MolluskAtaSetup, MolluskTokenSetup,
     },
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     pinocchio::pubkey::Pubkey as PinocchioPubkey,
@@ -1144,11 +1146,10 @@ impl BenchmarkRunner {
     /// Create mollusk instance with all ATA implementations loaded
     /// Uses the unified setup function for all ATA implementations
     pub fn create_mollusk_for_all_ata_implementations(token_program_id: &Pubkey) -> Mollusk {
-        use crate::tests::test_utils::{setup_mollusk_unified, MolluskAtaSetup, MolluskTokenSetup};
-        
         // Convert from pinocchio Pubkey to solana Pubkey for unified function
-        let solana_token_program_id = solana_pubkey::Pubkey::new_from_array(token_program_id.to_bytes());
-        
+        let solana_token_program_id =
+            solana_pubkey::Pubkey::new_from_array(token_program_id.to_bytes());
+
         // Use the unified setup to load all ATA implementations + token programs
         setup_mollusk_unified(
             MolluskAtaSetup::AllImplementations,

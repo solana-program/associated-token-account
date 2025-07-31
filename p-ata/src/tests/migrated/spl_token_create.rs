@@ -13,8 +13,6 @@ use {
     spl_associated_token_account_client::address::get_associated_token_address,
 };
 
-use mollusk_svm::program::loader_keys::LOADER_V3;
-
 #[test]
 fn success_create() {
     let ata_program_id = spl_associated_token_account::id();
@@ -148,21 +146,7 @@ fn success_using_deprecated_instruction_creator() {
 
     // For the deprecated instruction test, we need to use the original SPL token program
     // since the deprecated function hardcodes spl_token::id()
-    let mut mollusk = Mollusk::default();
-
-    // Add P-ATA program
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    // For this test, load the pinocchio token program (drop-in replacement for SPL Token)
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Step 1: Create the mint account
     let mint_space = 82; // Standard SPL Token mint size

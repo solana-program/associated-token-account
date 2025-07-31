@@ -367,15 +367,12 @@ fn fail_account_exists_with_wrong_owner() {
         6,
     );
 
-    let data = create_mollusk_token_account_data(&token_mint_address, &wrong_owner, 0);
-
     // Create a token account at the ATA address but with wrong owner
-    let wrong_token_account = Account {
-        lamports: 1_000_000_000,
-        data,
-        owner: token_program_id,
-        executable: false,
-        rent_epoch: 0,
+    let wrong_token_account = {
+        use crate::tests::benches::common::AccountBuilder;
+        let mut account = AccountBuilder::token_account(&token_mint_address, &wrong_owner, 0, &token_program_id);
+        account.lamports = 1_000_000_000;
+        account
     };
 
     accounts.extend([
@@ -434,16 +431,13 @@ fn fail_non_ata() {
         6,
     );
 
-    let data = create_mollusk_token_account_data(&token_mint_address, &wallet_address, 0);
-
     // Create a valid token account but at a non-ATA address
     let token_account_balance = 3_500_880;
-    let valid_token_account = Account {
-        lamports: token_account_balance,
-        data,
-        owner: token_program_id,
-        executable: false,
-        rent_epoch: 0,
+    let valid_token_account = {
+        use crate::tests::benches::common::AccountBuilder;
+        let mut account = AccountBuilder::token_account(&token_mint_address, &wallet_address, 0, &token_program_id);
+        account.lamports = token_account_balance;
+        account
     };
 
     accounts.extend([

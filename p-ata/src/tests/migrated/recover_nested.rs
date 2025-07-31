@@ -171,12 +171,11 @@ fn setup_recover_test_scenario(
         get_associated_token_address_with_program_id(wallet, owner_mint, token_program_id);
     accounts.push((
         owner_ata,
-        Account {
-            lamports: 2_039_280,
-            data: create_mollusk_token_account_data(owner_mint, wallet, 0),
-            owner: *token_program_id,
-            executable: false,
-            rent_epoch: 0,
+        {
+            use crate::tests::benches::common::AccountBuilder;
+            let mut account = AccountBuilder::token_account(owner_mint, wallet, 0, token_program_id);
+            account.lamports = 2_039_280;
+            account
         },
     ));
 
@@ -187,7 +186,10 @@ fn setup_recover_test_scenario(
         nested_ata,
         Account {
             lamports: 2_039_280,
-            data: create_mollusk_token_account_data(nested_mint, &owner_ata, amount),
+            data: {
+                use crate::tests::benches::common::AccountBuilder;
+                AccountBuilder::token_account(nested_mint, &owner_ata, amount, token_program_id).data
+            },
             owner: *token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -202,7 +204,10 @@ fn setup_recover_test_scenario(
             destination_ata,
             Account {
                 lamports: 2_039_280,
-                data: create_mollusk_token_account_data(nested_mint, wallet, 0),
+                data: {
+                use crate::tests::benches::common::AccountBuilder;
+                AccountBuilder::token_account(nested_mint, wallet, 0, token_program_id).data
+            },
                 owner: *token_program_id,
                 executable: false,
                 rent_epoch: 0,
@@ -412,7 +417,10 @@ fn run_not_nested_test(token_program_id: Pubkey) {
         owner_ata,
         Account {
             lamports: 2_039_280,
-            data: create_mollusk_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
+            data: {
+                    use crate::tests::benches::common::AccountBuilder;
+                    AccountBuilder::token_account(&ctx.mint, &ctx.wallet.pubkey(), 0, &ctx.token_program_id).data
+                },
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -426,7 +434,10 @@ fn run_not_nested_test(token_program_id: Pubkey) {
         nested_ata,
         Account {
             lamports: 2_039_280,
-            data: create_mollusk_token_account_data(&ctx.mint, &wrong_wallet, 100), // owned by wrong_wallet, not owner_ata
+            data: {
+                    use crate::tests::benches::common::AccountBuilder;
+                    AccountBuilder::token_account(&ctx.mint, &wrong_wallet, 100, &ctx.token_program_id).data
+                }, // owned by wrong_wallet, not owner_ata
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -443,7 +454,10 @@ fn run_not_nested_test(token_program_id: Pubkey) {
         destination_ata,
         Account {
             lamports: 2_039_280,
-            data: create_mollusk_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
+            data: {
+                    use crate::tests::benches::common::AccountBuilder;
+                    AccountBuilder::token_account(&ctx.mint, &ctx.wallet.pubkey(), 0, &ctx.token_program_id).data
+                },
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -498,7 +512,10 @@ fn run_wrong_address_derivation_owner_test(token_program_id: Pubkey) {
         wrong_owner_ata,
         Account {
             lamports: 2_039_280,
-            data: create_mollusk_token_account_data(&ctx.mint, &wrong_wallet, 0),
+            data: {
+                    use crate::tests::benches::common::AccountBuilder;
+                    AccountBuilder::token_account(&ctx.mint, &wrong_wallet, 0, &ctx.token_program_id).data
+                },
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -679,7 +696,10 @@ fn fail_owner_account_does_not_exist() {
         nested_ata,
         Account {
             lamports: 2_039_280,
-            data: create_mollusk_token_account_data(&ctx.mint, &owner_ata, 100),
+            data: {
+                    use crate::tests::benches::common::AccountBuilder;
+                    AccountBuilder::token_account(&ctx.mint, &owner_ata, 100, &ctx.token_program_id).data
+                },
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -696,7 +716,10 @@ fn fail_owner_account_does_not_exist() {
         destination_ata,
         Account {
             lamports: 2_039_280,
-            data: create_mollusk_token_account_data(&ctx.mint, &ctx.wallet.pubkey(), 0),
+            data: {
+                    use crate::tests::benches::common::AccountBuilder;
+                    AccountBuilder::token_account(&ctx.mint, &ctx.wallet.pubkey(), 0, &ctx.token_program_id).data
+                },
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -829,7 +852,10 @@ fn fail_destination_not_wallet_ata() {
         wrong_destination_ata,
         Account {
             lamports: 2_039_280,
-            data: create_mollusk_token_account_data(&ctx.mint, &wrong_wallet, 0),
+            data: {
+                    use crate::tests::benches::common::AccountBuilder;
+                    AccountBuilder::token_account(&ctx.mint, &wrong_wallet, 0, &ctx.token_program_id).data
+                },
             owner: ctx.token_program_id,
             executable: false,
             rent_epoch: 0,

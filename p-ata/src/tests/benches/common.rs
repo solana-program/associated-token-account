@@ -56,47 +56,65 @@ impl AccountBuilder {
         }
     }
 
-    pub fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
-        #[cfg(feature = "full-debug-logs")]
-        println!(
-            "🔧 Creating token account data | Mint: {} | Owner: {}",
-            mint.to_string()[0..8].to_string(),
-            owner.to_string()[0..8].to_string()
-        );
 
-        // Use the unified implementation from test_utils
-        unified_builders::create_token_account_data_unified(
-            mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
-            owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
-            amount,
-        )
+
+
+
+
+
+    pub fn system_account(lamports: u64) -> Account {
+        Account::new(lamports, 0, &SYSTEM_PROGRAM_ID)
     }
 
-    pub fn mint_data(decimals: u8) -> Vec<u8> {
-        // Use the unified implementation from test_utils
-        unified_builders::create_mint_data_unified(decimals)
+    pub fn executable_program(owner: Pubkey) -> Account {
+        Account {
+            lamports: 0,
+            data: Vec::new(),
+            owner,
+            executable: true,
+            rent_epoch: 0,
+        }
     }
 
-    pub fn extended_mint_data(decimals: u8) -> Vec<u8> {
-        let required_len =
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
-                ExtensionType::ImmutableOwner,
-            ])
-            .expect("calc len");
+    pub fn token_account(
+        mint: &Pubkey,
+        owner: &Pubkey,
+        amount: u64,
+        token_program_id: &Pubkey,
+    ) -> Account {
+        Account {
+            lamports: TOKEN_ACCOUNT_RENT_EXEMPT,
+            data: {
+                #[cfg(feature = "full-debug-logs")]
+                println!(
+                    "🔧 Creating token account data | Mint: {} | Owner: {}",
+                    mint.to_string()[0..8].to_string(),
+                    owner.to_string()[0..8].to_string()
+                );
 
-        let mut data = Self::mint_data(decimals);
-        data.resize(required_len, 0u8);
-
-        let cursor = constants::account_sizes::MINT_ACCOUNT_SIZE;
-        let immutable_owner_header = [7u8, 0u8, 0u8, 0u8];
-        data[cursor..cursor + 4].copy_from_slice(&immutable_owner_header);
-
-        data
+                unified_builders::create_token_account_data_unified(
+                    mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
+                    owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
+                    amount,
+                )
+            },
+            owner: *token_program_id,
+            executable: false,
+            rent_epoch: 0,
+        }
     }
 
-    /// Create mint data with multiple common extensions using Token-2022's official methods
-    /// Uses extensions that are supported by our inline account size calculation to avoid CPI
-    pub fn extended_mint_data_with_common_extensions(decimals: u8) -> Vec<u8> {
+    pub fn mint(decimals: u8, token_program_id: &Pubkey) -> Account {
+        Account {
+            lamports: MINT_ACCOUNT_RENT_EXEMPT,
+            data: unified_builders::create_mint_data_unified(decimals),
+            owner: *token_program_id,
+            executable: false,
+            rent_epoch: 0,
+        }
+    }
+
+    pub fn extended_mint(decimals: u8, token_program_id: &Pubkey) -> Account {
         use solana_program_option::COption;
         use spl_token_2022::{
             extension::{
@@ -172,59 +190,9 @@ impl AccountBuilder {
         mint.init_account_type()
             .expect("Failed to init account type");
 
-        data
-    }
-
-    pub fn multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
-        // Use the unified implementation from test_utils
-        let bytes_vec: Vec<[u8; 32]> = signer_pubkeys.iter().map(|pk| pk.to_bytes()).collect();
-        let byte_refs: Vec<&[u8; 32]> = bytes_vec.iter().collect();
-        unified_builders::create_multisig_data_unified(m, &byte_refs)
-    }
-
-    pub fn system_account(lamports: u64) -> Account {
-        Account::new(lamports, 0, &SYSTEM_PROGRAM_ID)
-    }
-
-    pub fn executable_program(owner: Pubkey) -> Account {
-        Account {
-            lamports: 0,
-            data: Vec::new(),
-            owner,
-            executable: true,
-            rent_epoch: 0,
-        }
-    }
-
-    pub fn token_account(
-        mint: &Pubkey,
-        owner: &Pubkey,
-        amount: u64,
-        token_program_id: &Pubkey,
-    ) -> Account {
-        Account {
-            lamports: TOKEN_ACCOUNT_RENT_EXEMPT,
-            data: Self::token_account_data(mint, owner, amount),
-            owner: *token_program_id,
-            executable: false,
-            rent_epoch: 0,
-        }
-    }
-
-    pub fn mint(decimals: u8, token_program_id: &Pubkey) -> Account {
-        Account {
-            lamports: MINT_ACCOUNT_RENT_EXEMPT,
-            data: Self::mint_data(decimals),
-            owner: *token_program_id,
-            executable: false,
-            rent_epoch: 0,
-        }
-    }
-
-    pub fn extended_mint(decimals: u8, token_program_id: &Pubkey) -> Account {
         Account {
             lamports: EXTENDED_MINT_ACCOUNT_RENT_EXEMPT, // Use extended mint rent amount
-            data: Self::extended_mint_data_with_common_extensions(decimals),
+            data,
             owner: *token_program_id,
             executable: false,
             rent_epoch: 0,

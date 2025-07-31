@@ -406,6 +406,33 @@ pub enum CreateAtaInstructionType {
     CreateIdempotent { bump: Option<u8> },
 }
 
+#[cfg(any(test, feature = "std"))]
+/// Encodes the instruction data payload for ATA creation-related instructions.
+/// Extracted for reuse across test and benchmark builders.
+/// TODO(refactor): Once all builders use this helper, inline encoding logic above can be removed.
+pub fn encode_create_ata_instruction_data(instruction_type: &CreateAtaInstructionType) -> Vec<u8> {
+    match instruction_type {
+        CreateAtaInstructionType::Create { bump, account_len } => {
+            let mut data = vec![0]; // Discriminator for Create
+            if let Some(b) = bump {
+                data.push(*b);
+                if let Some(len) = account_len {
+                    data.extend_from_slice(&len.to_le_bytes());
+                }
+            }
+            data
+        }
+        CreateAtaInstructionType::CreateIdempotent { bump } => {
+            let mut data = vec![1]; // Discriminator for CreateIdempotent
+            if let Some(b) = bump {
+                data.push(*b);
+            }
+            data
+        }
+    }
+}
+
+
 /// Build a create associated token account instruction with a given discriminator
 #[cfg(any(test, feature = "std"))]
 pub fn build_create_ata_instruction(
@@ -427,25 +454,7 @@ pub fn build_create_ata_instruction(
         AccountMeta::new_readonly(sysvar::rent::id(), false),
     ];
 
-    let data = match instruction_type {
-        CreateAtaInstructionType::Create { bump, account_len } => {
-            let mut data = vec![0]; // Discriminator for Create
-            if let Some(b) = bump {
-                data.push(b);
-                if let Some(len) = account_len {
-                    data.extend_from_slice(&len.to_le_bytes());
-                }
-            }
-            data
-        }
-        CreateAtaInstructionType::CreateIdempotent { bump } => {
-            let mut data = vec![1]; // Discriminator for CreateIdempotent
-            if let Some(b) = bump {
-                data.push(b);
-            }
-            data
-        }
-    };
+    let data = encode_create_ata_instruction_data(&instruction_type);
 
     Instruction {
         program_id: ata_program_id,

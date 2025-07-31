@@ -291,7 +291,12 @@ impl RecoverAccountSet {
         // Replace wallet with multisig account
         self.wallet.1 = Account {
             lamports: ONE_SOL,
-            data: AccountBuilder::multisig_data(threshold, &signers),
+            data: {
+                    use crate::tests::test_utils::unified_builders;
+                    let bytes_vec: Vec<[u8; 32]> = signers.iter().map(|pk| pk.to_bytes()).collect();
+                    let byte_refs: Vec<&[u8; 32]> = bytes_vec.iter().collect();
+                    unified_builders::create_multisig_data_unified(threshold, &byte_refs)
+                },
             owner: self.token_program.0,
             executable: false,
             rent_epoch: 0,

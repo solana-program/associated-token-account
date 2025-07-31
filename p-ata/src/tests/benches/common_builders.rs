@@ -9,10 +9,6 @@ use {
     solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
     std::{
-        boxed::Box,
-        collections::HashMap,
-        format,
-        string::{String, ToString},
         vec,
         vec::Vec,
     },
@@ -539,6 +535,7 @@ impl CommonTestCaseBuilder {
         ) {
             let actual_wallet = wallet;
 
+            #[allow(unused_variables)]
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
                 nested_mint,
@@ -654,6 +651,7 @@ impl CommonTestCaseBuilder {
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
             // For recover tests, the wallet must be engineered using the owner_mint as a seed.
+            #[allow(unused_variables)]
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
                 nested_mint,
@@ -1010,6 +1008,66 @@ impl CommonTestCaseBuilder {
         accounts: &[(Pubkey, Account)],
         bump: u8,
     ) -> Vec<u8> {
+        // Delegate to shared encoder for standard Create / CreateIdempotent cases to avoid duplicate logic.
+        if config.instruction_discriminator <= 1 {
+            use crate::tests::test_utils::{CreateAtaInstructionType, encode_create_ata_instruction_data};
+            // Compute optional account length when token_account_len_arg is requested.
+            let account_len_opt: Option<u16> = if variant.token_account_len_arg {
+                if config.token_program
+                    == Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
+                        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                    ))
+                {
+                    // Token-2022 path
+                    if matches!(config.base_test, BaseTestType::CreateExtended) {
+                        let account_extensions = ExtensionType::get_required_init_account_extensions(&[
+                            ExtensionType::TransferFeeConfig,
+                            ExtensionType::NonTransferable,
+                            ExtensionType::TransferHook,
+                            ExtensionType::DefaultAccountState,
+                            ExtensionType::MetadataPointer,
+                        ]);
+                        Some(
+                            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
+                                &account_extensions,
+                            )
+                            .expect("failed to calculate extended account length") as u16,
+                        )
+                    } else {
+                        Some(
+                            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&[
+                                ExtensionType::ImmutableOwner,
+                            ])
+                            .expect("failed to calculate Token-2022 account length") as u16,
+                        )
+                    }
+                } else {
+                    // Standard SPL Token account size
+                    Some(165u16)
+                }
+            } else {
+                None
+            };
+
+            let instruction_type = if config.instruction_discriminator == 0 {
+                // Create
+                CreateAtaInstructionType::Create {
+                    bump: if variant.bump_arg || variant.token_account_len_arg {
+                        Some(bump)
+                    } else {
+                        None
+                    },
+                    account_len: account_len_opt,
+                }
+            } else {
+                // CreateIdempotent
+                CreateAtaInstructionType::CreateIdempotent {
+                    bump: if variant.bump_arg { Some(bump) } else { None },
+                }
+            };
+            return encode_create_ata_instruction_data(&instruction_type);
+        }
+
         let mut data = vec![config.instruction_discriminator];
 
         // Special handling for RecoverNested/RecoverMultisig bump variants
@@ -1056,45 +1114,9 @@ impl CommonTestCaseBuilder {
             return data;
         }
 
-        // If token_account_len_arg is specified, we MUST also include bump (P-ATA requirement)
-        if variant.bump_arg || variant.token_account_len_arg {
+        // Bump / length logic for discriminator > 1 (Recover etc.)
+        if variant.bump_arg {
             data.push(bump);
-        }
-
-        if variant.token_account_len_arg {
-            let account_len: u16 = if config.token_program
-                == Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
-                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-                )) {
-                // For CreateExtended test, calculate account size based on the mint extensions
-                if matches!(config.base_test, BaseTestType::CreateExtended) {
-                    // Calculate account extensions required by the extended mint
-                    let account_extensions =
-                        ExtensionType::get_required_init_account_extensions(&[
-                            ExtensionType::TransferFeeConfig,   // → requires TransferFeeAmount
-                            ExtensionType::NonTransferable,     // → requires NonTransferableAccount
-                            ExtensionType::TransferHook,        // → requires TransferHookAccount
-                            ExtensionType::DefaultAccountState, // → mint-only (no account extension)
-                            ExtensionType::MetadataPointer, // → mint-only (no account extension)
-                        ]);
-
-                    ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
-                        &account_extensions,
-                    )
-                    .expect("failed to calculate extended account length")
-                        as u16
-                } else {
-                    // Standard Token-2022 with just ImmutableOwner
-                    ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&[
-                        ExtensionType::ImmutableOwner,
-                    ])
-                    .expect("failed to calculate Token-2022 account length")
-                        as u16
-                }
-            } else {
-                165 // Standard token account size
-            };
-            data.extend_from_slice(&account_len.to_le_bytes());
         }
 
         data
@@ -1449,3 +1471,4 @@ pub fn calculate_failure_test_number(base_test: BaseTestType, variant: TestVaria
     let failure_id = FAILURE_COUNTER.fetch_add(1, Ordering::SeqCst);
     base + variant_offset + (failure_id % 8)
 }
+

@@ -92,11 +92,7 @@ impl AccountBuilder {
                     owner.to_string()[0..8].to_string()
                 );
 
-                unified_builders::create_token_account_data_unified(
-                    mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
-                    owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
-                    amount,
-                )
+                crate::tests::test_utils::create_mollusk_token_account_data(mint, owner, amount)
             },
             owner: *token_program_id,
             executable: false,
@@ -107,7 +103,7 @@ impl AccountBuilder {
     pub fn mint(decimals: u8, token_program_id: &Pubkey) -> Account {
         Account {
             lamports: MINT_ACCOUNT_RENT_EXEMPT,
-            data: unified_builders::create_mint_data_unified(decimals),
+            data: crate::tests::test_utils::create_mollusk_mint_data(decimals),
             owner: *token_program_id,
             executable: false,
             rent_epoch: 0,
@@ -220,7 +216,7 @@ impl AccountBuilder {
         );
 
         // Use unified mint data and customize the authority
-        let mut data = unified_builders::create_mint_data_unified(decimals);
+        let mut data = crate::tests::test_utils::create_mollusk_mint_data(decimals);
         data[4..36].copy_from_slice(mint_authority.as_ref());
         data
     }

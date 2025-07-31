@@ -292,11 +292,14 @@ impl RecoverAccountSet {
         self.wallet.1 = Account {
             lamports: ONE_SOL,
             data: {
-                    use crate::tests::test_utils::unified_builders;
-                    let bytes_vec: Vec<[u8; 32]> = signers.iter().map(|pk| pk.to_bytes()).collect();
-                    let byte_refs: Vec<&[u8; 32]> = bytes_vec.iter().collect();
-                    unified_builders::create_multisig_data_unified(threshold, &byte_refs)
-                },
+                use pinocchio::pubkey::Pubkey;
+                let byte_refs: Vec<&[u8; 32]> = signers
+                    .iter()
+                    .take(signers.len())
+                    .map(|pk| pk.as_ref().try_into().expect("Pubkey is 32 bytes"))
+                    .collect();
+                crate::tests::test_utils::unified_builders::create_multisig_data_unified(threshold, &byte_refs)
+            },
             owner: self.token_program.0,
             executable: false,
             rent_epoch: 0,

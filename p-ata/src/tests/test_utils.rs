@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
+
 use {
     pinocchio::pubkey::Pubkey,
     pinocchio_pubkey::pubkey,
@@ -19,15 +21,157 @@ use {
     spl_token_metadata_interface::state::TokenMetadata,
 };
 
+#[cfg(any(test, feature = "std"))]
 use std::{string::String, vec, vec::Vec};
 
-pub const SPL_TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+// ================================ SHARED CONSTANTS ================================
+
+/// Shared constants that are used across both tests and benchmarks
+pub mod shared_constants {
+    use pinocchio::pubkey::Pubkey;
+    use pinocchio_pubkey::pubkey;
+    #[cfg(feature = "full-debug-logs")]
+    use std::println;
+
+    #[cfg(any(test, feature = "std"))]
+    use solana_pubkey::Pubkey as SolanaPubkey;
+
+    /// Standard SPL token account size (fixed for all SPL token accounts)
+    pub const TOKEN_ACCOUNT_SIZE: usize = 165;
+
+    /// Standard mint account size (base size without extensions)
+    pub const MINT_ACCOUNT_SIZE: usize = 82;
+
+    /// Multisig account size
+    pub const MULTISIG_ACCOUNT_SIZE: usize = 355;
+
+    /// Standard lamport amounts for testing
+    pub const ONE_SOL: u64 = 1_000_000_000;
+    pub const TOKEN_ACCOUNT_RENT_EXEMPT: u64 = 2_000_000;
+    pub const MINT_ACCOUNT_RENT_EXEMPT: u64 = 2_000_000;
+    pub const EXTENDED_MINT_ACCOUNT_RENT_EXEMPT: u64 = 3_000_000;
+
+    /// Native loader program ID (used across both test suites)
+    pub const NATIVE_LOADER_ID: SolanaPubkey = SolanaPubkey::new_from_array([
+        5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173,
+        247, 101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
+    ]);
+
+    /// SPL Token program ID (pinocchio format)
+    pub const SPL_TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+}
+
+// ================================ UNIFIED ACCOUNT CREATION ================================
+
+/// Unified account data creation that works with both Pubkey types
+pub mod unified_builders {
+    use super::shared_constants::*;
+    use solana_pubkey::Pubkey as SolanaPubkey;
+    use std::{vec, vec::Vec};
+
+    /// Create token account data that works with any pubkey type
+    pub fn create_token_account_data_unified(
+        mint: &[u8; 32],
+        owner: &[u8; 32],
+        amount: u64,
+    ) -> Vec<u8> {
+        let mut data = vec![0u8; TOKEN_ACCOUNT_SIZE];
+
+        // mint
+        data[0..32].copy_from_slice(mint);
+        // owner
+        data[32..64].copy_from_slice(owner);
+        // amount
+        data[64..72].copy_from_slice(&amount.to_le_bytes());
+        // delegate option = 0 (none)
+        data[72] = 0;
+        // state = 1 (initialized)
+        data[108] = 1;
+        // is_native option = 0 (none)
+        data[109] = 0;
+        // delegated_amount = 0
+        data[110..118].copy_from_slice(&0u64.to_le_bytes());
+        // close_authority option = 0 (none)
+        data[118] = 0;
+
+        data
+    }
+
+    /// Create mint account data
+    pub fn create_mint_data_unified(decimals: u8) -> Vec<u8> {
+        let mut data = vec![0u8; MINT_ACCOUNT_SIZE];
+        data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
+        data[44] = decimals;
+        data[45] = 1; // is_initialized = 1
+        data
+    }
+
+    /// Create multisig account data
+    pub fn create_multisig_data_unified(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
+        use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
+        use spl_token_interface::state::Transmutable;
+        #[cfg(feature = "full-debug-logs")]
+        use std::println;
+
+        assert!(
+            m as usize <= signer_pubkeys.len(),
+            "m cannot exceed number of provided signers"
+        );
+        assert!(m >= 1, "m must be at least 1");
+        assert!(
+            signer_pubkeys.len() <= MAX_SIGNERS as usize,
+            "too many signers provided"
+        );
+
+        // Create data buffer with the exact size expected by spl_token_interface
+        let mut data = vec![0u8; Multisig::LEN];
+
+        // Set the multisig fields manually to match the exact struct layout
+        data[0] = m; // m: u8
+        data[1] = signer_pubkeys.len() as u8; // n: u8
+        data[2] = 1; // is_initialized: u8 (1 = true)
+                     // According to the on-chain `Multisig` layout the signer array starts
+                     // immediately after the three-byte header (m, n, is_initialized) with *no* padding.
+
+        // Copy each signer into place right after the 3-byte header.
+        for (i, pk_bytes) in signer_pubkeys.iter().enumerate() {
+            let offset = 3 + i * 32; // Each `Pubkey` is 32 bytes
+            data[offset..offset + 32].copy_from_slice(*pk_bytes);
+        }
+
+        #[cfg(feature = "full-debug-logs")]
+        {
+            println!("🔍 [DEBUG] Created multisig data:");
+            println!("    m: {}", data[0]);
+            println!("    n: {}", data[1]);
+            println!("    initialized: {}", data[2]);
+            println!("    data len: {}", data.len());
+            for i in 0..signer_pubkeys.len() {
+                let offset = 3 + i * 32;
+                let signer_bytes = &data[offset..offset + 32];
+                println!("    signer[{}] at offset {}: {:?}", i, offset, signer_bytes);
+            }
+        }
+
+        data
+    }
+
+    /// Create rent sysvar data
+    pub fn create_rent_sysvar_data(
+        lamports_per_byte_year: u64,
+        exemption_threshold: f64,
+        burn_percent: u8,
+    ) -> Vec<u8> {
+        let mut data = Vec::new();
+        data.extend_from_slice(&lamports_per_byte_year.to_le_bytes());
+        data.extend_from_slice(&exemption_threshold.to_le_bytes());
+        data.push(burn_percent);
+        data
+    }
+}
 
 // Shared constants for mollusk testing
-pub const NATIVE_LOADER_ID: SolanaPubkey = SolanaPubkey::new_from_array([
-    5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
-    101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
-]);
+pub use shared_constants::NATIVE_LOADER_ID;
 
 /// Matches the pinocchio Account struct.
 /// Account fields are private, so this struct allows more readable
@@ -48,7 +192,7 @@ pub struct AccountLayout {
 
 // ---- Shared Mollusk Test Utilities ----
 
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 use {
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk},
     solana_instruction::{AccountMeta, Instruction},
@@ -58,7 +202,7 @@ use {
 };
 
 /// Common mollusk setup with ATA program and token program
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn setup_mollusk_with_programs(token_program_id: &SolanaPubkey) -> Mollusk {
     let ata_program_id = spl_associated_token_account::id();
     let mut mollusk = Mollusk::default();
@@ -80,7 +224,7 @@ pub fn setup_mollusk_with_programs(token_program_id: &SolanaPubkey) -> Mollusk {
 }
 
 /// Create standard base accounts needed for mollusk tests
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(SolanaPubkey, Account)> {
     [
         (
@@ -127,7 +271,7 @@ pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(SolanaPubkey, Accou
 }
 
 /// Create standard base accounts with token program
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn create_mollusk_base_accounts_with_token(
     payer: &Keypair,
     token_program_id: &SolanaPubkey,
@@ -149,7 +293,7 @@ pub fn create_mollusk_base_accounts_with_token(
 }
 
 /// Create standard base accounts with token program and wallet
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn create_mollusk_base_accounts_with_token_and_wallet(
     payer: &Keypair,
     wallet: &SolanaPubkey,
@@ -178,7 +322,7 @@ pub enum CreateAtaInstructionType {
 }
 
 /// Build a create associated token account instruction with a given discriminator
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn build_create_ata_instruction(
     ata_program_id: SolanaPubkey,
     payer: SolanaPubkey,
@@ -226,68 +370,42 @@ pub fn build_create_ata_instruction(
 }
 
 /// Create valid token account data for mollusk testing (solana SDK compatible)
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn create_mollusk_token_account_data(
     mint: &SolanaPubkey,
     owner: &SolanaPubkey,
     amount: u64,
 ) -> Vec<u8> {
-    const TOKEN_ACCOUNT_SIZE: usize = 165; // SPL Token account size (no extensions)
-    let mut data = [0u8; TOKEN_ACCOUNT_SIZE];
-
-    // mint
-    data[0..32].copy_from_slice(mint.as_ref());
-    // owner
-    data[32..64].copy_from_slice(owner.as_ref());
-    // amount
-    data[64..72].copy_from_slice(&amount.to_le_bytes());
-    // delegate option = 0 (none)
-    data[72] = 0;
-    // state = 1 (initialized)
-    data[108] = 1;
-    // is_native option = 0 (none)
-    data[109] = 0;
-    // delegated_amount = 0
-    data[110..118].copy_from_slice(&0u64.to_le_bytes());
-    // close_authority option = 0 (none)
-    data[118] = 0;
-
-    data.to_vec()
+    unified_builders::create_token_account_data_unified(
+        mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
+        owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
+        amount,
+    )
 }
 
 /// Create mint account data for mollusk testing
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn create_mollusk_mint_data(decimals: u8) -> Vec<u8> {
-    const MINT_ACCOUNT_SIZE: usize = 82;
-    let mut data = [0u8; MINT_ACCOUNT_SIZE];
-    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
-    data[44] = decimals;
-    data[45] = 1; // is_initialized = 1
-    data.to_vec()
+    unified_builders::create_mint_data_unified(decimals)
 }
 
 /// Create valid token account data for testing
 pub fn create_token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
-    let mollusk_mint = SolanaPubkey::new_from_array(*mint);
-    let mollusk_owner = SolanaPubkey::new_from_array(*owner);
-    create_mollusk_token_account_data(&mollusk_mint, &mollusk_owner, amount)
+    unified_builders::create_token_account_data_unified(
+        mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
+        owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
+        amount,
+    )
 }
 
 /// Create valid multisig data for testing
 pub fn create_multisig_data(m: u8, n: u8, signers: &[Pubkey]) -> Vec<u8> {
-    let mut data = vec![0u8; Multisig::LEN];
-    data[0] = m;
-    data[1] = n;
-    data[2] = 1; // initialized
-
-    // Add signers (starting at byte 12, each signer is 32 bytes)
-    for (i, signer) in signers.iter().take(n as usize).enumerate() {
-        let start = 12 + (i * 32);
-        let end = start + 32;
-        data[start..end].copy_from_slice(signer.as_ref());
-    }
-
-    data
+    let byte_refs: Vec<&[u8; 32]> = signers
+        .iter()
+        .take(n as usize)
+        .map(|pk| pk.as_ref().try_into().expect("Pubkey is 32 bytes"))
+        .collect();
+    unified_builders::create_multisig_data_unified(m, &byte_refs)
 }
 
 /// Create rent sysvar data for testing
@@ -296,11 +414,11 @@ pub fn create_rent_data(
     exemption_threshold: f64,
     burn_percent: u8,
 ) -> Vec<u8> {
-    let mut data = Vec::new();
-    data.extend_from_slice(&lamports_per_byte_year.to_le_bytes());
-    data.extend_from_slice(&exemption_threshold.to_le_bytes());
-    data.push(burn_percent);
-    data
+    unified_builders::create_rent_sysvar_data(
+        lamports_per_byte_year,
+        exemption_threshold,
+        burn_percent,
+    )
 }
 
 /// Test helper to verify token account structure
@@ -309,7 +427,7 @@ pub fn validate_token_account_structure(
     expected_mint: &Pubkey,
     expected_owner: &Pubkey,
 ) -> bool {
-    if data.len() < TokenAccount::LEN {
+    if data.len() < shared_constants::TOKEN_ACCOUNT_SIZE {
         return false;
     }
 
@@ -362,7 +480,9 @@ mod tests {
 
     #[test]
     fn test_fn_is_spl_token_program() {
-        assert!(is_spl_token_program(&SPL_TOKEN_PROGRAM_ID));
+        assert!(is_spl_token_program(
+            &shared_constants::SPL_TOKEN_PROGRAM_ID
+        ));
 
         let token_2022_id = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
         assert!(!is_spl_token_program(&token_2022_id));
@@ -380,12 +500,13 @@ mod tests {
 
         let data = create_multisig_data(2, 3, &signers);
 
-        assert_eq!(data.len(), Multisig::LEN);
+        assert_eq!(data.len(), shared_constants::MULTISIG_ACCOUNT_SIZE);
         assert_eq!(data[0], 2); // m
         assert_eq!(data[1], 3); // n
         assert_eq!(data[2], 1); // initialized
 
-        assert_eq!(&data[12..44], signers[0].as_ref());
+        // Signer array starts immediately after the 3-byte header.
+        assert_eq!(&data[3..35], signers[0].as_ref());
     }
 
     /// Test that the token account data is created correctly
@@ -399,7 +520,7 @@ mod tests {
         let data = create_token_account_data(&mint, &owner, amount);
 
         // Verify the data structure
-        assert_eq!(data.len(), TokenAccount::LEN);
+        assert_eq!(data.len(), shared_constants::TOKEN_ACCOUNT_SIZE);
         assert_eq!(&data[0..32], mint.as_ref());
         assert_eq!(&data[32..64], owner.as_ref());
 
@@ -471,20 +592,20 @@ mod tests {
         let mint = SolanaPubkey::new_unique();
         let owner = SolanaPubkey::new_unique();
         let data = create_mollusk_token_account_data(&mint, &owner, 1000);
-        assert_eq!(data.len(), 165);
+        assert_eq!(data.len(), shared_constants::TOKEN_ACCOUNT_SIZE);
         assert_eq!(&data[0..32], mint.as_ref());
         assert_eq!(&data[32..64], owner.as_ref());
         assert_eq!(data[108], 1); // initialized
 
         // Test mint data
         let mint_data = create_mollusk_mint_data(6);
-        assert_eq!(mint_data.len(), 82);
+        assert_eq!(mint_data.len(), shared_constants::MINT_ACCOUNT_SIZE);
         assert_eq!(mint_data[44], 6); // decimals
         assert_eq!(mint_data[45], 1); // initialized
     }
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 /// Creates and initializes a mint account with the given parameters.
 /// Returns a vector of accounts including the initialized mint and all necessary
 /// base accounts for testing.
@@ -496,7 +617,7 @@ pub fn create_test_mint(
     token_program: &SolanaPubkey,
     decimals: u8,
 ) -> Vec<(SolanaPubkey, Account)> {
-    let mint_space = 82u64;
+    let mint_space = shared_constants::MINT_ACCOUNT_SIZE as u64;
     let rent_lamports = 1_461_600u64;
 
     let create_mint_ix = system_instruction::create_account(
@@ -561,7 +682,7 @@ pub fn create_test_mint(
 }
 
 /// Create standard ATA test accounts with all required program accounts
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn create_ata_test_accounts(
     payer: &Keypair,
     ata_address: SolanaPubkey,
@@ -585,7 +706,7 @@ pub fn create_ata_test_accounts(
         (
             mint,
             Account {
-                lamports: 1_461_600,
+                lamports: shared_constants::MINT_ACCOUNT_RENT_EXEMPT,
                 data: create_mollusk_mint_data(6),
                 owner: token_program,
                 executable: false,

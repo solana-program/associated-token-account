@@ -1,8 +1,20 @@
-use std::collections::HashMap;
+#![cfg(any(test, feature = "std"))]
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
-use crate::common::{BaseTestType, ComparisonResult, CompatibilityStatus, TestVariant};
-use comfy_table::{presets::UTF8_FULL, ContentArrangement, Table};
-use serde::Serialize;
+use {
+    crate::tests::benches::common::{
+        BaseTestType, ComparisonResult, CompatibilityStatus, TestVariant,
+    },
+    comfy_table::{presets::UTF8_FULL, ContentArrangement, Table},
+    serde::Serialize,
+    std::{
+        collections::HashMap,
+        eprintln, format, print, println,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    },
+};
 
 #[macro_export]
 macro_rules! print_cell {
@@ -98,7 +110,7 @@ pub fn print_matrix_results(
 
 /// Print detailed per-test comparison output.
 pub fn print_test_results(result: &ComparisonResult, show_debug: bool) {
-    use crate::common;
+    use super::common;
 
     print!("--- Testing {} --- ", result.test_name);
 
@@ -185,7 +197,7 @@ pub fn print_test_results(result: &ComparisonResult, show_debug: bool) {
 
 /// Summarise overall compatibility findings across all tests.
 pub fn print_compatibility_summary(all_results: &[ComparisonResult]) {
-    use crate::common;
+    use super::common;
 
     println!("\n=== COMPATIBILITY ANALYSIS SUMMARY ===");
 

@@ -1,24 +1,36 @@
+// (Removed file-level cfg guard to ensure this module is always compiled)
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
+
 use {
+    crate::tests::{
+        benches::{account_templates::StandardAccountSet, constants},
+        shared_constants::{
+            EXTENDED_MINT_ACCOUNT_RENT_EXEMPT, MINT_ACCOUNT_RENT_EXEMPT, TOKEN_ACCOUNT_RENT_EXEMPT,
+        },
+        test_utils::{shared_constants, unified_builders},
+    },
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
+    pinocchio::pubkey::Pubkey as PinocchioPubkey,
     solana_account::Account,
     solana_instruction,
     solana_pubkey::Pubkey,
     solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
-    spl_token_interface::state::Transmutable,
-    std::env,
+    std::{
+        boxed::Box,
+        collections::HashMap,
+        eprintln, format, print, println,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    },
     strum::{Display, EnumIter},
 };
-
-pub mod account_templates;
-pub mod constants;
-
-use account_templates::*;
-use constants::{account_sizes::*, lamports::*};
 
 // ================================ CONSTANTS ================================
 
 pub const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
+/// Native loader program ID - unified with test_utils value
 pub const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
     5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
     101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
@@ -50,16 +62,17 @@ impl AccountBuilder {
             owner.to_string()[0..8].to_string()
         );
 
-        build_token_account_data_core(
+        // Use the unified implementation from test_utils
+        unified_builders::create_token_account_data_unified(
             mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
             owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
             amount,
         )
-        .to_vec()
     }
 
     pub fn mint_data(decimals: u8) -> Vec<u8> {
-        build_mint_data_core(decimals).to_vec()
+        // Use the unified implementation from test_utils
+        unified_builders::create_mint_data_unified(decimals)
     }
 
     pub fn extended_mint_data(decimals: u8) -> Vec<u8> {
@@ -72,7 +85,7 @@ impl AccountBuilder {
         let mut data = Self::mint_data(decimals);
         data.resize(required_len, 0u8);
 
-        let cursor = MINT_ACCOUNT_SIZE;
+        let cursor = constants::account_sizes::MINT_ACCOUNT_SIZE;
         let immutable_owner_header = [7u8, 0u8, 0u8, 0u8];
         data[cursor..cursor + 4].copy_from_slice(&immutable_owner_header);
 
@@ -161,11 +174,10 @@ impl AccountBuilder {
     }
 
     pub fn multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
-        let byte_refs: Vec<&[u8; 32]> = signer_pubkeys
-            .iter()
-            .map(|pk| pk.as_ref().try_into().expect("Pubkey is 32 bytes"))
-            .collect();
-        build_multisig_data_core(m, &byte_refs)
+        // Use the unified implementation from test_utils
+        let bytes_vec: Vec<[u8; 32]> = signer_pubkeys.iter().map(|pk| pk.to_bytes()).collect();
+        let byte_refs: Vec<&[u8; 32]> = bytes_vec.iter().collect();
+        unified_builders::create_multisig_data_unified(m, &byte_refs)
     }
 
     pub fn system_account(lamports: u64) -> Account {
@@ -237,7 +249,10 @@ impl AccountBuilder {
             AccountTypeId::Mint,
         );
 
-        base_mint_data(1, &mint_authority, decimals).to_vec()
+        // Use unified mint data and customize the authority
+        let mut data = unified_builders::create_mint_data_unified(decimals);
+        data[4..36].copy_from_slice(mint_authority.as_ref());
+        data
     }
 }
 
@@ -422,13 +437,6 @@ pub fn find_optimal_wallet_for_mints(
         });
 
         if all_optimal {
-            #[cfg(feature = "full-debug-logs")]
-            println!(
-                "🎯 Found optimal wallet with bump 255 for {} mints after {} attempts: {}",
-                mints.len(),
-                attempts + 1,
-                candidate_wallet.to_string()[0..8].to_string()
-            );
             return candidate_wallet;
         }
 
@@ -488,65 +496,7 @@ pub fn const_pk_with_optimal_bump(
     find_optimal_wallet_for_mints(token_program_id, &[*mint], ata_program_ids, search_entropy)
 }
 
-pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
-    use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
-
-    assert!(
-        m as usize <= signer_pubkeys.len(),
-        "m cannot exceed number of provided signers"
-    );
-    assert!(m >= 1, "m must be at least 1");
-    assert!(
-        signer_pubkeys.len() <= MAX_SIGNERS as usize,
-        "too many signers provided"
-    );
-
-    let mut data = vec![0u8; Multisig::LEN];
-    data[0] = m;
-    data[1] = signer_pubkeys.len() as u8;
-    data[2] = 1;
-
-    for (i, pk) in signer_pubkeys.iter().enumerate() {
-        let offset = 3 + i * 32;
-        data[offset..offset + 32].copy_from_slice(*pk);
-    }
-    data
-}
-
-#[inline(always)]
-fn build_mint_data_core(decimals: u8) -> [u8; MINT_ACCOUNT_SIZE] {
-    base_mint_data(0, &Pubkey::default(), decimals)
-}
-
-/// Generic helper to create the 82-byte SPL mint layout.
-///
-/// * `state` – 0 = Uninitialized, 1 = Initialized (matches SPL/Token-2022 enum).
-/// * `mint_authority` – 32-byte pubkey (all zeros if none).
-/// * `decimals` – mint decimals.
-#[inline(always)]
-fn base_mint_data(state: u32, mint_authority: &Pubkey, decimals: u8) -> [u8; MINT_ACCOUNT_SIZE] {
-    let mut data = [0u8; MINT_ACCOUNT_SIZE];
-    data[0..4].copy_from_slice(&state.to_le_bytes());
-    data[4..36].copy_from_slice(mint_authority.as_ref());
-    data[44] = decimals;
-    data[45] = 1; // is_initialized flag mirrors the state field
-                  // supply (bytes 46..50) already zeroed
-    data
-}
-
-#[inline(always)]
-fn build_token_account_data_core(
-    mint: &[u8; 32],
-    owner: &[u8; 32],
-    amount: u64,
-) -> [u8; TOKEN_ACCOUNT_SIZE] {
-    let mut data = [0u8; TOKEN_ACCOUNT_SIZE];
-    data[0..32].copy_from_slice(mint);
-    data[32..64].copy_from_slice(owner);
-    data[64..72].copy_from_slice(&amount.to_le_bytes());
-    data[108] = 1;
-    data
-}
+// Old core functions removed - now using unified implementations in AccountBuilder
 
 // ========================== SHARED BENCHMARK SETUP ============================
 
@@ -699,7 +649,7 @@ impl BenchmarkSetup {
 
     #[allow(dead_code)]
     /// Validate that the benchmark setup works with a simple test
-    pub(crate) fn validate_setup(
+    pub fn validate_setup(
         mollusk: &Mollusk,
         program_id: &Pubkey,
         token_program_id: &Pubkey,
@@ -816,7 +766,7 @@ impl AtaImplementation {
         }
     }
 
-    pub(crate) fn p_ata_prefunded(program_id: Pubkey) -> Self {
+    pub fn p_ata_prefunded(program_id: Pubkey) -> Self {
         Self {
             name: "p-ata-prefunded",
             program_id,

@@ -9,7 +9,11 @@ pub mod test_utils;
 pub mod bump;
 pub mod token_account_len;
 
-#[cfg(test)]
+// Benchmark modules - compiled unconditionally so that benchmarks have access to their helpers
+pub mod benches;
+
+// Always re-export test_utils when benchmarks/tests are enabled (including benches build)
+#[cfg(any(test, feature = "std"))]
 pub(crate) use test_utils::*;
 
 // Migrated tests from /program/tests

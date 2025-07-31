@@ -1,9 +1,19 @@
-use {
-    solana_account::Account, solana_instruction::AccountMeta, solana_pubkey::Pubkey,
-    std::collections::HashMap,
-};
+#![cfg(any(test, feature = "std"))]
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
-use crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE;
+use {
+    crate::tests::benches::constants::account_sizes::TOKEN_ACCOUNT_SIZE,
+    solana_account::Account,
+    solana_instruction::AccountMeta,
+    solana_pubkey::Pubkey,
+    std::{
+        collections::HashMap,
+        format,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    },
+};
 
 // ========================== ACCOUNT TYPE ENUM ==========================
 

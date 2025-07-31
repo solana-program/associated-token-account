@@ -1,4 +1,8 @@
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
+
+#[cfg(any(test, feature = "std"))]
 use {
+    curve25519_dalek::edwards::CompressedEdwardsY,
     mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
     solana_program,
     solana_pubkey::Pubkey,
@@ -23,12 +27,21 @@ pub fn derive_address_with_bump(seeds: &[&[u8]], bump: u8, program_id: &Pubkey) 
 /// Simple off-curve check for testing that mirrors the logic in processor.rs
 /// Returns true if the address is off-curve (valid PDA), false if on-curve (invalid PDA)
 pub fn is_off_curve_test(address: &Pubkey) -> bool {
-    use curve25519_dalek::edwards::CompressedEdwardsY;
-
-    let compressed = CompressedEdwardsY(address.to_bytes());
-    match compressed.decompress() {
-        None => true,                    // invalid encoding → off-curve
-        Some(pt) => pt.is_small_order(), // small-order = off-curve, otherwise on-curve
+    #[cfg(any(test, feature = "std"))]
+    {
+        let compressed = CompressedEdwardsY(address.to_bytes());
+        match compressed.decompress() {
+            None => true,                    // invalid encoding → off-curve
+            Some(pt) => pt.is_small_order(), // small-order = off-curve, otherwise on-curve
+        }
+    }
+    #[cfg(not(any(test, feature = "std")))]
+    {
+        // Fallback for when mollusk_svm is not available (e.g., in a CI environment)
+        // This is a placeholder and should ideally be replaced with a proper check
+        // For now, we'll assume any address is off-curve if mollusk_svm is not present
+        // This is a simplification and might need refinement based on actual requirements
+        true
     }
 }
 
@@ -114,7 +127,7 @@ pub fn find_wallet_with_non_canonical_opportunity(
 }
 
 /// Setup mollusk with both ATA and token programs for bump testing
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 pub fn setup_mollusk_for_bump_tests(token_program_id: &Pubkey) -> Mollusk {
     let ata_program_id = spl_associated_token_account::id();
     let mut mollusk = Mollusk::default();
@@ -135,7 +148,7 @@ pub fn setup_mollusk_for_bump_tests(token_program_id: &Pubkey) -> Mollusk {
     mollusk
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 mod tests {
     use super::*;
 

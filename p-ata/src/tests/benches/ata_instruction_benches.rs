@@ -1,20 +1,31 @@
+#![cfg(any(test, feature = "std"))]
+
+// Now that helpers are available via #[cfg(any(test, feature = "std"))],
+// we can use the library crate directly without re-exports.
+
 use {
-    mollusk_svm::Mollusk, solana_account::Account, solana_instruction::Instruction, solana_logger,
+    ::pinocchio_ata_program::tests::benches::{
+        account_comparison::{AccountComparisonService, ComparisonFormatter},
+        common::{
+            self as common, AccountBuilder, AllProgramIds, AtaImplementation, AtaVariant,
+            BaseTestType, BenchmarkResult, BenchmarkRunner, BenchmarkSetup, ComparisonResult,
+            CompatibilityStatus, TestVariant, NATIVE_LOADER_ID, SYSTEM_PROGRAM_ID,
+        },
+        common_builders::CommonTestCaseBuilder,
+        formatter,
+    },
+    mollusk_svm::Mollusk,
+    solana_account::Account,
+    solana_instruction::Instruction,
+    solana_logger,
     solana_pubkey::Pubkey,
+    std::{
+        format, println,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    },
 };
-
-#[path = "common.rs"]
-mod common;
-use common::*;
-
-mod common_builders;
-use common_builders::CommonTestCaseBuilder;
-
-mod account_comparison;
-use account_comparison::{AccountComparisonService, ComparisonFormatter};
-
-#[macro_use]
-mod formatter;
 
 struct TestConfiguration {
     base_test: BaseTestType,
@@ -120,39 +131,39 @@ static TEST_CONFIGS: &[TestConfiguration] = &[
 
 // ============================ SETUP AND CONFIGURATION =============================
 
-impl BenchmarkSetup {
-    fn validate_ata_setup(
-        mollusk: &Mollusk,
-        ata_implementation: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> Result<(), String> {
-        let test_variant = TestVariant {
-            rent_arg: false,
-            bump_arg: false,
-            token_account_len_arg: false,
-        };
-        let (test_ix, test_accounts) = CommonTestCaseBuilder::build_test_case(
-            BaseTestType::Create,
-            test_variant,
-            ata_implementation,
-            token_program_id,
-        );
-        // println!("Running test case: {:?}", test_ix);
-        let result = mollusk.process_instruction(&test_ix, &test_accounts);
+/// Validate that a given ATA implementation can successfully create a basic account.
+fn validate_ata_setup(
+    mollusk: &Mollusk,
+    ata_implementation: &AtaImplementation,
+    token_program_id: &Pubkey,
+) -> Result<(), String> {
+    let test_variant = TestVariant {
+        rent_arg: false,
+        bump_arg: false,
+        token_account_len_arg: false,
+    };
 
-        match result.program_result {
-            mollusk_svm::result::ProgramResult::Success => {
-                println!(
-                    "✓ ATA setup validation passed for {}",
-                    ata_implementation.name
-                );
-                Ok(())
-            }
-            _ => Err(format!(
-                "Setup validation failed for {}: {:?}",
-                ata_implementation.name, result.program_result
-            )),
+    let (test_ix, test_accounts) = CommonTestCaseBuilder::build_test_case(
+        BaseTestType::Create,
+        test_variant,
+        ata_implementation,
+        token_program_id,
+    );
+
+    let result = mollusk.process_instruction(&test_ix, &test_accounts);
+
+    match result.program_result {
+        mollusk_svm::result::ProgramResult::Success => {
+            println!(
+                "✓ ATA setup validation passed for {}",
+                ata_implementation.name
+            );
+            Ok(())
         }
+        _ => Err(format!(
+            "Setup validation failed for {}: {:?}",
+            ata_implementation.name, result.program_result
+        )),
     }
 }
 
@@ -550,7 +561,7 @@ fn main() {
     );
 
     // Validate prefunded P-ATA setup
-    if let Err(e) = BenchmarkSetup::validate_ata_setup(
+    if let Err(e) = validate_ata_setup(
         &mollusk,
         &impls.pata_prefunded_impl,
         &program_ids.token_program_id,
@@ -559,9 +570,7 @@ fn main() {
     }
 
     // Validate SPL ATA setup
-    if let Err(e) =
-        BenchmarkSetup::validate_ata_setup(&mollusk, &impls.spl_impl, &program_ids.token_program_id)
-    {
+    if let Err(e) = validate_ata_setup(&mollusk, &impls.spl_impl, &program_ids.token_program_id) {
         panic!("SPL ATA benchmark setup validation failed: {}", e);
     }
 
@@ -570,7 +579,7 @@ fn main() {
         "Validating legacy P-ATA setup with token program {}",
         program_ids.token_program_id
     );
-    if let Err(e) = BenchmarkSetup::validate_ata_setup(
+    if let Err(e) = validate_ata_setup(
         &mollusk,
         &impls.pata_legacy_impl,
         &program_ids.token_program_id,

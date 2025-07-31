@@ -1,18 +1,30 @@
-use strum::Display;
+#![cfg(any(test, feature = "std"))]
+
 use {
+    ::pinocchio_ata_program::tests::benches::{
+        account_templates::{self, *},
+        common::{
+            self as common, AccountBuilder, AllProgramIds, AtaImplementation, AtaVariant,
+            BaseTestType, BenchmarkResult, BenchmarkRunner, BenchmarkSetup, ComparisonResult,
+            CompatibilityStatus, TestVariant, NATIVE_LOADER_ID, SYSTEM_PROGRAM_ID,
+        },
+        common_builders::{self as common_builders, CommonTestCaseBuilder, FailureMode},
+        constants::account_sizes,
+    },
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_logger,
     solana_pubkey::Pubkey,
+    std::{
+        boxed::Box,
+        collections::{BTreeMap, HashMap},
+        eprintln, format, println,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    },
+    strum::Display,
 };
-
-#[path = "common.rs"]
-mod common;
-use common::{account_templates::*, *};
-
-#[path = "common_builders.rs"]
-mod common_builders;
-use common_builders::{CommonTestCaseBuilder, FailureMode};
 
 // ================================ FAILURE TEST CONSTANTS ================================
 
@@ -314,20 +326,20 @@ fn build_base_failure_accounts(
 ) -> (Pubkey, Pubkey, Pubkey) {
     let test_number = common_builders::calculate_failure_test_number(base_test, variant);
 
-    let payer = crate::common::structured_pk(
+    let payer = common::structured_pk(
         &ata_implementation.variant,
-        crate::common::TestBankId::Failures,
+        common::TestBankId::Failures,
         test_number,
-        crate::common::AccountTypeId::Payer,
+        common::AccountTypeId::Payer,
     );
 
     // Use consistent variant for mint and wallet to enable byte-for-byte comparison
-    let consistent_variant = &crate::common::AtaVariant::SplAta;
-    let mint = crate::common::structured_pk(
+    let consistent_variant = &common::AtaVariant::SplAta;
+    let mint = common::structured_pk(
         consistent_variant,
-        crate::common::TestBankId::Failures,
+        common::TestBankId::Failures,
         test_number,
-        crate::common::AccountTypeId::Mint,
+        common::AccountTypeId::Mint,
     );
     // Use random seeded pubkey instead of optimal bump hunting
     // Fixed seed ensures consistency across implementations for fair comparison
@@ -335,11 +347,11 @@ fn build_base_failure_accounts(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64;
-    let wallet = crate::common::random_seeded_pk(
+    let wallet = common::random_seeded_pk(
         consistent_variant,
-        crate::common::TestBankId::Failures,
+        common::TestBankId::Failures,
         test_number,
-        crate::common::AccountTypeId::Wallet,
+        common::AccountTypeId::Wallet,
         42, // Fixed seed ensures consistency across implementations
         simple_entropy,
     );
@@ -367,17 +379,17 @@ impl RecoverNestedAccounts {
             TestVariant::BASE,
         );
         let [nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet] =
-            crate::common::structured_pk_multi(
+            common::structured_pk_multi(
                 &ata_impl.variant,
-                crate::common::TestBankId::Failures,
+                common::TestBankId::Failures,
                 test_number,
                 [
-                    crate::common::AccountTypeId::NestedAta,
-                    crate::common::AccountTypeId::NestedMint,
-                    crate::common::AccountTypeId::Ata, // dest_ata
-                    crate::common::AccountTypeId::OwnerAta,
-                    crate::common::AccountTypeId::OwnerMint,
-                    crate::common::AccountTypeId::Wallet,
+                    common::AccountTypeId::NestedAta,
+                    common::AccountTypeId::NestedMint,
+                    common::AccountTypeId::Ata, // dest_ata
+                    common::AccountTypeId::OwnerAta,
+                    common::AccountTypeId::OwnerMint,
+                    common::AccountTypeId::Wallet,
                 ],
             );
         Self {
@@ -471,11 +483,11 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let wrong_ata_address = crate::common::structured_pk(
+        let wrong_ata_address = common::structured_pk(
             &ata_impl.variant,
-            crate::common::TestBankId::Failures,
+            common::TestBankId::Failures,
             173,
-            crate::common::AccountTypeId::Ata,
+            common::AccountTypeId::Ata,
         );
 
         CommonTestCaseBuilder::build_failure_test_case_with_name(
@@ -517,7 +529,7 @@ impl FailureTestBuilder {
             ],
         );
 
-        let accounts = RecoverAccountSet::new(
+        let accounts = account_templates::RecoverAccountSet::new(
             accounts_struct.nested_ata,
             accounts_struct.nested_mint,
             accounts_struct.dest_ata,
@@ -562,11 +574,11 @@ impl FailureTestBuilder {
                     TestVariant::BASE,
                 );
                 // Overwrite the nested_ata with a new, different key to force a mismatch.
-                accs.nested_ata = crate::common::structured_pk(
+                accs.nested_ata = common::structured_pk(
                     &ata_impl.variant,
-                    crate::common::TestBankId::Failures,
+                    common::TestBankId::Failures,
                     test_number.wrapping_add(10), // Use a distinct offset to guarantee a different address
-                    crate::common::AccountTypeId::NestedAta,
+                    common::AccountTypeId::NestedAta,
                 );
             },
         )
@@ -587,11 +599,11 @@ impl FailureTestBuilder {
                     TestVariant::BASE,
                 );
                 // Overwrite the dest_ata with a new, different key to force a mismatch.
-                accs.dest_ata = crate::common::structured_pk(
+                accs.dest_ata = common::structured_pk(
                     &ata_impl.variant,
-                    crate::common::TestBankId::Failures,
+                    common::TestBankId::Failures,
                     test_number.wrapping_add(11), // Use a distinct offset to guarantee a different address
-                    crate::common::AccountTypeId::Ata,
+                    common::AccountTypeId::Ata,
                 );
             },
         )
@@ -647,9 +659,10 @@ impl FailureTestBuilder {
             &ata_impl.program_id,
         );
 
-        let mut accounts = StandardAccountSet::new(payer, ata, wallet, mint, token_program_id)
-            .with_existing_ata(&mint, &wallet, token_program_id)
-            .to_vec();
+        let mut accounts =
+            account_templates::StandardAccountSet::new(payer, ata, wallet, mint, token_program_id)
+                .with_existing_ata(&mint, &wallet, token_program_id)
+                .to_vec();
 
         // Apply the specific failure condition to the accounts
         failure_applicator(&mut accounts, &ata, &mint, &wallet, ata_impl);
@@ -681,7 +694,7 @@ impl FailureTestBuilder {
             "fail_wrong_token_account_size",
             |accounts, ata, _mint, _wallet, _ata_impl| {
                 // Apply failure: set ATA to wrong size
-                FailureAccountBuilder::set_wrong_data_size(accounts, *ata, 100);
+                account_templates::FailureAccountBuilder::set_wrong_data_size(accounts, *ata, 100);
             },
         )
     }
@@ -700,11 +713,11 @@ impl FailureTestBuilder {
                     BaseTestType::CreateIdempotent,
                     TestVariant::BASE,
                 );
-                let wrong_mint = crate::common::structured_pk(
+                let wrong_mint = common::structured_pk(
                     &ata_impl.variant,
-                    crate::common::TestBankId::Failures,
+                    common::TestBankId::Failures,
                     test_number.wrapping_add(10),
-                    crate::common::AccountTypeId::Mint,
+                    common::AccountTypeId::Mint,
                 );
 
                 // Replace ATA with one pointing to wrong mint
@@ -736,11 +749,11 @@ impl FailureTestBuilder {
                     BaseTestType::CreateIdempotent,
                     TestVariant::BASE,
                 );
-                let wrong_owner = crate::common::structured_pk(
+                let wrong_owner = common::structured_pk(
                     &ata_impl.variant,
-                    crate::common::TestBankId::Failures,
+                    common::TestBankId::Failures,
                     test_number.wrapping_add(11),
-                    crate::common::AccountTypeId::Wallet,
+                    common::AccountTypeId::Wallet,
                 );
 
                 // Replace ATA with one having wrong owner
@@ -771,15 +784,14 @@ impl FailureTestBuilder {
             let mut new_data = mint_acct.data.clone();
 
             // Ensure starting from the canonical 82-byte layout.
-            if new_data.len() != crate::constants::account_sizes::MINT_ACCOUNT_SIZE {
-                new_data.truncate(crate::constants::account_sizes::MINT_ACCOUNT_SIZE);
+            if new_data.len() != account_sizes::MINT_ACCOUNT_SIZE {
+                new_data.truncate(account_sizes::MINT_ACCOUNT_SIZE);
             }
 
             // Increase length to 98 bytes and write the 4-byte TLV header (ImmutableOwner = 7).
-            let required_len = crate::constants::account_sizes::MINT_ACCOUNT_SIZE + 16; // header + padding
+            let required_len = account_sizes::MINT_ACCOUNT_SIZE + 16; // header + padding
             new_data.resize(required_len, 0u8);
-            new_data[crate::constants::account_sizes::MINT_ACCOUNT_SIZE
-                ..crate::constants::account_sizes::MINT_ACCOUNT_SIZE + 4]
+            new_data[account_sizes::MINT_ACCOUNT_SIZE..account_sizes::MINT_ACCOUNT_SIZE + 4]
                 .copy_from_slice(&[7u8, 0u8, 0u8, 0u8]);
 
             mint_acct.data = new_data;
@@ -888,26 +900,26 @@ impl FailureTestBuilder {
             common_builders::calculate_failure_test_number(BaseTestType::Create, TestVariant::BASE);
 
         // Transaction payer (attacker's wallet that can sign)
-        let attacker_wallet = crate::common::structured_pk(
+        let attacker_wallet = common::structured_pk(
             &ata_impl.variant,
-            crate::common::TestBankId::Failures,
+            common::TestBankId::Failures,
             test_number,
-            crate::common::AccountTypeId::Payer,
+            common::AccountTypeId::Payer,
         );
 
         // Simulate victim's wallet (we don't control this)
-        let victim_wallet = crate::common::structured_pk(
+        let victim_wallet = common::structured_pk(
             &ata_impl.variant,
-            crate::common::TestBankId::Failures,
+            common::TestBankId::Failures,
             test_number.wrapping_add(10),
-            crate::common::AccountTypeId::Wallet,
+            common::AccountTypeId::Wallet,
         );
 
-        let victim_mint = crate::common::structured_pk(
+        let victim_mint = common::structured_pk(
             &ata_impl.variant,
-            crate::common::TestBankId::Failures,
+            common::TestBankId::Failures,
             test_number.wrapping_add(1),
-            crate::common::AccountTypeId::Mint,
+            common::AccountTypeId::Mint,
         );
 
         // Victim's ATA - properly derived PDA from victim's wallet and mint
@@ -973,7 +985,7 @@ impl FailureTestBuilder {
             // System program
             (
                 SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(crate::common::NATIVE_LOADER_ID),
+                AccountBuilder::executable_program(common::NATIVE_LOADER_ID),
             ),
             // Token program
             (

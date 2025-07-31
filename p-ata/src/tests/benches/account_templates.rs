@@ -1,8 +1,24 @@
-#![allow(dead_code)]
+// (Removed file-level cfg guard so account templates are always compiled)
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 //! Account templates for benchmark tests
 
-use crate::{constants::lamports::*, AccountBuilder, NATIVE_LOADER_ID, SYSTEM_PROGRAM_ID};
-use {solana_account::Account, solana_pubkey::Pubkey, solana_sysvar::rent};
+use {
+    crate::tests::benches::common::*,
+    crate::tests::test_utils::shared_constants::{ONE_SOL, TOKEN_ACCOUNT_SIZE},
+    solana_account::Account,
+    solana_pubkey::Pubkey,
+    solana_sysvar::rent,
+    std::{
+        collections::HashMap,
+        format,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    },
+};
+
+#[cfg(feature = "full-debug-logs")]
+use std::println;
 
 /// Standard account set for most ATA benchmark tests
 ///
@@ -260,6 +276,18 @@ impl RecoverAccountSet {
     ///
     /// Used for RecoverMultisig tests
     pub fn with_multisig(mut self, threshold: u8, signers: Vec<Pubkey>) -> Self {
+        #[cfg(feature = "full-debug-logs")]
+        {
+            println!(
+                "🔍 [DEBUG] Setting up multisig with threshold: {}, signers: {}",
+                threshold,
+                signers.len()
+            );
+            for (i, signer) in signers.iter().enumerate() {
+                println!("    Signer {}: {}", i, signer);
+            }
+        }
+
         // Replace wallet with multisig account
         self.wallet.1 = Account {
             lamports: ONE_SOL,
@@ -273,6 +301,12 @@ impl RecoverAccountSet {
         for signer in &signers {
             self.multisig_signers
                 .push((*signer, AccountBuilder::system_account(ONE_SOL)));
+        }
+
+        #[cfg(feature = "full-debug-logs")]
+        {
+            println!("    Multisig wallet address: {}", self.wallet.0);
+            println!("    Added {} signer accounts", self.multisig_signers.len());
         }
 
         self
@@ -411,7 +445,7 @@ impl FailureAccountBuilder {
             .position(|(addr, _)| *addr == target_address)
         {
             accounts[pos].1.data =
-                vec![0xFF; crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE];
+                vec![0xFF; crate::tests::benches::constants::account_sizes::TOKEN_ACCOUNT_SIZE];
             accounts[pos].1.owner = *token_program;
             accounts[pos].1.lamports = 2_000_000;
         }
@@ -446,7 +480,7 @@ impl FailureAccountBuilder {
             .position(|(addr, _)| *addr == target_address)
         {
             accounts[pos].1.data =
-                vec![0xFF; crate::common::constants::account_sizes::MULTISIG_ACCOUNT_SIZE];
+                vec![0xFF; crate::tests::benches::constants::account_sizes::MULTISIG_ACCOUNT_SIZE];
             accounts[pos].1.owner = *token_program;
         }
     }

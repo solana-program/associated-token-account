@@ -23,12 +23,12 @@ p-ata (pinocchio-ata) is a drop-in replacement for SPL ATA. Following in the foo
 
 ## Test Suites
 The test suites included are:
-1. `/src/tests/mollusk_adapter.rs` - The original SPL ATA suite is run with a Mollusk adapter, allowing the unmodified solana_program_test files for SPL ATA to be run on p-ata.
+1. `/src/tests/utils/mollusk_adapter.rs` - The original SPL ATA suite is run with a Mollusk adapter, allowing the unmodified solana_program_test files for SPL ATA to be run on p-ata.
 2. `/src/tests/migrated` - (Redundancy) A migrated version of the same tests, written to run on Mollusk.
 3. `/src/tests` - Unit tests for the various helper functions in processor.rs.
 4. `/src/tests/token_account_len` - Tests for token account data length logic, whether passed in or calculated in-program. Includes exhaustive tests for the `calculate_account_size_from_mint_extensions` function, testing the results of this function for all possible combinations of token extensions against the results from Token-2022's `GetAccountDataSize` logic.
 5. `/src/tests/bump` - Mollusk tests ensuring the safety of various scenarios where `bump` is passed in. 
-5. `/benches` A benchmark suite, which benches categories of operations in p-ata against SPL ATA and verifies that accounts are changed in the same way, byte-for-byte. See "Benchmarking" below.
+5. `/src/tests/benches` A benchmark suite, which benches categories of operations in p-ata against SPL ATA and verifies that accounts are changed in the same way, byte-for-byte. See "Benchmarking" below.
 
 ```
 cargo build --features build-programs && cargo test
@@ -38,7 +38,7 @@ cargo build --features build-programs && cargo test
 Set `BENCH_ITERATIONS` to average a number of runs. If only 1 iteration is used, optimal bump wallets will be found instead of random wallets each run.
 
 ```
-BENCH_ITERATIONS=1 cargo bench
+BENCH_ITERATIONS=1 cargo bench --features std
 ```
 
 ### "Best run" numbers (ideal bumps) *as of 2025-07-29, 2607f50*
@@ -78,10 +78,10 @@ All benchmarks also check for byte-for-byte equivalence with SPL ATA.
 To benchmark (and run a set of failure tests and byte-for-byte equivalence tests) from the /p-ata directory:
 
 ```
-cargo build --features build-programs && cargo bench
+cargo build --features build-programs && cargo bench --features std
 ```
 
-Mollusk's extensive debug logs are filtered out *unless* a test has an unexpected result. To show all of them, run `cargo bench --features full-debug-logs`.
+Mollusk's extensive debug logs are filtered out *unless* a test has an unexpected result. To show all of them, run `cargo bench --features std,full-debug-logs`.
 
 ## Tests with byte-for-byte checking on changed accounts
 (byte-for-byte is irrelevant for "P-ATA optimization working" tests)

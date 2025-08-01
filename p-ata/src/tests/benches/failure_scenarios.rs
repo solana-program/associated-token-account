@@ -1134,13 +1134,38 @@ impl FailureTestRunner {
         }
     }
 
-    /// Run a failure test with configuration against both implementations and compare results
+    /// Run a failure test with configuration against both implementations and compare results.
+    /// First, a baseline test is run to ensure the un-mutated case succeeds.
     fn run_failure_comparison_test_with_config(
         config: &FailureTestConfig,
         p_ata_impl: &AtaImplementation,
         original_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> ComparisonResult {
+        // baseline sanity check: the un-mutated case must suceed
+
+        let (baseline_ix, baseline_accounts) = CommonTestCaseBuilder::build_test_case(
+            config.base_test,
+            config.variant,
+            p_ata_impl,
+            token_program_id,
+        );
+        let baseline_result = BenchmarkRunner::run_single_benchmark(
+            &format!("{}_baseline", config.name),
+            &baseline_ix,
+            &baseline_accounts,
+            p_ata_impl,
+            token_program_id,
+            1,
+        );
+        assert!(
+            baseline_result.success,
+            "Baseline {} test should succeed",
+            config.name
+        );
+        debug_log!("Baseline {} test succeeded", config.name);
+
+        // Now mutate the test case.
         let test_builder = |ata_impl: &AtaImplementation, token_program_id: &Pubkey| {
             FailureTestBuilder::build_failure_test(config, ata_impl, token_program_id)
         };

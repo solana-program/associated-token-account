@@ -1,21 +1,23 @@
 #![cfg(any(test, feature = "std"))]
 
 use {
-    ::pinocchio_ata_program::tests::{
-        address_gen::{random_seeded_pk, structured_pk, structured_pk_multi},
-        NATIVE_LOADER_ID,
-    },
-    ::pinocchio_ata_program::tests::{
-        benches::{
-            account_templates,
-            common::{
-                self as common, AtaImplementation, BaseTestType, BenchmarkResult, BenchmarkRunner,
-                BenchmarkSetup, ComparisonResult, CompatibilityStatus, TestVariant,
+    ::pinocchio_ata_program::{
+        debug_log,
+        tests::{
+            address_gen::{random_seeded_pk, structured_pk, structured_pk_multi},
+            benches::{
+                account_templates,
+                common::{
+                    self as common, AtaImplementation, BaseTestType, BenchmarkResult,
+                    BenchmarkRunner, BenchmarkSetup, ComparisonResult, CompatibilityStatus,
+                    TestVariant,
+                },
+                common_builders::{self as common_builders, CommonTestCaseBuilder, FailureMode},
+                constants::account_sizes,
             },
-            common_builders::{self as common_builders, CommonTestCaseBuilder, FailureMode},
-            constants::account_sizes,
+            utils::account_builder::AccountBuilder,
+            NATIVE_LOADER_ID,
         },
-        utils::account_builder::AccountBuilder,
     },
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
@@ -301,27 +303,24 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
 /// Log test information for debugging - only shown with --full-debug-logs feature
 #[allow(unused)]
 fn log_test_info(test_name: &str, ata_impl: &AtaImplementation, addresses: &[(&str, &Pubkey)]) {
-    #[cfg(feature = "full-debug-logs")]
-    {
-        let short_addresses: Vec<String> = addresses
-            .iter()
-            .map(|(name, addr)| format!("{}: {}", name, &addr.to_string()[0..8]))
-            .collect();
+    let short_addresses: Vec<String> = addresses
+        .iter()
+        .map(|(name, addr)| format!("{}: {}", name, &addr.to_string()[0..8]))
+        .collect();
 
-        println!(
-            "🔍 Test: {} | Implementation: {} | {}",
-            test_name,
-            ata_impl.name,
-            short_addresses.join(" | ")
-        );
+    debug_log!(
+        "🔍 Test: {} | Implementation: {} | {}",
+        test_name,
+        ata_impl.name,
+        short_addresses.join(" | ")
+    );
 
-        let full_addresses: Vec<String> = addresses
-            .iter()
-            .map(|(name, addr)| format!("{}: {}", name, addr))
-            .collect();
+    let full_addresses: Vec<String> = addresses
+        .iter()
+        .map(|(name, addr)| format!("{}: {}", name, addr))
+        .collect();
 
-        println!("    Full addresses: {}", full_addresses.join(" | "));
-    }
+    debug_log!("    Full addresses: {}", full_addresses.join(" | "));
 }
 
 // Helper function for complex cases that need custom logic
@@ -906,8 +905,14 @@ impl FailureTestBuilder {
             (test_number, common::AccountTypeId::Payer),
             (test_number.wrapping_add(10), common::AccountTypeId::Wallet),
             (test_number.wrapping_add(1), common::AccountTypeId::Mint),
-        ].map(|(num, account_type)| {
-            structured_pk(&ata_impl.variant, common::TestBankId::Failures, num, account_type)
+        ]
+        .map(|(num, account_type)| {
+            structured_pk(
+                &ata_impl.variant,
+                common::TestBankId::Failures,
+                num,
+                account_type,
+            )
         });
 
         // Victim's ATA - properly derived PDA from victim's wallet and mint

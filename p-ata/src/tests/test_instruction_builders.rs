@@ -13,9 +13,9 @@ use {
 };
 
 #[rstest]
-#[case([1u8; 32])]   // owner_1
-#[case([2u8; 32])]   // owner_2
-#[case([42u8; 32])]  // owner_42
+#[case([1u8; 32])] // owner_1
+#[case([2u8; 32])] // owner_2
+#[case([42u8; 32])] // owner_42
 #[case([255u8; 32])] // owner_255
 fn test_build_initialize_account3_data(#[case] owner_bytes: [u8; 32]) {
     let owner = Pubkey::from(owner_bytes);
@@ -57,9 +57,9 @@ fn test_build_transfer_data(amount: u64, decimals: u8) {
 }
 
 #[rstest]
-#[case(0x0123456789abcdef_u64, 6)]  // big_endian_value
-#[case(0x1234_u64, 9)]              // small_value
-#[case(u64::MAX, 18)]               // max_value
+#[case(0x0123456789abcdef_u64, 6)] // big_endian_value
+#[case(0x1234_u64, 9)] // small_value
+#[case(u64::MAX, 18)] // max_value
 fn test_build_transfer_data_endianness(#[case] amount: u64, #[case] decimals: u8) {
     let data = build_transfer_checked_data(amount, decimals);
 
@@ -70,8 +70,8 @@ fn test_build_transfer_data_endianness(#[case] amount: u64, #[case] decimals: u8
 
 #[rstest]
 #[case([42u8; 32])] // owner_test
-#[case([0u8; 32])]  // owner_zeros
-#[case([1u8; 32])]  // owner_ones
+#[case([0u8; 32])] // owner_zeros
+#[case([1u8; 32])] // owner_ones
 fn test_instruction_data_deterministic_owner(#[case] owner_bytes: [u8; 32]) {
     let owner = Pubkey::from(owner_bytes);
 
@@ -81,8 +81,8 @@ fn test_instruction_data_deterministic_owner(#[case] owner_bytes: [u8; 32]) {
 }
 
 #[rstest]
-#[case(1000, 6)]      // transfer_1
-#[case(500, 9)]       // transfer_2
+#[case(1000, 6)] // transfer_1
+#[case(500, 9)] // transfer_2
 #[case(u64::MAX, 18)] // transfer_3
 fn test_instruction_data_deterministic_transfer(#[case] amount: u64, #[case] decimals: u8) {
     let transfer1 = build_transfer_checked_data(amount, decimals);

@@ -1,5 +1,14 @@
 #![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
+/// Debug logging macro that only compiles under the full-debug-logs feature
+#[macro_export]
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        #[cfg(feature = "full-debug-logs")]
+        std::println!($($arg)*);
+    };
+}
+
 use {pinocchio::pubkey::Pubkey, pinocchio_pubkey::pubkey};
 
 #[cfg(any(test, feature = "std"))]
@@ -7,8 +16,6 @@ use std::{vec, vec::Vec};
 
 /// Shared constants that are used across both tests and benchmarks
 pub mod shared_constants {
-    #[cfg(feature = "full-debug-logs")]
-    use std::println;
 
     use solana_pubkey::Pubkey as SolanaPubkey;
     use {pinocchio::pubkey::Pubkey, pinocchio_pubkey::pubkey};
@@ -84,8 +91,6 @@ pub mod unified_builders {
     pub fn create_multisig_data_unified(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
         use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
         use spl_token_interface::state::Transmutable;
-        #[cfg(feature = "full-debug-logs")]
-        use std::println;
 
         assert!(
             m as usize <= signer_pubkeys.len(),
@@ -113,18 +118,15 @@ pub mod unified_builders {
             data[offset..offset + 32].copy_from_slice(*pk_bytes);
         }
 
-        #[cfg(feature = "full-debug-logs")]
-        {
-            println!("🔍 [DEBUG] Created multisig data:");
-            println!("    m: {}", data[0]);
-            println!("    n: {}", data[1]);
-            println!("    initialized: {}", data[2]);
-            println!("    data len: {}", data.len());
-            for i in 0..signer_pubkeys.len() {
-                let offset = 3 + i * 32;
-                let signer_bytes = &data[offset..offset + 32];
-                println!("    signer[{}] at offset {}: {:?}", i, offset, signer_bytes);
-            }
+        crate::debug_log!("🔍 [DEBUG] Created multisig data:");
+        crate::debug_log!("    m: {}", data[0]);
+        crate::debug_log!("    n: {}", data[1]);
+        crate::debug_log!("    initialized: {}", data[2]);
+        crate::debug_log!("    data len: {}", data.len());
+        for i in 0..signer_pubkeys.len() {
+            let offset = 3 + i * 32;
+            let signer_bytes = &data[offset..offset + 32];
+            crate::debug_log!("    signer[{}] at offset {}: {:?}", i, offset, signer_bytes);
         }
 
         data

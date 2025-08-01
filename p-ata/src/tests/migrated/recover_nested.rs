@@ -115,6 +115,7 @@ where
 }
 
 /// Setup complete test scenario with real token program accounts
+#[allow(clippy::too_many_arguments)]
 fn setup_recover_test_scenario(
     _mollusk: &Mollusk,
     ata_program_id: &Pubkey,

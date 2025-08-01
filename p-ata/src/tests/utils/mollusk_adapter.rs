@@ -172,7 +172,7 @@ impl MolluskBanksClient {
                 mollusk_svm::result::ProgramResult::Success => {
                     // Handle special case for recover_nested: delete the nested account
                     if mollusk_instruction.program_id == spl_associated_token_account::id()
-                        && mollusk_instruction.data.len() > 0
+                        && !mollusk_instruction.data.is_empty()
                         && mollusk_instruction.data[0] == 2
                     {
                         // This is a successful recover_nested instruction
@@ -197,7 +197,7 @@ impl MolluskBanksClient {
                     // Map UnknownError to the appropriate error based on context
                     let instruction_error = if mollusk_instruction.program_id
                         == spl_associated_token_account::id()
-                        && mollusk_instruction.data.len() > 0
+                        && !mollusk_instruction.data.is_empty()
                         && mollusk_instruction.data[0] == 2
                     {
                         // For recover_nested, UnknownError usually means wrong token program
@@ -398,13 +398,13 @@ fn map_mollusk_error_to_original(
     error: ProgramError,
 ) -> InstructionError {
     if instruction.program_id == spl_associated_token_account::id() {
-        let is_recover_nested = instruction.data.len() > 0 && instruction.data[0] == 2;
-        let is_idempotent_create = instruction.data.len() > 0 && instruction.data[0] == 1;
+        let is_recover_nested = !instruction.data.is_empty() && instruction.data[0] == 2;
+        let is_idempotent_create = !instruction.data.is_empty() && instruction.data[0] == 1;
 
         match error {
             // System program "account already exists" -> IllegalOwner for non-idempotent ATA create
             ProgramError::Custom(0) => {
-                if instruction.data.len() > 0 && instruction.data[0] == 0 {
+                if !instruction.data.is_empty() && instruction.data[0] == 0 {
                     InstructionError::IllegalOwner
                 } else {
                     InstructionError::from(u64::from(error))

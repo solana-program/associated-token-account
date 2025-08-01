@@ -4,8 +4,8 @@ use {
     crate::tests::{
         account_builder::AccountBuilder,
         address_gen::{
-            derive_address_with_bump, find_optimal_wallet_for_mints, find_optimal_wallet_for_nested_ata,
-            random_seeded_pk, structured_pk,
+            derive_address_with_bump, find_optimal_wallet_for_mints,
+            find_optimal_wallet_for_nested_ata, random_seeded_pk, structured_pk,
         },
         benches::{account_templates::*, common::*, constants::*},
     },
@@ -14,8 +14,7 @@ use {
     solana_pubkey::Pubkey,
     solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
-    std::vec,
-    std::vec::Vec,
+    std::{format, vec, vec::Vec},
 };
 
 #[cfg(feature = "full-debug-logs")]
@@ -310,10 +309,13 @@ impl CommonTestCaseBuilder {
                             AtaVariant::SplAta,
                             TestBankId::Benchmarks,
                             base_test as u8,
-                            [AccountTypeId::Signer1, 
-                             AccountTypeId::Signer2, 
-                             AccountTypeId::Signer3]
-                        ].to_vec(),
+                            [
+                                AccountTypeId::Signer1,
+                                AccountTypeId::Signer2,
+                                AccountTypeId::Signer3
+                            ]
+                        ]
+                        .to_vec(),
                     },
                 ],
                 failure_mode: None,
@@ -330,11 +332,17 @@ impl CommonTestCaseBuilder {
                         AtaVariant::SplAta,
                         TestBankId::Benchmarks,
                         base_test as u8,
-                        [AccountTypeId::Payer,
-                         AccountTypeId::Wallet,
-                         AccountTypeId::Mint]
+                        [
+                            AccountTypeId::Payer,
+                            AccountTypeId::Wallet,
+                            AccountTypeId::Mint
+                        ]
                     ];
-                    vec![SpecialAccountMod::FixedAddresses { payer, wallet, mint }]
+                    vec![SpecialAccountMod::FixedAddresses {
+                        payer,
+                        wallet,
+                        mint,
+                    }]
                 },
                 failure_mode: None,
             },
@@ -407,7 +415,7 @@ impl CommonTestCaseBuilder {
                     // For recover operations, optimize ALL three ATAs: Owner, Destination, AND Nested
                     let all_implementations =
                         crate::tests::benches::common::AtaImplementation::all();
-                    let ata_program_ids = vec![
+                    let ata_program_ids = [
                         all_implementations.spl_impl.program_id,
                         all_implementations.pata_legacy_impl.program_id,
                         all_implementations.pata_prefunded_impl.program_id,
@@ -426,15 +434,12 @@ impl CommonTestCaseBuilder {
                 // be consistent with the multisig signer configuration. The signers are
                 // generated with specific structured addresses that must match the wallet.
                 // Optimal bump search would break this relationship.
-                #[cfg(feature = "full-debug-logs")]
-                {
-                    println!("🔍 [DEBUG] Skipping optimal bump for RecoverMultisig to preserve multisig relationship");
-                    println!("    Using deterministic wallet: {}", wallet);
-                }
+                crate::debug_log!("🔍 [DEBUG] Skipping optimal bump for RecoverMultisig to preserve multisig relationship");
+                crate::debug_log!("    Using deterministic wallet: {}", wallet);
             } else if !matches!(config.base_test, BaseTestType::WorstCase) {
                 // For standard create operations, find wallet optimal for mint across all ATA programs
                 let all_implementations = crate::tests::benches::common::AtaImplementation::all();
-                let ata_program_ids = vec![
+                let ata_program_ids = [
                     all_implementations.spl_impl.program_id,
                     all_implementations.pata_legacy_impl.program_id,
                     all_implementations.pata_prefunded_impl.program_id,
@@ -449,25 +454,22 @@ impl CommonTestCaseBuilder {
             // Note: WorstCase tests intentionally use sub-optimal wallets, so skip optimization
         }
 
-        #[cfg(feature = "full-debug-logs")]
-        {
-            let base_test_name = config.base_test.to_string();
-            let display_test_name = _test_name.unwrap_or(&base_test_name);
-            println!(
-                "🔍 Test: {} | Implementation: {} | Mint: {} | Owner: {} | Payer: {}",
-                display_test_name,
-                ata_implementation.name,
-                mint.to_string()[0..8].to_string(),
-                wallet.to_string()[0..8].to_string(),
-                payer.to_string()[0..8].to_string()
-            );
+        let base_test_name = format!("{:?}", config.base_test);
+        crate::debug_log!(
+            "🔍 Test: {} | Implementation: {} | Mint: {} | Owner: {} | Payer: {}",
+            base_test_name,
+            ata_implementation.name,
+            mint.to_string()[0..8].to_string(),
+            wallet.to_string()[0..8].to_string(),
+            payer.to_string()[0..8].to_string()
+        );
 
-            // Log full addresses for debugging address consistency
-            println!(
-                "    Full addresses: Mint: {} | Owner: {} | Payer: {}",
-                mint, wallet, payer
-            );
-        }
+        crate::debug_log!(
+            "    Full addresses: Mint: {} | Owner: {} | Payer: {}",
+            mint,
+            wallet,
+            payer
+        );
 
         let derivation_program_id = ata_implementation.program_id;
 
@@ -547,12 +549,10 @@ impl CommonTestCaseBuilder {
         );
         let mut ix = Self::build_instruction(&config, variant, ata_implementation, &accounts, bump);
 
-        #[cfg(feature = "full-debug-logs")]
-        println!("🐛 [DEBUG] Built instruction with data: {:?}", ix.data);
+        crate::debug_log!("🐛 [DEBUG] Built instruction with data: {:?}", ix.data);
 
         if let Some(failure_mode) = &config.failure_mode {
-            #[cfg(feature = "full-debug-logs")]
-            println!("🐛 [DEBUG] Applying failure mode: {:?}", failure_mode);
+            crate::debug_log!("🐛 [DEBUG] Applying failure mode: {:?}", failure_mode);
             Self::apply_failure_mode(
                 failure_mode,
                 &mut ix,
@@ -743,17 +743,16 @@ impl CommonTestCaseBuilder {
         };
 
         // Debug logging for recover_multisig address calculations
-        #[cfg(feature = "full-debug-logs")]
         if matches!(config.base_test, BaseTestType::RecoverMultisig) {
-            println!("🔍 [DEBUG] Address calculation in build_recover_accounts:");
-            println!("    wallet: {}", actual_wallet);
-            println!("    token_program: {}", config.token_program);
-            println!("    owner_mint: {}", owner_mint);
-            println!(
+            crate::debug_log!("🔍 [DEBUG] Address calculation in build_recover_accounts:");
+            crate::debug_log!("    wallet: {}", actual_wallet);
+            crate::debug_log!("    token_program: {}", config.token_program);
+            crate::debug_log!("    owner_mint: {}", owner_mint);
+            crate::debug_log!(
                 "    ata_implementation.program_id: {}",
                 ata_implementation.program_id
             );
-            println!("    owner_ata (from caller): {}", owner_ata);
+            crate::debug_log!("    owner_ata (from caller): {}", owner_ata);
         }
 
         let (nested_ata, _) = Pubkey::find_program_address(
@@ -774,12 +773,11 @@ impl CommonTestCaseBuilder {
             &ata_implementation.program_id,
         );
 
-        #[cfg(feature = "full-debug-logs")]
         if matches!(config.base_test, BaseTestType::RecoverMultisig) {
-            println!("🔍 [DEBUG] Calculated addresses:");
-            println!("    nested_ata: {}", nested_ata);
-            println!("    dest_ata: {}", dest_ata);
-            println!("    nested_mint: {}", nested_mint);
+            crate::debug_log!("🔍 [DEBUG] Calculated addresses:");
+            crate::debug_log!("    nested_ata: {}", nested_ata);
+            crate::debug_log!("    dest_ata: {}", dest_ata);
+            crate::debug_log!("    nested_mint: {}", nested_mint);
         }
 
         let mut account_set = RecoverAccountSet::new(
@@ -881,63 +879,59 @@ impl CommonTestCaseBuilder {
 
         // Add multisig signers if present
         if matches!(config.base_test, BaseTestType::RecoverMultisig) {
-            #[cfg(feature = "full-debug-logs")]
-            {
-                println!("🔍 [DEBUG] RecoverMultisig meta building:");
-                println!("    Total accounts: {}", accounts.len());
-                for (i, (pubkey, _)) in accounts.iter().enumerate() {
-                    println!("    accounts[{}]: {}", i, pubkey);
-                }
-
-                // Show what we're passing to the program
-                println!("🔍 [DEBUG] RecoverMultisig instruction accounts:");
-                println!("    [0] nested_ata: {}", accounts[0].0);
-                println!("    [1] nested_mint: {}", accounts[1].0);
-                println!("    [2] dest_ata: {}", accounts[2].0);
-                println!("    [3] owner_ata: {}", accounts[3].0);
-                println!("    [4] owner_mint: {}", accounts[4].0);
-                println!("    [5] wallet (multisig): {}", accounts[5].0);
-                println!("    [6] token_program: {}", accounts[6].0);
+            crate::debug_log!("🔍 [DEBUG] RecoverMultisig meta building:");
+            crate::debug_log!("    Total accounts: {}", accounts.len());
+            for (i, (pubkey, _)) in accounts.iter().enumerate() {
+                crate::debug_log!("    accounts[{}]: {}", i, pubkey);
             }
+
+            // Show what we're passing to the program
+            crate::debug_log!("🔍 [DEBUG] RecoverMultisig instruction accounts:");
+            crate::debug_log!("    [0] nested_ata: {}", accounts[0].0);
+            crate::debug_log!("    [1] nested_mint: {}", accounts[1].0);
+            crate::debug_log!("    [2] dest_ata: {}", accounts[2].0);
+            crate::debug_log!("    [3] owner_ata: {}", accounts[3].0);
+            crate::debug_log!("    [4] owner_mint: {}", accounts[4].0);
+            crate::debug_log!("    [5] wallet (multisig): {}", accounts[5].0);
+            crate::debug_log!("    [6] token_program: {}", accounts[6].0);
 
             // For 2-of-3 multisig, only pass in the 2 accounts that are actually signing
             let signer_start = accounts.len() - 3;
 
-            #[cfg(feature = "full-debug-logs")]
-            {
-                println!("    Signer start index: {}", signer_start);
-                println!("    Signer 1: {}", accounts[signer_start].0);
-                println!("    Signer 2: {}", accounts[signer_start + 1].0);
-                println!(
-                    "    Signer 3 (not included): {}",
-                    accounts[signer_start + 2].0
+            crate::debug_log!("    Signer start index: {}", signer_start);
+            crate::debug_log!("    Signer 1: {}", accounts[signer_start].0);
+            crate::debug_log!("    Signer 2: {}", accounts[signer_start + 1].0);
+            crate::debug_log!(
+                "    Signer 3 (not included): {}",
+                accounts[signer_start + 2].0
+            );
+
+            // Also check what's in the multisig account data
+            let multisig_data = &accounts[5].1.data;
+            // Minimum length = header (3 bytes) + first signer (32 bytes)
+            if multisig_data.len() >= 35 {
+                let m = multisig_data[0];
+                let n = multisig_data[1];
+                let initialized = multisig_data[2];
+                crate::debug_log!(
+                    "    Multisig config: m={}, n={}, initialized={}",
+                    m,
+                    n,
+                    initialized
                 );
 
-                // Also check what's in the multisig account data
-                let multisig_data = &accounts[5].1.data;
-                // Minimum length = header (3 bytes) + first signer (32 bytes)
-                if multisig_data.len() >= 35 {
-                    let m = multisig_data[0];
-                    let n = multisig_data[1];
-                    let initialized = multisig_data[2];
-                    println!(
-                        "    Multisig config: m={}, n={}, initialized={}",
-                        m, n, initialized
-                    );
-
-                    for i in 0..n {
-                        let offset = 3 + (i as usize) * 32;
-                        if offset + 32 <= multisig_data.len() {
-                            let signer_bytes = &multisig_data[offset..offset + 32];
-                            let signer_pubkey = Pubkey::try_from(signer_bytes).unwrap_or_default();
-                            println!("    Multisig signer {}: {}", i, signer_pubkey);
-                        }
+                for i in 0..n {
+                    let offset = 3 + (i as usize) * 32;
+                    if offset + 32 <= multisig_data.len() {
+                        let signer_bytes = &multisig_data[offset..offset + 32];
+                        let signer_pubkey = Pubkey::try_from(signer_bytes).unwrap_or_default();
+                        crate::debug_log!("    Multisig signer {}: {}", i, signer_pubkey);
                     }
                 }
-
-                // Show the final instruction meta that will be sent
-                println!("🔍 [DEBUG] Final instruction metas being built:");
             }
+
+            // Show the final instruction meta that will be sent
+            crate::debug_log!("🔍 [DEBUG] Final instruction metas being built:");
 
             metas.push(AccountMeta::new_readonly(accounts[signer_start].0, true));
             metas.push(AccountMeta::new_readonly(
@@ -947,13 +941,15 @@ impl CommonTestCaseBuilder {
             // Don't include the third signer since it's not signing
         }
 
-        #[cfg(feature = "full-debug-logs")]
         if matches!(config.base_test, BaseTestType::RecoverMultisig) {
-            println!("🔍 [DEBUG] Final instruction metas for RecoverMultisig:");
+            crate::debug_log!("🔍 [DEBUG] Final instruction metas for RecoverMultisig:");
             for (i, meta) in metas.iter().enumerate() {
-                println!(
+                crate::debug_log!(
                     "    meta[{}]: {} (writable: {}, signer: {})",
-                    i, meta.pubkey, meta.is_writable, meta.is_signer
+                    i,
+                    meta.pubkey,
+                    meta.is_writable,
+                    meta.is_signer
                 );
             }
         }
@@ -1036,8 +1032,7 @@ impl CommonTestCaseBuilder {
                 instruction_type
             );
             let data = encode_create_ata_instruction_data(&instruction_type);
-            #[cfg(feature = "full-debug-logs")]
-            println!("🐛 [DEBUG] Early return path - encoded data: {:?}", data);
+            crate::debug_log!("🐛 [DEBUG] Early return path - encoded data: {:?}", data);
             return data;
         }
 
@@ -1333,8 +1328,7 @@ impl CommonTestCaseBuilder {
                     invalid_bump, ix.data
                 );
                 FailureInstructionBuilder::set_bump_value(ix, *invalid_bump);
-                #[cfg(feature = "full-debug-logs")]
-                println!(
+                crate::debug_log!(
                     "🐛 [DEBUG] InvalidBumpValue applied. Data after: {:?}",
                     ix.data
                 );

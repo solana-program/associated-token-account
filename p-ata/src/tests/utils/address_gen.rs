@@ -232,13 +232,13 @@ pub fn const_pk_with_optimal_bump(
 
 /// Find a wallet that produces bump 255 for nested ATA operations
 ///
-/// This function finds a wallet where ALL three ATAs (Owner, Destination, AND Nested) 
+/// This function finds a wallet where ALL three ATAs (Owner, Destination, AND Nested)
 /// have optimal bump values across all ATA program implementations.
 ///
 /// # Arguments
 /// * `token_program` - Token program ID for ATA derivation
 /// * `owner_mint` - Mint address for the owner ATA
-/// * `nested_mint` - Mint address for the nested ATA 
+/// * `nested_mint` - Mint address for the nested ATA
 /// * `ata_programs` - Array of ATA program IDs to check
 /// * `base_entropy` - Base entropy for deterministic starting point
 ///
@@ -300,9 +300,9 @@ macro_rules! pk_array {
     ($variant:expr, $bank:expr, $num:expr, [$($account_type:expr),* $(,)?]) => {
         [$(
             $crate::tests::utils::address_gen::structured_pk(
-                &$variant, 
-                $bank, 
-                $num, 
+                &$variant,
+                $bank,
+                $num,
                 $account_type
             )
         ),*]

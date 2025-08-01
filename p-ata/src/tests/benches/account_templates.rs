@@ -2,9 +2,12 @@
 //! Account templates for benchmark tests
 
 use {
-    crate::tests::{
-        account_builder::AccountBuilder,
-        test_utils::shared_constants::{NATIVE_LOADER_ID, ONE_SOL},
+    crate::{
+        debug_log,
+        tests::{
+            account_builder::AccountBuilder,
+            test_utils::shared_constants::{NATIVE_LOADER_ID, ONE_SOL},
+        },
     },
     solana_account::Account,
     solana_pubkey::Pubkey,
@@ -264,16 +267,13 @@ impl RecoverAccountSet {
     ///
     /// Used for RecoverMultisig tests
     pub fn with_multisig(mut self, threshold: u8, signers: Vec<Pubkey>) -> Self {
-        #[cfg(feature = "full-debug-logs")]
-        {
-            println!(
-                "🔍 [DEBUG] Setting up multisig with threshold: {}, signers: {}",
-                threshold,
-                signers.len()
-            );
-            for (i, signer) in signers.iter().enumerate() {
-                println!("    Signer {}: {}", i, signer);
-            }
+        debug_log!(
+            "🔍 [DEBUG] Setting up multisig with threshold: {}, signers: {}",
+            threshold,
+            signers.len()
+        );
+        for (i, signer) in signers.iter().enumerate() {
+            debug_log!("    Signer {}: {}", i, signer);
         }
 
         // Replace wallet with multisig account
@@ -300,11 +300,8 @@ impl RecoverAccountSet {
                 .push((*signer, AccountBuilder::system_account(ONE_SOL)));
         }
 
-        #[cfg(feature = "full-debug-logs")]
-        {
-            println!("    Multisig wallet address: {}", self.wallet.0);
-            println!("    Added {} signer accounts", self.multisig_signers.len());
-        }
+        debug_log!("    Multisig wallet address: {}", self.wallet.0);
+        debug_log!("    Added {} signer accounts", self.multisig_signers.len());
 
         self
     }

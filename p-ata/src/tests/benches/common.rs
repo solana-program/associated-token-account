@@ -2,8 +2,8 @@
 
 use {
     crate::tests::{
-        benches::account_templates::StandardAccountSet,
-        setup_mollusk_unified, MolluskAtaSetup, MolluskTokenSetup,
+        benches::account_templates::StandardAccountSet, setup_mollusk_unified, MolluskAtaSetup,
+        MolluskTokenSetup,
     },
     mollusk_svm::Mollusk,
     solana_account::Account,
@@ -209,7 +209,11 @@ impl BenchmarkSetup {
             AtaVariant::SplAta,
             TestBankId::Benchmarks,
             1,
-            [AccountTypeId::Payer, AccountTypeId::Mint, AccountTypeId::Wallet]
+            [
+                AccountTypeId::Payer,
+                AccountTypeId::Mint,
+                AccountTypeId::Wallet
+            ]
         ];
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],

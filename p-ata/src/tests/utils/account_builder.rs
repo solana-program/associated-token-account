@@ -53,8 +53,7 @@ impl AccountBuilder {
         Account {
             lamports: TOKEN_ACCOUNT_RENT_EXEMPT,
             data: {
-                #[cfg(feature = "full-debug-logs")]
-                println!(
+                crate::debug_log!(
                     "🔧 Creating token account data | Mint: {} | Owner: {}",
                     mint.to_string()[0..8].to_string(),
                     owner.to_string()[0..8].to_string()

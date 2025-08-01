@@ -1,50 +1,11 @@
 #![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
+use crate::tests::address_gen::{derive_address_with_bump, is_off_curve};
 #[cfg(any(test, feature = "std"))]
 use {
-    crate::tests::test_utils::setup_mollusk_with_programs,
-    curve25519_dalek::edwards::CompressedEdwardsY,
-    mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
-    solana_program,
+    crate::tests::test_utils::setup_mollusk_with_programs, mollusk_svm::Mollusk,
     solana_pubkey::Pubkey,
-    std::vec::Vec,
 };
-
-/// Manual PDA derivation using the same logic as pinocchio_pubkey::derive_address
-/// This replicates the exact address derivation process for testing purposes
-pub fn derive_address_with_bump(seeds: &[&[u8]], bump: u8, program_id: &Pubkey) -> Pubkey {
-    let mut hasher = solana_program::hash::Hasher::default();
-    for seed in seeds {
-        hasher.hash(seed);
-    }
-    hasher.hash(&[bump]);
-    hasher.hash(program_id.as_ref());
-    hasher.hash(b"ProgramDerivedAddress");
-
-    let hash = hasher.result();
-    Pubkey::from(hash.to_bytes())
-}
-
-/// Simple off-curve check for testing that mirrors the logic in processor.rs
-/// Returns true if the address is off-curve (valid PDA), false if on-curve (invalid PDA)
-pub fn is_off_curve_test(address: &Pubkey) -> bool {
-    #[cfg(any(test, feature = "std"))]
-    {
-        let compressed = CompressedEdwardsY(address.to_bytes());
-        match compressed.decompress() {
-            None => true,                    // invalid encoding → off-curve
-            Some(pt) => pt.is_small_order(), // small-order = off-curve, otherwise on-curve
-        }
-    }
-    #[cfg(not(any(test, feature = "std")))]
-    {
-        // Fallback for when mollusk_svm is not available (e.g., in a CI environment)
-        // This is a placeholder and should ideally be replaced with a proper check
-        // For now, we'll assume any address is off-curve if mollusk_svm is not present
-        // This is a simplification and might need refinement based on actual requirements
-        true
-    }
-}
 
 /// Find a wallet where find_program_address returns the target canonical bump,
 /// meaning all bumps > canonical_bump are on-curve.
@@ -119,7 +80,7 @@ pub fn find_wallet_with_non_canonical_opportunity(
 
             // Check if this lower bump also produces an off-curve address
             // If so, we have a non-canonical scenario: lower_bump is valid but not optimal
-            if is_off_curve_test(&lower_address) {
+            if is_off_curve(&lower_address) {
                 return Some((wallet, owner_mint, nested_mint, canonical_bump, lower_bump));
             }
         }
@@ -161,6 +122,6 @@ mod tests {
         // Test with a known off-curve address (system program ID is typically off-curve)
         let system_program = Pubkey::new_from_array([0u8; 32]);
         // We can't guarantee this specific address, so just test the function doesn't panic
-        let _ = is_off_curve_test(&system_program);
+        let _ = is_off_curve(&system_program);
     }
 }

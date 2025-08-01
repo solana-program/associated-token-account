@@ -1,9 +1,10 @@
 //! Migrated test for idempotent creation functionality using mollusk
 
 use {
+    crate::tests::account_builder::AccountBuilder,
     crate::tests::test_utils::{
-        build_create_ata_instruction, create_mollusk_token_account_data, create_test_mint,
-        setup_mollusk_with_programs, CreateAtaInstructionType,
+        build_create_ata_instruction, create_test_mint, setup_mollusk_with_programs,
+        CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
@@ -369,8 +370,8 @@ fn fail_account_exists_with_wrong_owner() {
 
     // Create a token account at the ATA address but with wrong owner
     let wrong_token_account = {
-        use crate::tests::benches::common::AccountBuilder;
-        let mut account = AccountBuilder::token_account(&token_mint_address, &wrong_owner, 0, &token_program_id);
+        let mut account =
+            AccountBuilder::token_account(&token_mint_address, &wrong_owner, 0, &token_program_id);
         account.lamports = 1_000_000_000;
         account
     };
@@ -434,8 +435,12 @@ fn fail_non_ata() {
     // Create a valid token account but at a non-ATA address
     let token_account_balance = 3_500_880;
     let valid_token_account = {
-        use crate::tests::benches::common::AccountBuilder;
-        let mut account = AccountBuilder::token_account(&token_mint_address, &wallet_address, 0, &token_program_id);
+        let mut account = AccountBuilder::token_account(
+            &token_mint_address,
+            &wallet_address,
+            0,
+            &token_program_id,
+        );
         account.lamports = token_account_balance;
         account
     };

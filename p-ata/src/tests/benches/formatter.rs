@@ -9,7 +9,7 @@ use {
     serde::Serialize,
     std::{
         collections::HashMap,
-        eprintln, format, print, println,
+        eprintln, print, println,
         string::{String, ToString},
         vec,
         vec::Vec,

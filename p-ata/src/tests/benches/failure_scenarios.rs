@@ -1,15 +1,21 @@
 #![cfg(any(test, feature = "std"))]
 
 use {
-    ::pinocchio_ata_program::tests::benches::{
-        account_templates::{self, *},
-        common::{
-            self as common, AccountBuilder, AllProgramIds, AtaImplementation, AtaVariant,
-            BaseTestType, BenchmarkResult, BenchmarkRunner, BenchmarkSetup, ComparisonResult,
-            CompatibilityStatus, TestVariant, NATIVE_LOADER_ID, SYSTEM_PROGRAM_ID,
+    ::pinocchio_ata_program::tests::{
+        address_gen::{random_seeded_pk, structured_pk, structured_pk_multi},
+        NATIVE_LOADER_ID,
+    },
+    ::pinocchio_ata_program::tests::{
+        benches::{
+            account_templates,
+            common::{
+                self as common, AtaImplementation, BaseTestType, BenchmarkResult, BenchmarkRunner,
+                BenchmarkSetup, ComparisonResult, CompatibilityStatus, TestVariant,
+            },
+            common_builders::{self as common_builders, CommonTestCaseBuilder, FailureMode},
+            constants::account_sizes,
         },
-        common_builders::{self as common_builders, CommonTestCaseBuilder, FailureMode},
-        constants::account_sizes,
+        utils::account_builder::AccountBuilder,
     },
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
@@ -17,8 +23,7 @@ use {
     solana_pubkey::Pubkey,
     std::{
         boxed::Box,
-        collections::{BTreeMap, HashMap},
-        eprintln, format, println,
+        format, println,
         string::{String, ToString},
         vec,
         vec::Vec,
@@ -125,7 +130,7 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
         category: TestCategory::AddressDerivationStructure,
         base_test: BaseTestType::Create,
         variant: TestVariant::BASE,
-        failure_mode: FailureMode::MintWrongOwner(SYSTEM_PROGRAM_ID),
+        failure_mode: FailureMode::MintWrongOwner(solana_system_interface::program::id()),
         builder_type: TestBuilderType::Simple,
     },
     FailureTestConfig {
@@ -201,7 +206,9 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
         category: TestCategory::RecoveryOperations,
         base_test: BaseTestType::RecoverMultisig,
         variant: TestVariant::BASE,
-        failure_mode: FailureMode::RecoverMultisigWrongWalletOwner(SYSTEM_PROGRAM_ID),
+        failure_mode: FailureMode::RecoverMultisigWrongWalletOwner(
+            solana_system_interface::program::id(),
+        ),
         builder_type: TestBuilderType::Simple,
     },
     FailureTestConfig {
@@ -234,7 +241,7 @@ static FAILURE_TESTS: &[FailureTestConfig] = &[
         category: TestCategory::AdditionalValidation,
         base_test: BaseTestType::Create,
         variant: TestVariant::BASE,
-        failure_mode: FailureMode::AtaWrongOwner(SYSTEM_PROGRAM_ID),
+        failure_mode: FailureMode::AtaWrongOwner(solana_system_interface::program::id()),
         builder_type: TestBuilderType::Simple,
     },
     FailureTestConfig {
@@ -322,11 +329,10 @@ fn build_base_failure_accounts(
     base_test: BaseTestType,
     variant: TestVariant,
     ata_implementation: &AtaImplementation,
-    token_program_id: &Pubkey,
 ) -> (Pubkey, Pubkey, Pubkey) {
     let test_number = common_builders::calculate_failure_test_number(base_test, variant);
 
-    let payer = common::structured_pk(
+    let payer = structured_pk(
         &ata_implementation.variant,
         common::TestBankId::Failures,
         test_number,
@@ -335,7 +341,7 @@ fn build_base_failure_accounts(
 
     // Use consistent variant for mint and wallet to enable byte-for-byte comparison
     let consistent_variant = &common::AtaVariant::SplAta;
-    let mint = common::structured_pk(
+    let mint = structured_pk(
         consistent_variant,
         common::TestBankId::Failures,
         test_number,
@@ -347,7 +353,7 @@ fn build_base_failure_accounts(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos() as u64;
-    let wallet = common::random_seeded_pk(
+    let wallet = random_seeded_pk(
         consistent_variant,
         common::TestBankId::Failures,
         test_number,
@@ -379,7 +385,7 @@ impl RecoverNestedAccounts {
             TestVariant::BASE,
         );
         let [nested_ata, nested_mint, dest_ata, owner_ata, owner_mint, wallet] =
-            common::structured_pk_multi(
+            structured_pk_multi(
                 &ata_impl.variant,
                 common::TestBankId::Failures,
                 test_number,
@@ -483,7 +489,7 @@ impl FailureTestBuilder {
         ata_impl: &AtaImplementation,
         token_program_id: &Pubkey,
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        let wrong_ata_address = common::structured_pk(
+        let wrong_ata_address = structured_pk(
             &ata_impl.variant,
             common::TestBankId::Failures,
             173,
@@ -574,7 +580,7 @@ impl FailureTestBuilder {
                     TestVariant::BASE,
                 );
                 // Overwrite the nested_ata with a new, different key to force a mismatch.
-                accs.nested_ata = common::structured_pk(
+                accs.nested_ata = structured_pk(
                     &ata_impl.variant,
                     common::TestBankId::Failures,
                     test_number.wrapping_add(10), // Use a distinct offset to guarantee a different address
@@ -599,7 +605,7 @@ impl FailureTestBuilder {
                     TestVariant::BASE,
                 );
                 // Overwrite the dest_ata with a new, different key to force a mismatch.
-                accs.dest_ata = common::structured_pk(
+                accs.dest_ata = structured_pk(
                     &ata_impl.variant,
                     common::TestBankId::Failures,
                     test_number.wrapping_add(11), // Use a distinct offset to guarantee a different address
@@ -645,7 +651,6 @@ impl FailureTestBuilder {
             BaseTestType::CreateIdempotent,
             TestVariant::BASE,
             ata_impl,
-            token_program_id,
         );
 
         log_test_info(
@@ -674,7 +679,7 @@ impl FailureTestBuilder {
                 AccountMeta::new(ata, false),
                 AccountMeta::new_readonly(wallet, false),
                 AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
+                AccountMeta::new_readonly(solana_system_interface::program::id(), false),
                 AccountMeta::new_readonly(*token_program_id, false),
             ],
             data: vec![1u8], // CreateIdempotent instruction
@@ -713,7 +718,7 @@ impl FailureTestBuilder {
                     BaseTestType::CreateIdempotent,
                     TestVariant::BASE,
                 );
-                let wrong_mint = common::structured_pk(
+                let wrong_mint = structured_pk(
                     &ata_impl.variant,
                     common::TestBankId::Failures,
                     test_number.wrapping_add(10),
@@ -727,10 +732,7 @@ impl FailureTestBuilder {
                 }
 
                 // Add the wrong mint account
-                accounts.push((
-                    wrong_mint,
-                    AccountBuilder::mint_account(0, token_program_id, false),
-                ));
+                accounts.push((wrong_mint, AccountBuilder::mint(0, token_program_id)));
             },
         )
     }
@@ -749,7 +751,7 @@ impl FailureTestBuilder {
                     BaseTestType::CreateIdempotent,
                     TestVariant::BASE,
                 );
-                let wrong_owner = common::structured_pk(
+                let wrong_owner = structured_pk(
                     &ata_impl.variant,
                     common::TestBankId::Failures,
                     test_number.wrapping_add(11),
@@ -900,7 +902,7 @@ impl FailureTestBuilder {
             common_builders::calculate_failure_test_number(BaseTestType::Create, TestVariant::BASE);
 
         // Transaction payer (attacker's wallet that can sign)
-        let attacker_wallet = common::structured_pk(
+        let attacker_wallet = structured_pk(
             &ata_impl.variant,
             common::TestBankId::Failures,
             test_number,
@@ -908,14 +910,14 @@ impl FailureTestBuilder {
         );
 
         // Simulate victim's wallet (we don't control this)
-        let victim_wallet = common::structured_pk(
+        let victim_wallet = structured_pk(
             &ata_impl.variant,
             common::TestBankId::Failures,
             test_number.wrapping_add(10),
             common::AccountTypeId::Wallet,
         );
 
-        let victim_mint = common::structured_pk(
+        let victim_mint = structured_pk(
             &ata_impl.variant,
             common::TestBankId::Failures,
             test_number.wrapping_add(1),
@@ -967,7 +969,7 @@ impl FailureTestBuilder {
                 Account {
                     lamports: 5_000_000, // Initial balance - should go to 3_000_000 if exploit succeeds
                     data: vec![],
-                    owner: SYSTEM_PROGRAM_ID,
+                    owner: solana_system_interface::program::id(),
                     executable: false,
                     rent_epoch: 0,
                 },
@@ -978,14 +980,11 @@ impl FailureTestBuilder {
             // The victim's wallet (used as seed in instruction but not for derivation)
             (victim_wallet, AccountBuilder::system_account(0)),
             // Attacker mint
-            (
-                victim_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
+            (victim_mint, AccountBuilder::mint(0, token_program_id)),
             // System program
             (
-                SYSTEM_PROGRAM_ID,
-                AccountBuilder::executable_program(common::NATIVE_LOADER_ID),
+                solana_system_interface::program::id(),
+                AccountBuilder::executable_program(NATIVE_LOADER_ID),
             ),
             // Token program
             (
@@ -1002,7 +1001,7 @@ impl FailureTestBuilder {
                 AccountMeta::new(attacker_ata, false), // associated_token_account (attacker's legitimate ATA)
                 AccountMeta::new_readonly(attacker_wallet, false), // wallet = seed for derivation
                 AccountMeta::new_readonly(victim_mint, false), // attacker's chosen mint
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
+                AccountMeta::new_readonly(solana_system_interface::program::id(), false),
                 AccountMeta::new_readonly(*token_program_id, false),
             ],
             data: vec![0u8, attacker_bump], // Create with bump for attacker's ATA
@@ -1462,11 +1461,7 @@ impl FailureTestRunner {
         std::fs::create_dir_all("benchmark_results").ok();
 
         // Write failure test results
-        if let Err(e) = std::fs::write("benchmark_results/failure_results.json", output) {
-            eprintln!("Failed to write failure results: {}", e);
-        } else {
-            println!("\n🧪 Failure test results written to benchmark_results/failure_results.json");
-        }
+        std::fs::write("benchmark_results/failure_results.json", output).unwrap();
     }
 
     /// Print failure test summary with compatibility analysis
@@ -1650,6 +1645,7 @@ impl FailureTestRunner {
 
 // ================================ MAIN FUNCTION ================================
 
+#[allow(dead_code)]
 fn main() {
     // Completely suppress debug output from Mollusk and Solana runtime
     std::env::set_var("RUST_LOG", "error");

@@ -1,4 +1,3 @@
-// (Removed file-level cfg guard)
 #![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
 // Re-export shared constants to maintain compatibility while using unified values

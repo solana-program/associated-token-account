@@ -1,23 +1,25 @@
-// (Removed file-level cfg guard to ensure this module is always compiled)
 #![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
 use {
-    crate::tests::benches::{account_templates::*, common::*, constants::*},
+    crate::tests::{
+        account_builder::AccountBuilder,
+        address_gen::{
+            derive_address_with_bump, find_optimal_wallet_for_mints, random_seeded_pk,
+            structured_pk,
+        },
+        benches::{account_templates::*, common::*, constants::*},
+    },
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
     solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
-    std::{
-        vec,
-        vec::Vec,
-    },
+    std::vec,
+    std::vec::Vec,
 };
 
 #[cfg(feature = "full-debug-logs")]
-use std::println;
-
-// ======================= CONSOLIDATED TEST CASE BUILDERS =======================
+use std::{println, string::String, string::ToString};
 
 /// Configuration for building test cases
 #[derive(Debug, Clone)]
@@ -263,13 +265,13 @@ impl CommonTestCaseBuilder {
                 special_account_mods: vec![SpecialAccountMod::NestedAta {
                     // No need to explicitly use AtaVariant::Original anymore
                     // structured_pk now automatically uses consistent addresses for mint types
-                    owner_mint: crate::tests::benches::common::structured_pk(
+                    owner_mint: structured_pk(
                         &crate::tests::benches::common::AtaVariant::PAtaLegacy, // Can use any variant now
                         crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
                         crate::tests::benches::common::AccountTypeId::OwnerMint,
                     ),
-                    nested_mint: crate::tests::benches::common::structured_pk(
+                    nested_mint: structured_pk(
                         &crate::tests::benches::common::AtaVariant::PAtaLegacy, // Can use any variant now
                         crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
@@ -289,13 +291,13 @@ impl CommonTestCaseBuilder {
                     SpecialAccountMod::NestedAta {
                         // No need to explicitly use AtaVariant::Original anymore
                         // structured_pk now automatically uses consistent addresses for mint types
-                        owner_mint: crate::tests::benches::common::structured_pk(
+                        owner_mint: structured_pk(
                             &crate::tests::benches::common::AtaVariant::PAtaLegacy, // Can use any variant now
                             crate::tests::benches::common::TestBankId::Benchmarks,
                             base_test as u8,
                             crate::tests::benches::common::AccountTypeId::OwnerMint,
                         ),
-                        nested_mint: crate::tests::benches::common::structured_pk(
+                        nested_mint: structured_pk(
                             &crate::tests::benches::common::AtaVariant::PAtaLegacy, // Can use any variant now
                             crate::tests::benches::common::TestBankId::Benchmarks,
                             base_test as u8,
@@ -305,19 +307,19 @@ impl CommonTestCaseBuilder {
                     SpecialAccountMod::MultisigWallet {
                         threshold: 2,
                         signers: vec![
-                            crate::tests::benches::common::structured_pk(
+                            structured_pk(
                                 &crate::tests::benches::common::AtaVariant::SplAta,
                                 crate::tests::benches::common::TestBankId::Benchmarks,
                                 base_test as u8,
                                 crate::tests::benches::common::AccountTypeId::Signer1,
                             ),
-                            crate::tests::benches::common::structured_pk(
+                            structured_pk(
                                 &crate::tests::benches::common::AtaVariant::SplAta,
                                 crate::tests::benches::common::TestBankId::Benchmarks,
                                 base_test as u8,
                                 crate::tests::benches::common::AccountTypeId::Signer2,
                             ),
-                            crate::tests::benches::common::structured_pk(
+                            structured_pk(
                                 &crate::tests::benches::common::AtaVariant::SplAta,
                                 crate::tests::benches::common::TestBankId::Benchmarks,
                                 base_test as u8,
@@ -336,19 +338,19 @@ impl CommonTestCaseBuilder {
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![SpecialAccountMod::FixedAddresses {
-                    payer: crate::tests::benches::common::structured_pk(
+                    payer: structured_pk(
                         &crate::tests::benches::common::AtaVariant::SplAta,
                         crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
                         crate::tests::benches::common::AccountTypeId::Payer,
                     ),
-                    wallet: crate::tests::benches::common::structured_pk(
+                    wallet: structured_pk(
                         &crate::tests::benches::common::AtaVariant::SplAta,
                         crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
                         crate::tests::benches::common::AccountTypeId::Wallet,
                     ),
-                    mint: crate::tests::benches::common::structured_pk(
+                    mint: structured_pk(
                         &crate::tests::benches::common::AtaVariant::SplAta,
                         crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
@@ -435,13 +437,12 @@ impl CommonTestCaseBuilder {
                     let mut attempt_entropy = search_entropy;
                     while {
                         // 1. Find wallet optimal for Owner ATA and Destination ATA
-                        let candidate_wallet =
-                            crate::tests::benches::common::find_optimal_wallet_for_mints(
-                                &config.token_program,
-                                &[*owner_mint, *nested_mint],
-                                &ata_program_ids[..],
-                                attempt_entropy,
-                            );
+                        let candidate_wallet = find_optimal_wallet_for_mints(
+                            &config.token_program,
+                            &[*owner_mint, *nested_mint],
+                            &ata_program_ids[..],
+                            attempt_entropy,
+                        );
 
                         // 2. Check if Nested ATA also has bump 255 for all programs
                         let mut all_nested_optimal = true;
@@ -497,7 +498,7 @@ impl CommonTestCaseBuilder {
                     all_implementations.pata_legacy_impl.program_id,
                     all_implementations.pata_prefunded_impl.program_id,
                 ];
-                wallet = crate::tests::benches::common::find_optimal_wallet_for_mints(
+                wallet = find_optimal_wallet_for_mints(
                     &config.token_program,
                     &[mint],
                     &ata_program_ids[..],
@@ -570,14 +571,28 @@ impl CommonTestCaseBuilder {
             )
         } else {
             // Standard tests: find the correct bump for the random wallet
-            Pubkey::find_program_address(
-                &[
+            // Special handling for InvalidBumpValue failure mode
+            if let Some(FailureMode::InvalidBumpValue(invalid_bump)) = &config.failure_mode {
+                // For InvalidBumpValue tests, derive address using the invalid bump
+                let seeds = &[
                     wallet.as_ref(),
                     config.token_program.as_ref(),
                     mint.as_ref(),
-                ],
-                &derivation_program_id,
-            )
+                ];
+                let invalid_address =
+                    derive_address_with_bump(seeds, *invalid_bump, &derivation_program_id);
+                (invalid_address, *invalid_bump)
+            } else {
+                // Normal case: find the canonical bump
+                Pubkey::find_program_address(
+                    &[
+                        wallet.as_ref(),
+                        config.token_program.as_ref(),
+                        mint.as_ref(),
+                    ],
+                    &derivation_program_id,
+                )
+            }
         };
 
         let mut accounts = Self::build_accounts(
@@ -591,7 +606,12 @@ impl CommonTestCaseBuilder {
         );
         let mut ix = Self::build_instruction(&config, variant, ata_implementation, &accounts, bump);
 
+        #[cfg(feature = "full-debug-logs")]
+        println!("🐛 [DEBUG] Built instruction with data: {:?}", ix.data);
+
         if let Some(failure_mode) = &config.failure_mode {
+            #[cfg(feature = "full-debug-logs")]
+            println!("🐛 [DEBUG] Applying failure mode: {:?}", failure_mode);
             Self::apply_failure_mode(
                 failure_mode,
                 &mut ix,
@@ -633,14 +653,14 @@ impl CommonTestCaseBuilder {
         // Use consistent variant for mint and wallet to enable byte-for-byte comparison
         let consistent_variant = &crate::tests::benches::common::AtaVariant::SplAta;
 
-        let payer = crate::tests::benches::common::structured_pk(
+        let payer = structured_pk(
             consistent_variant,
             test_bank,
             test_number,
             crate::tests::benches::common::AccountTypeId::Payer,
         );
 
-        let mint = crate::tests::benches::common::structured_pk(
+        let mint = structured_pk(
             consistent_variant,
             test_bank,
             test_number,
@@ -670,7 +690,7 @@ impl CommonTestCaseBuilder {
             // For nested tests, use random seeded pubkey
             if matches!(config.base_test, BaseTestType::RecoverMultisig) {
                 // Generate deterministic multisig wallet address using same base parameters as signers
-                crate::tests::benches::common::structured_pk(
+                structured_pk(
                     consistent_variant,
                     test_bank,
                     test_number,
@@ -678,7 +698,7 @@ impl CommonTestCaseBuilder {
                 )
             } else {
                 // Use random seeded pubkey for recover nested tests
-                crate::tests::benches::common::random_seeded_pk(
+                random_seeded_pk(
                     consistent_variant,
                     test_bank,
                     test_number,
@@ -688,7 +708,7 @@ impl CommonTestCaseBuilder {
                 )
             }
         } else if matches!(config.base_test, BaseTestType::WorstCase) {
-            crate::tests::benches::common::structured_pk(
+            structured_pk(
                 consistent_variant,
                 test_bank,
                 test_number,
@@ -696,7 +716,7 @@ impl CommonTestCaseBuilder {
             )
         } else {
             // Use random seeded pubkey for standard tests - optimal bump logic will be added later
-            crate::tests::benches::common::random_seeded_pk(
+            random_seeded_pk(
                 consistent_variant,
                 test_bank,
                 test_number,
@@ -1010,7 +1030,9 @@ impl CommonTestCaseBuilder {
     ) -> Vec<u8> {
         // Delegate to shared encoder for standard Create / CreateIdempotent cases to avoid duplicate logic.
         if config.instruction_discriminator <= 1 {
-            use crate::tests::test_utils::{CreateAtaInstructionType, encode_create_ata_instruction_data};
+            use crate::tests::test_utils::{
+                encode_create_ata_instruction_data, CreateAtaInstructionType,
+            };
             // Compute optional account length when token_account_len_arg is requested.
             let account_len_opt: Option<u16> = if variant.token_account_len_arg {
                 if config.token_program
@@ -1020,13 +1042,14 @@ impl CommonTestCaseBuilder {
                 {
                     // Token-2022 path
                     if matches!(config.base_test, BaseTestType::CreateExtended) {
-                        let account_extensions = ExtensionType::get_required_init_account_extensions(&[
-                            ExtensionType::TransferFeeConfig,
-                            ExtensionType::NonTransferable,
-                            ExtensionType::TransferHook,
-                            ExtensionType::DefaultAccountState,
-                            ExtensionType::MetadataPointer,
-                        ]);
+                        let account_extensions =
+                            ExtensionType::get_required_init_account_extensions(&[
+                                ExtensionType::TransferFeeConfig,
+                                ExtensionType::NonTransferable,
+                                ExtensionType::TransferHook,
+                                ExtensionType::DefaultAccountState,
+                                ExtensionType::MetadataPointer,
+                            ]);
                         Some(
                             ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
                                 &account_extensions,
@@ -1065,7 +1088,16 @@ impl CommonTestCaseBuilder {
                     bump: if variant.bump_arg { Some(bump) } else { None },
                 }
             };
-            return encode_create_ata_instruction_data(&instruction_type);
+
+            #[cfg(feature = "full-debug-logs")]
+            println!(
+                "🐛 [DEBUG] Early return path - building instruction with instruction_type: {:?}",
+                instruction_type
+            );
+            let data = encode_create_ata_instruction_data(&instruction_type);
+            #[cfg(feature = "full-debug-logs")]
+            println!("🐛 [DEBUG] Early return path - encoded data: {:?}", data);
+            return data;
         }
 
         let mut data = vec![config.instruction_discriminator];
@@ -1315,7 +1347,7 @@ impl CommonTestCaseBuilder {
                 FailureInstructionBuilder::replace_account_everywhere(
                     ix,
                     accounts,
-                    SYSTEM_PROGRAM_ID,
+                    solana_system_interface::program::id(),
                     *wrong_id,
                 );
             }
@@ -1354,7 +1386,17 @@ impl CommonTestCaseBuilder {
                 FailureInstructionBuilder::set_discriminator(ix, *disc);
             }
             FailureMode::InvalidBumpValue(invalid_bump) => {
+                #[cfg(feature = "full-debug-logs")]
+                println!(
+                    "🐛 [DEBUG] Applying InvalidBumpValue({}) to instruction. Data before: {:?}",
+                    invalid_bump, ix.data
+                );
                 FailureInstructionBuilder::set_bump_value(ix, *invalid_bump);
+                #[cfg(feature = "full-debug-logs")]
+                println!(
+                    "🐛 [DEBUG] InvalidBumpValue applied. Data after: {:?}",
+                    ix.data
+                );
             }
 
             // Complex recovery modifications
@@ -1471,4 +1513,3 @@ pub fn calculate_failure_test_number(base_test: BaseTestType, variant: TestVaria
     let failure_id = FAILURE_COUNTER.fetch_add(1, Ordering::SeqCst);
     base + variant_offset + (failure_id % 8)
 }
-

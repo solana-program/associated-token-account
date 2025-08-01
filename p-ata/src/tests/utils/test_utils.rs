@@ -1,40 +1,17 @@
 #![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
-use {
-    pinocchio::pubkey::Pubkey,
-    pinocchio_pubkey::pubkey,
-    spl_token_2022::{
-        extension::{
-            default_account_state::DefaultAccountState, group_pointer::GroupPointer,
-            interest_bearing_mint::InterestBearingConfig, metadata_pointer::MetadataPointer,
-            mint_close_authority::MintCloseAuthority, non_transferable::NonTransferable,
-            pausable::PausableConfig, permanent_delegate::PermanentDelegate,
-            transfer_fee::TransferFeeConfig, transfer_hook::TransferHook, ExtensionType,
-            PodStateWithExtensionsMut,
-        },
-        pod::PodMint,
-    },
-    spl_token_group_interface::state::{TokenGroup, TokenGroupMember},
-    spl_token_interface::state::{
-        account::Account as TokenAccount, multisig::Multisig, Transmutable,
-    },
-    spl_token_metadata_interface::state::TokenMetadata,
-};
+use {pinocchio::pubkey::Pubkey, pinocchio_pubkey::pubkey};
 
 #[cfg(any(test, feature = "std"))]
-use std::{string::String, vec, vec::Vec};
-
-// ================================ SHARED CONSTANTS ================================
+use std::{vec, vec::Vec};
 
 /// Shared constants that are used across both tests and benchmarks
 pub mod shared_constants {
-    use pinocchio::pubkey::Pubkey;
-    use pinocchio_pubkey::pubkey;
     #[cfg(feature = "full-debug-logs")]
     use std::println;
 
-    #[cfg(any(test, feature = "std"))]
     use solana_pubkey::Pubkey as SolanaPubkey;
+    use {pinocchio::pubkey::Pubkey, pinocchio_pubkey::pubkey};
 
     /// Standard SPL token account size (fixed for all SPL token accounts)
     pub const TOKEN_ACCOUNT_SIZE: usize = 165;
@@ -61,12 +38,9 @@ pub mod shared_constants {
     pub const SPL_TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 }
 
-// ================================ UNIFIED ACCOUNT CREATION ================================
-
 /// Unified account data creation that works with both Pubkey types
 pub mod unified_builders {
     use super::shared_constants::*;
-    use solana_pubkey::Pubkey as SolanaPubkey;
     use std::{vec, vec::Vec};
 
     /// Create token account data that works with any pubkey type
@@ -170,7 +144,6 @@ pub mod unified_builders {
     }
 }
 
-// Shared constants for mollusk testing
 pub use shared_constants::NATIVE_LOADER_ID;
 
 /// Matches the pinocchio Account struct.
@@ -396,6 +369,7 @@ pub fn create_mollusk_base_accounts_with_token_and_wallet(
 }
 
 /// The type of ATA creation instruction to build.
+#[derive(Debug)]
 pub enum CreateAtaInstructionType {
     /// The standard `Create` instruction, which can optionally include a bump seed and account length.
     Create {
@@ -431,7 +405,6 @@ pub fn encode_create_ata_instruction_data(instruction_type: &CreateAtaInstructio
         }
     }
 }
-
 
 /// Build a create associated token account instruction with a given discriminator
 #[cfg(any(test, feature = "std"))]

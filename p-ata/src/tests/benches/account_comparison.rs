@@ -10,7 +10,6 @@ use {
         collections::HashMap,
         format,
         string::{String, ToString},
-        vec,
         vec::Vec,
     },
 };

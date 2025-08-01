@@ -1,15 +1,11 @@
 #![cfg(any(test, feature = "std"))]
 
-// Now that helpers are available via #[cfg(any(test, feature = "std"))],
-// we can use the library crate directly without re-exports.
-
 use {
     ::pinocchio_ata_program::tests::benches::{
         account_comparison::{AccountComparisonService, ComparisonFormatter},
         common::{
-            self as common, AccountBuilder, AllProgramIds, AtaImplementation, AtaVariant,
-            BaseTestType, BenchmarkResult, BenchmarkRunner, BenchmarkSetup, ComparisonResult,
-            CompatibilityStatus, TestVariant, NATIVE_LOADER_ID, SYSTEM_PROGRAM_ID,
+            self as common, AtaImplementation, AtaVariant, BaseTestType, BenchmarkSetup,
+            ComparisonResult, TestVariant,
         },
         common_builders::CommonTestCaseBuilder,
         formatter,
@@ -22,7 +18,6 @@ use {
     std::{
         format, println,
         string::{String, ToString},
-        vec,
         vec::Vec,
     },
 };
@@ -497,6 +492,7 @@ impl PerformanceTestOrchestrator {
 
 // ================================= MAIN =====================================
 
+#[allow(dead_code)]
 fn main() {
     // Get number of iterations from environment or arguments
     let iterations = get_iterations();

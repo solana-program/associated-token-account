@@ -7,7 +7,7 @@ use {
         setup_mollusk_with_programs, CreateAtaInstructionType, MolluskAtaSetup, MolluskTokenSetup,
         NATIVE_LOADER_ID,
     },
-    mollusk_svm::{result::Check, Mollusk},
+    mollusk_svm::result::Check,
     solana_instruction::{AccountMeta, Instruction},
     solana_program::program_error::ProgramError,
     solana_pubkey::Pubkey,

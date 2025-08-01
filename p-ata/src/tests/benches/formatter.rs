@@ -16,17 +16,6 @@ use {
     },
 };
 
-#[macro_export]
-macro_rules! print_cell {
-    ($value:expr) => {
-        if $value > 0 {
-            print!(" | {:>15}", $value);
-        } else {
-            print!(" | {:>15}", "");
-        }
-    };
-}
-
 /// Returns the variant that represents "all optimizations enabled" for a given base test.
 pub fn get_all_optimizations_variant(base_test: BaseTestType) -> Option<TestVariant> {
     match base_test {
@@ -47,39 +36,41 @@ pub fn print_matrix_results(
     matrix_results: &HashMap<BaseTestType, HashMap<TestVariant, ComparisonResult>>,
     display_variants: &[TestVariant],
 ) {
-    // Build column set: SPL-ATA (base), requested P-ATA variants, plus an "all opt" column
-    let all_opt_variant = TestVariant {
+    let mut columns = vec![TestVariant::BASE];
+    columns.extend_from_slice(display_variants);
+    columns.push(TestVariant {
         rent_arg: true,
         bump_arg: true,
         token_account_len_arg: true,
-    };
-
-    let mut columns = vec![TestVariant::BASE];
-    columns.extend_from_slice(display_variants);
-    columns.push(all_opt_variant);
+    });
 
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
         .set_content_arrangement(ContentArrangement::Dynamic);
 
-    // Header row
-    let header: Vec<String> = std::iter::once("Test".to_string())
-        .chain(columns.iter().enumerate().map(|(i, v)| {
-            if i == 0 {
-                "SPL ATA".to_string()
-            } else {
-                v.column_name().to_string()
-            }
-        }))
-        .collect();
-    table.set_header(header);
+    table.set_header(
+        std::iter::once("Test".to_string())
+            .chain(columns.iter().enumerate().map(|(i, v)| {
+                if i == 0 {
+                    "SPL ATA".to_string()
+                } else {
+                    v.column_name().to_string()
+                }
+            }))
+            .collect::<Vec<String>>(),
+    );
 
     for (base_test, row) in matrix_results {
         let mut cells = Vec::with_capacity(columns.len() + 1);
         cells.push(base_test.to_string());
         for (i, variant) in columns.iter().enumerate() {
-            let lookup = if *variant == all_opt_variant {
+            let lookup = if *variant
+                == (TestVariant {
+                    rent_arg: true,
+                    bump_arg: true,
+                    token_account_len_arg: true,
+                }) {
                 get_all_optimizations_variant(*base_test)
             } else {
                 Some(*variant)
@@ -91,12 +82,10 @@ pub fn print_matrix_results(
                     } else {
                         0
                     }
+                } else if result.p_ata.success && result.p_ata.compute_units > 0 {
+                    result.p_ata.compute_units
                 } else {
-                    if result.p_ata.success && result.p_ata.compute_units > 0 {
-                        result.p_ata.compute_units
-                    } else {
-                        0
-                    }
+                    0
                 }
             });
             cells.push(cu.map(|v| v.to_string()).unwrap_or_default());
@@ -108,26 +97,12 @@ pub fn print_matrix_results(
     println!("{}", table);
 }
 
-/// Print detailed per-test comparison output.
-pub fn print_test_results(result: &ComparisonResult, show_debug: bool) {
+/// Print the compatibility status message for a test result
+fn print_compatibility_status(result: &ComparisonResult) {
     use super::common;
-
-    print!("--- Testing {} --- ", result.test_name);
-
-    let needs_details = matches!(
-        result.compatibility_status,
-        common::CompatibilityStatus::AccountMismatch
-            | common::CompatibilityStatus::IncompatibleSuccess
-            | common::CompatibilityStatus::IncompatibleFailure
-    );
-
     match result.compatibility_status {
-        common::CompatibilityStatus::Identical => {
-            println!("✅ Byte-for-Byte Identical");
-        }
-        common::CompatibilityStatus::BothRejected => {
-            println!("❌ Both failed (compatible)");
-        }
+        common::CompatibilityStatus::Identical => println!("✅ Byte-for-Byte Identical"),
+        common::CompatibilityStatus::BothRejected => println!("❌ Both failed (compatible)"),
         common::CompatibilityStatus::AccountMismatch => {
             println!("🔴 ACCOUNT STATE MISMATCH!");
             println!("      Both succeeded but produced different account states");
@@ -144,10 +119,24 @@ pub fn print_test_results(result: &ComparisonResult, show_debug: bool) {
                 println!("      SPL ATA succeeded where P-ATA failed");
             }
         }
-        common::CompatibilityStatus::OptimizedBehavior => {
-            println!("🚀 P-ATA optimization working");
-        }
+        common::CompatibilityStatus::OptimizedBehavior => println!("🚀 P-ATA optimization working"),
     }
+}
+
+/// Print detailed per-test comparison output.
+pub fn print_test_results(result: &ComparisonResult, show_debug: bool) {
+    use super::common;
+
+    print!("--- Testing {} --- ", result.test_name);
+
+    let needs_details = matches!(
+        result.compatibility_status,
+        common::CompatibilityStatus::AccountMismatch
+            | common::CompatibilityStatus::IncompatibleSuccess
+            | common::CompatibilityStatus::IncompatibleFailure
+    );
+
+    print_compatibility_status(result);
 
     if needs_details || show_debug {
         println!(
@@ -169,27 +158,17 @@ pub fn print_test_results(result: &ComparisonResult, show_debug: bool) {
             }
         );
 
-        if !result.p_ata.success {
-            if let Some(ref err) = result.p_ata.error_message {
-                println!("      P-ATA Error: {}", err);
+        for (label, result_data) in [("P-ATA", &result.p_ata), ("SPL ATA", &result.spl_ata)] {
+            if !result_data.success {
+                if let Some(ref err) = result_data.error_message {
+                    println!("      {} Error: {}", label, err);
+                }
             }
-        }
-        if !result.spl_ata.success {
-            if let Some(ref err) = result.spl_ata.error_message {
-                println!("      SPL ATA Error: {}", err);
-            }
-        }
-
-        if !result.p_ata.captured_output.is_empty() {
-            println!("      P-ATA Debug Output:");
-            for line in result.p_ata.captured_output.lines() {
-                println!("        {}", line);
-            }
-        }
-        if !result.spl_ata.captured_output.is_empty() {
-            println!("      SPL ATA Debug Output:");
-            for line in result.spl_ata.captured_output.lines() {
-                println!("        {}", line);
+            if !result_data.captured_output.is_empty() {
+                println!("      {} Debug Output:", label);
+                for line in result_data.captured_output.lines() {
+                    println!("        {}", line);
+                }
             }
         }
     }
@@ -259,14 +238,11 @@ pub fn print_compatibility_summary(all_results: &[ComparisonResult]) {
         println!("\n  Detailed Issues:");
         for r in &concerning {
             println!("    {} - {:?}", r.test_name, r.compatibility_status);
-            if !r.p_ata.success {
-                if let Some(ref e) = r.p_ata.error_message {
-                    println!("      P-ATA Error: {}", e);
-                }
-            }
-            if !r.spl_ata.success {
-                if let Some(ref e) = r.spl_ata.error_message {
-                    println!("      SPL ATA Error: {}", e);
+            for (label, result_data) in [("P-ATA", &r.p_ata), ("SPL ATA", &r.spl_ata)] {
+                if !result_data.success {
+                    if let Some(ref e) = result_data.error_message {
+                        println!("      {} Error: {}", label, e);
+                    }
                 }
             }
         }

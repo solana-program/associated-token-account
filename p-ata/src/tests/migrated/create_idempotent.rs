@@ -1,4 +1,5 @@
 //! Migrated test for idempotent creation functionality using mollusk
+#![cfg(test)]
 
 use {
     crate::tests::account_builder::AccountBuilder,

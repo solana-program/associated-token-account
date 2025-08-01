@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 use {
     crate::processor::is_off_curve, pinocchio::pubkey::Pubkey, solana_keypair::Keypair,
     solana_program::pubkey::Pubkey as SolanaPubkey, solana_signer::Signer,

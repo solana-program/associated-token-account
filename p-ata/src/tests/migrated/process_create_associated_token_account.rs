@@ -1,4 +1,5 @@
 //! Migrated test for process_create_associated_token_account functionality using mollusk
+#![cfg(test)]
 
 use {
     crate::tests::test_utils::{

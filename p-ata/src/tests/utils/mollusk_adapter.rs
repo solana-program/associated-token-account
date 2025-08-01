@@ -20,45 +20,37 @@ use {
         transaction::{Transaction, TransactionError},
     },
     spl_associated_token_account, spl_associated_token_account_client,
-    std::collections::BTreeMap,
+    std::{collections::BTreeMap, vec::Vec},
 };
 
 #[allow(dead_code, clippy::all, unsafe_code)]
-// This function is the primary bridge between the solana_program_test environment
-// and the pinocchio-based p-ata program. `unsafe` relies on the assumption that
-// the memory layouts of `solana_program::AccountInfo` and
-// `pinocchio::account_info::AccountInfo` are identical.
+// Bridge between solana_program_test and pinocchio-based p-ata program.
+// `unsafe` assumes identical memory layouts of AccountInfo types.
 fn process_instruction(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> Result<(), ProgramError> {
-    // This wrapper allows us to test SPL ATA instructions against our p-ata implementation
-
-    // Convert program_id to pinocchio format
     let pinocchio_program_id = pinocchio::pubkey::Pubkey::from(program_id.to_bytes());
-
-    // Call the pinocchio process_instruction with simple transmute (layouts are identical)
     let pinocchio_accounts: &[pinocchio::account_info::AccountInfo] =
         unsafe { core::mem::transmute(accounts) };
 
-    match pinocchio_process_instruction(&pinocchio_program_id, pinocchio_accounts, instruction_data)
-    {
-        Ok(()) => Ok(()),
-        Err(pinocchio::program_error::ProgramError::NotEnoughAccountKeys) => {
-            Err(ProgramError::NotEnoughAccountKeys)
-        }
-        Err(pinocchio::program_error::ProgramError::InvalidAccountData) => {
-            Err(ProgramError::InvalidAccountData)
-        }
-        Err(pinocchio::program_error::ProgramError::InvalidArgument) => {
-            Err(ProgramError::InvalidArgument)
-        }
-        Err(pinocchio::program_error::ProgramError::InvalidInstructionData) => {
-            Err(ProgramError::InvalidInstructionData)
-        }
-        Err(_) => Err(ProgramError::Custom(1)),
-    }
+    pinocchio_process_instruction(&pinocchio_program_id, pinocchio_accounts, instruction_data)
+        .map_err(|err| match err {
+            pinocchio::program_error::ProgramError::NotEnoughAccountKeys => {
+                ProgramError::NotEnoughAccountKeys
+            }
+            pinocchio::program_error::ProgramError::InvalidAccountData => {
+                ProgramError::InvalidAccountData
+            }
+            pinocchio::program_error::ProgramError::InvalidArgument => {
+                ProgramError::InvalidArgument
+            }
+            pinocchio::program_error::ProgramError::InvalidInstructionData => {
+                ProgramError::InvalidInstructionData
+            }
+            _ => ProgramError::Custom(1),
+        })
 }
 
 #[allow(dead_code)]
@@ -86,70 +78,53 @@ impl MolluskBanksClient {
         &self,
         transaction: Transaction,
     ) -> Result<(), BanksClientError> {
-        // Process each instruction in the transaction through Mollusk
         for instruction in &transaction.message.instructions {
             let program_id =
                 transaction.message.account_keys[instruction.program_id_index as usize];
 
-            // Build the instruction with proper accounts
-            let mut instruction_accounts = std::vec::Vec::new();
-            for &account_index in &instruction.accounts {
-                let account_key = transaction.message.account_keys[account_index as usize];
-                let account = self
-                    .accounts
-                    .borrow()
-                    .get(&account_key)
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        // Create a default account if it doesn't exist
-                        Account::new(0, 0, &solana_sdk::system_program::id())
-                    });
-                instruction_accounts.push((account_key, account));
-            }
+            let instruction_accounts: Vec<_> = instruction
+                .accounts
+                .iter()
+                .map(|&account_index| {
+                    let account_key = transaction.message.account_keys[account_index as usize];
+                    let account = self
+                        .accounts
+                        .borrow()
+                        .get(&account_key)
+                        .cloned()
+                        .unwrap_or_else(|| Account::new(0, 0, &solana_sdk::system_program::id()));
+                    (account_key, account)
+                })
+                .collect();
 
-            // Create the instruction for Mollusk with proper account meta flags
-            let mut mollusk_accounts = std::vec::Vec::new();
-            for &account_index in &instruction.accounts {
-                let account_key = transaction.message.account_keys[account_index as usize];
+            let header = &transaction.message.header;
+            let writable_signer_end = header.num_required_signatures as usize
+                - header.num_readonly_signed_accounts as usize;
+            let all_signers_end = header.num_required_signatures as usize;
+            let writable_nonsigner_end = transaction.message.account_keys.len()
+                - header.num_readonly_unsigned_accounts as usize;
 
-                // Determine if this account is a signer
-                let is_signer = if (account_index as usize)
-                    < transaction.message.header.num_required_signatures as usize
-                {
-                    true
-                } else {
-                    false
-                };
+            let mollusk_accounts: Vec<_> = instruction
+                .accounts
+                .iter()
+                .map(|&account_index| {
+                    let account_key = transaction.message.account_keys[account_index as usize];
+                    let account_idx = account_index as usize;
+                    let is_signer = account_idx < header.num_required_signatures as usize;
+                    let is_writable = match account_idx {
+                        idx if idx < writable_signer_end => true,
+                        idx if idx < all_signers_end => false,
+                        idx if idx < writable_nonsigner_end => true,
+                        _ => false,
+                    };
 
-                // Determine if this account is writable
-                let is_writable = if (account_index as usize)
-                    < (transaction.message.header.num_required_signatures as usize
-                        - transaction.message.header.num_readonly_signed_accounts as usize)
-                {
-                    true // Writable signer
-                } else if (account_index as usize)
-                    >= transaction.message.header.num_required_signatures as usize
-                    && (account_index as usize)
-                        < (transaction.message.account_keys.len()
-                            - transaction.message.header.num_readonly_unsigned_accounts as usize)
-                {
-                    true // Writable non-signer
-                } else {
-                    false // Read-only
-                };
-
-                if is_writable {
-                    mollusk_accounts.push(solana_sdk::instruction::AccountMeta::new(
-                        account_key,
-                        is_signer,
-                    ));
-                } else {
-                    mollusk_accounts.push(solana_sdk::instruction::AccountMeta::new_readonly(
-                        account_key,
-                        is_signer,
-                    ));
-                }
-            }
+                    if is_writable {
+                        solana_sdk::instruction::AccountMeta::new(account_key, is_signer)
+                    } else {
+                        solana_sdk::instruction::AccountMeta::new_readonly(account_key, is_signer)
+                    }
+                })
+                .collect();
 
             let mollusk_instruction = solana_sdk::instruction::Instruction {
                 program_id,
@@ -157,28 +132,21 @@ impl MolluskBanksClient {
                 data: instruction.data.clone(),
             };
 
-            // Process the instruction through Mollusk
             let result = self
                 .mollusk
                 .process_instruction(&mollusk_instruction, &instruction_accounts);
 
-            // Update our account tracking with the results
             for (pubkey, account) in result.resulting_accounts {
                 self.accounts.borrow_mut().insert(pubkey, account);
             }
 
-            // Check if the instruction failed
             match result.program_result {
                 mollusk_svm::result::ProgramResult::Success => {
-                    // Handle special case for recover_nested: delete the nested account
+                    // Handle recover_nested: delete the nested account (Mollusk keeps closed accounts)
                     if mollusk_instruction.program_id == spl_associated_token_account::id()
-                        && mollusk_instruction.data.len() > 0
-                        && mollusk_instruction.data[0] == 2
+                        && mollusk_instruction.data.get(0) == Some(&2)
                     {
-                        // This is a successful recover_nested instruction
-                        // The nested account (first account) should be deleted
-                        // (Mollusk keeps the closed account)
-                        if let Some(nested_account_key) = mollusk_instruction.accounts.get(0) {
+                        if let Some(nested_account_key) = mollusk_instruction.accounts.first() {
                             self.accounts
                                 .borrow_mut()
                                 .remove(&nested_account_key.pubkey);
@@ -186,7 +154,6 @@ impl MolluskBanksClient {
                     }
                 }
                 mollusk_svm::result::ProgramResult::Failure(err) => {
-                    // Convert ProgramError to InstructionError with custom mapping
                     let instruction_error =
                         map_mollusk_error_to_original(&mollusk_instruction, err);
                     return Err(BanksClientError::TransactionError(
@@ -194,13 +161,10 @@ impl MolluskBanksClient {
                     ));
                 }
                 mollusk_svm::result::ProgramResult::UnknownError(_) => {
-                    // Map UnknownError to the appropriate error based on context
                     let instruction_error = if mollusk_instruction.program_id
                         == spl_associated_token_account::id()
-                        && mollusk_instruction.data.len() > 0
-                        && mollusk_instruction.data[0] == 2
+                        && mollusk_instruction.data.get(0) == Some(&2)
                     {
-                        // For recover_nested, UnknownError usually means wrong token program
                         InstructionError::IllegalOwner
                     } else {
                         InstructionError::ProgramFailedToComplete
@@ -219,7 +183,6 @@ impl MolluskBanksClient {
         &self,
         pubkey: Pubkey,
     ) -> Result<Option<Account>, solana_program::program_error::ProgramError> {
-        // Return the account if it exists in our tracking
         Ok(self.accounts.borrow().get(&pubkey).cloned())
     }
 
@@ -227,7 +190,6 @@ impl MolluskBanksClient {
         &self,
         pubkey: Pubkey,
     ) -> Result<u64, solana_program::program_error::ProgramError> {
-        // Return the account balance if it exists, otherwise 0
         Ok(self
             .accounts
             .borrow()
@@ -240,7 +202,6 @@ impl MolluskBanksClient {
         &self,
         _previous_blockhash: &Hash,
     ) -> Result<Hash, solana_program::program_error::ProgramError> {
-        // Return a new mock blockhash
         Ok(Hash::new_unique())
     }
 }
@@ -272,18 +233,14 @@ impl MolluskProgramTest {
 
     pub async fn start(self) -> (MolluskBanksClient, Keypair, Hash) {
         let payer = Keypair::new();
-        let recent_blockhash = Hash::default();
-
         let mut accounts = self.accounts;
 
-        // Add the payer account
+        // Add required accounts
         accounts.insert(
             payer.pubkey(),
             Account::new(1_000_000_000, 0, &solana_sdk::system_program::id()),
         );
 
-        // Add the token mint account with real mint data from fixture file
-        // (Same approach as the original program_test_2022)
         let mint_data = std::fs::read("../program/tests/fixtures/token-mint-data.bin")
             .expect("Failed to read token mint data");
         accounts.insert(
@@ -297,21 +254,16 @@ impl MolluskProgramTest {
             },
         );
 
-        // Add system program
         accounts.insert(
             solana_sdk::system_program::id(),
             Account::new(0, 0, &solana_sdk::native_loader::id()),
         );
-
-        // Add token program
         accounts.insert(
             self.token_program_id,
             Account::new(0, 0, &loader_keys::LOADER_V3),
         );
 
-        // Add rent sysvar account so token program can access rent exemption info
-        let rent = self.mollusk.sysvars.rent.clone();
-        let rent_data = bincode::serialize(&rent).expect("serialize rent");
+        let rent_data = bincode::serialize(&self.mollusk.sysvars.rent).expect("serialize rent");
         accounts.insert(
             solana_program::sysvar::rent::id(),
             Account {
@@ -323,12 +275,14 @@ impl MolluskProgramTest {
             },
         );
 
-        let banks_client = MolluskBanksClient {
-            mollusk: self.mollusk,
-            accounts: RefCell::new(accounts),
-        };
-
-        (banks_client, payer, recent_blockhash)
+        (
+            MolluskBanksClient {
+                mollusk: self.mollusk,
+                accounts: RefCell::new(accounts),
+            },
+            payer,
+            Hash::default(),
+        )
     }
 
     pub async fn start_with_context(self) -> MolluskProgramTestContext {
@@ -341,21 +295,14 @@ impl MolluskProgramTest {
     }
 }
 
-fn setup_mollusk_with_p_ata(mollusk: &mut Mollusk) {
-    let program_id = spl_associated_token_account::id();
-    mollusk.add_program(
-        &program_id,
-        "target/deploy/pinocchio_ata_program",
-        &loader_keys::LOADER_V3,
-    );
-}
-
 /// Mollusk-based equivalent of program_test_2022
 pub fn mollusk_program_test_2022(token_mint_address: Pubkey) -> MolluskProgramTest {
     let mut mollusk = Mollusk::default();
-    setup_mollusk_with_p_ata(&mut mollusk);
-
-    // Add required programs
+    mollusk.add_program(
+        &spl_associated_token_account::id(),
+        "target/deploy/pinocchio_ata_program",
+        &loader_keys::LOADER_V3,
+    );
     mollusk.add_program(
         &spl_token_2022::id(),
         "programs/token-2022/target/deploy/spl_token_2022",
@@ -373,9 +320,11 @@ pub fn mollusk_program_test_2022(token_mint_address: Pubkey) -> MolluskProgramTe
 /// Mollusk-based equivalent of program_test
 pub fn mollusk_program_test(token_mint_address: Pubkey) -> MolluskProgramTest {
     let mut mollusk = Mollusk::default();
-    setup_mollusk_with_p_ata(&mut mollusk);
-
-    // Add required programs - use p-token for non-2022 tests
+    mollusk.add_program(
+        &spl_associated_token_account::id(),
+        "target/deploy/pinocchio_ata_program",
+        &loader_keys::LOADER_V3,
+    );
     mollusk.add_program(
         &spl_token::id(),
         "programs/token/target/deploy/pinocchio_token_program",
@@ -391,80 +340,39 @@ pub fn mollusk_program_test(token_mint_address: Pubkey) -> MolluskProgramTest {
 }
 
 /// Maps Mollusk errors to match the original solana_program_test behavior
-/// This is a workaround to handle p-ata differing errors without requiring
-/// changes to the actual original test files.
 fn map_mollusk_error_to_original(
     instruction: &solana_sdk::instruction::Instruction,
     error: ProgramError,
 ) -> InstructionError {
-    if instruction.program_id == spl_associated_token_account::id() {
-        let is_recover_nested = instruction.data.len() > 0 && instruction.data[0] == 2;
-        let is_idempotent_create = instruction.data.len() > 0 && instruction.data[0] == 1;
+    if instruction.program_id != spl_associated_token_account::id() {
+        return InstructionError::from(u64::from(error));
+    }
 
-        match error {
-            // System program "account already exists" -> IllegalOwner for non-idempotent ATA create
-            ProgramError::Custom(0) => {
-                if instruction.data.len() > 0 && instruction.data[0] == 0 {
-                    InstructionError::IllegalOwner
-                } else {
-                    InstructionError::from(u64::from(error))
-                }
-            }
-            // P-ATA program "Provided owner is not allowed" -> Custom(0) for InvalidOwner
-            ProgramError::IllegalOwner => InstructionError::Custom(0),
-            // InvalidInstructionData from canonical address mismatch -> InvalidSeeds
-            ProgramError::InvalidInstructionData => InstructionError::InvalidSeeds,
-            // InvalidAccountData errors need context-specific mapping
-            ProgramError::InvalidAccountData => {
-                if is_recover_nested {
-                    InstructionError::IllegalOwner
-                } else if is_idempotent_create {
-                    // For idempotent create, if account exists but isn't proper ATA,
-                    // original expects InvalidSeeds (address derivation check)
-                    InstructionError::InvalidSeeds
-                } else {
-                    InstructionError::from(u64::from(error))
-                }
-            }
-            // IncorrectProgramId errors for recover_nested should be mapped to IllegalOwner
-            ProgramError::IncorrectProgramId => {
-                if is_recover_nested {
-                    InstructionError::IllegalOwner
-                } else {
-                    InstructionError::from(u64::from(error))
-                }
-            }
-            ProgramError::MissingRequiredSignature => InstructionError::MissingRequiredSignature,
-            ProgramError::InvalidSeeds => InstructionError::InvalidSeeds,
-            // InvalidArgument might be InvalidSeeds if ATA address doesn't match expected seeds
-            ProgramError::InvalidArgument => {
-                // Check if this is due to invalid ATA address (seeds mismatch)
-                if instruction.accounts.len() >= 6 {
-                    let provided_ata_address = instruction.accounts[1].pubkey;
-                    let wallet_address = instruction.accounts[2].pubkey;
-                    let token_mint_address = instruction.accounts[3].pubkey;
-                    let token_program_address = instruction.accounts[5].pubkey;
+    let instruction_type = instruction.data.get(0);
+    let is_recover_nested = instruction_type == Some(&2);
+    let is_idempotent_create = instruction_type == Some(&1);
 
-                    // Calculate expected ATA address using the correct token program
-                    let expected_ata_address = spl_associated_token_account_client::address::get_associated_token_address_with_program_id(
-                        &wallet_address,
-                        &token_mint_address,
-                        &token_program_address,
-                    );
-
-                    // If addresses don't match, this is an InvalidSeeds error
-                    if provided_ata_address != expected_ata_address {
-                        InstructionError::InvalidSeeds
-                    } else {
-                        InstructionError::from(u64::from(error))
-                    }
-                } else {
-                    InstructionError::from(u64::from(error))
-                }
+    match error {
+        ProgramError::Custom(0) if instruction_type == Some(&0) => InstructionError::IllegalOwner,
+        ProgramError::IllegalOwner => InstructionError::Custom(0),
+        ProgramError::InvalidInstructionData => InstructionError::InvalidSeeds,
+        ProgramError::InvalidAccountData if is_recover_nested => InstructionError::IllegalOwner,
+        ProgramError::InvalidAccountData if is_idempotent_create => InstructionError::InvalidSeeds,
+        ProgramError::IncorrectProgramId if is_recover_nested => InstructionError::IllegalOwner,
+        ProgramError::MissingRequiredSignature => InstructionError::MissingRequiredSignature,
+        ProgramError::InvalidSeeds => InstructionError::InvalidSeeds,
+        ProgramError::InvalidArgument if instruction.accounts.len() >= 6 => {
+            let expected_ata = spl_associated_token_account_client::address::get_associated_token_address_with_program_id(
+                &instruction.accounts[2].pubkey,
+                &instruction.accounts[3].pubkey,
+                &instruction.accounts[5].pubkey,
+            );
+            if instruction.accounts[1].pubkey != expected_ata {
+                InstructionError::InvalidSeeds
+            } else {
+                InstructionError::from(u64::from(error))
             }
-            _ => InstructionError::from(u64::from(error)),
         }
-    } else {
-        InstructionError::from(u64::from(error))
+        _ => InstructionError::from(u64::from(error)),
     }
 }

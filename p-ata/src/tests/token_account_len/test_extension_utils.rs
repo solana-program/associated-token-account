@@ -1,27 +1,22 @@
 #![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
 #[cfg(any(test, feature = "std"))]
-use spl_token_2022::extension::{
-    default_account_state::DefaultAccountState, group_pointer::GroupPointer,
-    interest_bearing_mint::InterestBearingConfig, metadata_pointer::MetadataPointer,
-    mint_close_authority::MintCloseAuthority, non_transferable::NonTransferable,
-    pausable::PausableConfig, permanent_delegate::PermanentDelegate,
-    transfer_fee::TransferFeeConfig, transfer_hook::TransferHook, PodStateWithExtensionsMut,
+use {
+    spl_token_2022::{
+        extension::{
+            default_account_state::DefaultAccountState, group_pointer::GroupPointer,
+            interest_bearing_mint::InterestBearingConfig, metadata_pointer::MetadataPointer,
+            mint_close_authority::MintCloseAuthority, non_transferable::NonTransferable,
+            pausable::PausableConfig, permanent_delegate::PermanentDelegate,
+            transfer_fee::TransferFeeConfig, transfer_hook::TransferHook,
+            PodStateWithExtensionsMut,
+        },
+        pod::PodMint,
+    },
+    spl_token_group_interface::state::{TokenGroup, TokenGroupMember},
+    spl_token_metadata_interface::state::TokenMetadata,
+    std::{format, string::String, vec::Vec},
 };
-
-#[cfg(any(test, feature = "std"))]
-use spl_token_2022::pod::PodMint;
-
-#[cfg(any(test, feature = "std"))]
-use spl_token_group_interface::state::TokenGroup;
-
-#[cfg(any(test, feature = "std"))]
-use spl_token_group_interface::state::TokenGroupMember;
-
-#[cfg(any(test, feature = "std"))]
-use spl_token_metadata_interface::state::TokenMetadata;
-use std::string::String;
-use std::vec::Vec;
 
 #[derive(Debug, PartialEq)]
 pub enum ExtensionCategory {
@@ -34,58 +29,40 @@ pub enum ExtensionCategory {
 /// until the new variants are explicitly handled. Note this ignores the program's
 /// anticipated "`PlannedZeroAccountDataLengthExtension`"
 pub fn categorize_extension(ext: spl_token_2022::extension::ExtensionType) -> ExtensionCategory {
+    use spl_token_2022::extension::ExtensionType::*;
     match ext {
-        // Skip padding/uninitialized
-        spl_token_2022::extension::ExtensionType::Uninitialized => ExtensionCategory::Skip,
+        Uninitialized => ExtensionCategory::Skip,
 
-        // Simple mint extensions that can be initialized independently
-        spl_token_2022::extension::ExtensionType::TransferFeeConfig => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::NonTransferable => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::TransferHook => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::Pausable => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::DefaultAccountState => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::InterestBearingConfig => {
-            ExtensionCategory::Include
-        }
-        spl_token_2022::extension::ExtensionType::MetadataPointer => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::GroupPointer => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::GroupMemberPointer => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::MintCloseAuthority => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::PermanentDelegate => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::ScaledUiAmount => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::TokenMetadata => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::ConfidentialTransferMint => {
-            ExtensionCategory::Include
-        }
-        spl_token_2022::extension::ExtensionType::ConfidentialTransferFeeConfig => {
-            ExtensionCategory::Include
-        }
-        spl_token_2022::extension::ExtensionType::TokenGroup => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::TokenGroupMember => ExtensionCategory::Include,
-        spl_token_2022::extension::ExtensionType::ConfidentialMintBurn => {
-            ExtensionCategory::Include
-        }
+        // Mint extensions that can be initialized independently
+        TransferFeeConfig
+        | NonTransferable
+        | TransferHook
+        | Pausable
+        | DefaultAccountState
+        | InterestBearingConfig
+        | MetadataPointer
+        | GroupPointer
+        | GroupMemberPointer
+        | MintCloseAuthority
+        | PermanentDelegate
+        | ScaledUiAmount
+        | TokenMetadata
+        | ConfidentialTransferMint
+        | ConfidentialTransferFeeConfig
+        | TokenGroup
+        | TokenGroupMember
+        | ConfidentialMintBurn => ExtensionCategory::Include,
 
         // Account-only extensions - these shouldn't be in mint data
-        spl_token_2022::extension::ExtensionType::TransferFeeAmount => {
-            ExtensionCategory::AccountOnly
-        }
-        spl_token_2022::extension::ExtensionType::ConfidentialTransferAccount => {
-            ExtensionCategory::AccountOnly
-        }
-        spl_token_2022::extension::ExtensionType::ImmutableOwner => ExtensionCategory::AccountOnly,
-        spl_token_2022::extension::ExtensionType::NonTransferableAccount => {
-            ExtensionCategory::AccountOnly
-        }
-        spl_token_2022::extension::ExtensionType::TransferHookAccount => {
-            ExtensionCategory::AccountOnly
-        }
-        spl_token_2022::extension::ExtensionType::ConfidentialTransferFeeAmount => {
-            ExtensionCategory::AccountOnly
-        }
-        spl_token_2022::extension::ExtensionType::PausableAccount => ExtensionCategory::AccountOnly,
-        spl_token_2022::extension::ExtensionType::MemoTransfer => ExtensionCategory::AccountOnly,
-        spl_token_2022::extension::ExtensionType::CpiGuard => ExtensionCategory::AccountOnly,
+        TransferFeeAmount
+        | ConfidentialTransferAccount
+        | ImmutableOwner
+        | NonTransferableAccount
+        | TransferHookAccount
+        | ConfidentialTransferFeeAmount
+        | PausableAccount
+        | MemoTransfer
+        | CpiGuard => ExtensionCategory::AccountOnly,
     }
 }
 
@@ -97,32 +74,23 @@ pub fn create_mint_data_with_extensions(
     use std::string::String;
     use std::{vec, vec::Vec};
 
-    // Check for variable-length extensions we must size manually
-    let has_variable_length = extension_types
+    let required_size = if extension_types
         .iter()
-        .any(|ext| matches!(ext, ExtensionType::TokenMetadata));
+        .any(|ext| matches!(ext, ExtensionType::TokenMetadata))
+    {
+        // Calculate length for all sized extensions first, then add buffer for TokenMetadata
+        let mut size = ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(
+            &extension_types
+                .iter()
+                .copied()
+                .filter(|e| !matches!(e, ExtensionType::TokenMetadata))
+                .collect::<Vec<_>>(),
+        )
+        .expect("calc len for sized subset");
 
-    let required_size = if has_variable_length {
-        // Calculate length for all sized extensions first
-        let mut sized_exts: Vec<ExtensionType> = extension_types
-            .iter()
-            .copied()
-            .filter(|e| !matches!(e, ExtensionType::TokenMetadata))
-            .collect();
-
-        let mut required_size =
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&sized_exts)
-                .expect("calc len for sized subset");
-
-        // Add a generous buffer for the variable-length TokenMetadata TLV entry
-        if extension_types
-            .iter()
-            .any(|e| matches!(e, ExtensionType::TokenMetadata))
-        {
-            const TOKEN_METADATA_VALUE_LEN_ESTIMATE: usize = 500;
-            required_size += TOKEN_METADATA_VALUE_LEN_ESTIMATE + 4; // value + TLV header
-        }
-        required_size
+        const TOKEN_METADATA_VALUE_LEN_ESTIMATE: usize = 500;
+        size += TOKEN_METADATA_VALUE_LEN_ESTIMATE + 4; // value + TLV header
+        size
     } else {
         ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(extension_types)
             .expect("Failed to calculate account length")
@@ -231,16 +199,14 @@ pub fn create_mint_data_with_extensions(
                 extension.new_multiplier = spl_token_2022::extension::scaled_ui_amount::PodF64::from(1.0);
             }
             ExtensionType::TokenMetadata => {
-                let metadata = TokenMetadata {
+                mint.init_variable_len_extension(&TokenMetadata {
                     update_authority: Default::default(),
                     mint: solana_pubkey::Pubkey::new_unique(),
                     name: String::from("Test"),
                     symbol: String::from("TEST"),
                     uri: String::from("https://example.com/token.json"),
                     additional_metadata: vec![],
-                };
-                mint.init_variable_len_extension(&metadata, false)
-                    .expect("Failed to init TokenMetadata");
+                }, false).expect("Failed to init TokenMetadata");
             }
             ExtensionType::ConfidentialTransferMint => {
                 let extension = mint
@@ -293,69 +259,36 @@ pub fn create_mint_data_with_extensions(
 pub fn get_extensions_by_category(
     category: ExtensionCategory,
 ) -> Vec<spl_token_2022::extension::ExtensionType> {
-    let mut result = Vec::new();
-    for i in 0..=u16::MAX {
-        if let Ok(ext) = spl_token_2022::extension::ExtensionType::try_from(i) {
-            if categorize_extension(ext) == category {
-                result.push(ext);
-            }
-        }
-    }
-    result
+    (0..=u16::MAX)
+        .filter_map(|i| spl_token_2022::extension::ExtensionType::try_from(i).ok())
+        .filter(|ext| categorize_extension(*ext) == category)
+        .collect()
+}
+
+/// Helper function to check if extension list contains a specific extension type
+fn has_extension(
+    extension_types: &[spl_token_2022::extension::ExtensionType],
+    target: spl_token_2022::extension::ExtensionType,
+) -> bool {
+    extension_types.iter().any(|ext| *ext == target)
 }
 
 /// Check if a combination of extension types is valid according to Token-2022 rules
 pub fn is_valid_extension_combination(
     extension_types: &[spl_token_2022::extension::ExtensionType],
 ) -> bool {
-    let has_scaled_ui_amount = extension_types.iter().any(|ext| {
-        matches!(
-            ext,
-            spl_token_2022::extension::ExtensionType::ScaledUiAmount
-        )
-    });
-    let has_interest_bearing = extension_types.iter().any(|ext| {
-        matches!(
-            ext,
-            spl_token_2022::extension::ExtensionType::InterestBearingConfig
-        )
-    });
-    let has_token_group = extension_types
-        .iter()
-        .any(|ext| matches!(ext, spl_token_2022::extension::ExtensionType::TokenGroup));
-    let has_group_pointer = extension_types
-        .iter()
-        .any(|ext| matches!(ext, spl_token_2022::extension::ExtensionType::GroupPointer));
-    let has_token_group_member = extension_types.iter().any(|ext| {
-        matches!(
-            ext,
-            spl_token_2022::extension::ExtensionType::TokenGroupMember
-        )
-    });
-    let has_group_member_pointer = extension_types.iter().any(|ext| {
-        matches!(
-            ext,
-            spl_token_2022::extension::ExtensionType::GroupMemberPointer
-        )
-    });
-    let has_transfer_fee_config = extension_types.iter().any(|ext| {
-        matches!(
-            ext,
-            spl_token_2022::extension::ExtensionType::TransferFeeConfig
-        )
-    });
-    let has_confidential_transfer_mint = extension_types.iter().any(|ext| {
-        matches!(
-            ext,
-            spl_token_2022::extension::ExtensionType::ConfidentialTransferMint
-        )
-    });
-    let has_confidential_transfer_fee_config = extension_types.iter().any(|ext| {
-        matches!(
-            ext,
-            spl_token_2022::extension::ExtensionType::ConfidentialTransferFeeConfig
-        )
-    });
+    use spl_token_2022::extension::ExtensionType::*;
+
+    let has_scaled_ui_amount = has_extension(extension_types, ScaledUiAmount);
+    let has_interest_bearing = has_extension(extension_types, InterestBearingConfig);
+    let has_token_group = has_extension(extension_types, TokenGroup);
+    let has_group_pointer = has_extension(extension_types, GroupPointer);
+    let has_token_group_member = has_extension(extension_types, TokenGroupMember);
+    let has_group_member_pointer = has_extension(extension_types, GroupMemberPointer);
+    let has_transfer_fee_config = has_extension(extension_types, TransferFeeConfig);
+    let has_confidential_transfer_mint = has_extension(extension_types, ConfidentialTransferMint);
+    let has_confidential_transfer_fee_config =
+        has_extension(extension_types, ConfidentialTransferFeeConfig);
 
     // ScaledUiAmount cannot be combined with InterestBearingConfig
     if has_scaled_ui_amount && has_interest_bearing {
@@ -426,11 +359,10 @@ pub fn test_extension_combination_helper(
     let result = calculate_account_size_from_mint_extensions(&mint_data);
 
     if result != Some(expected_size) {
-        let mut error_msg = String::from("Extension combination failed: ");
-        error_msg.push_str(description);
-        error_msg.push_str(". Extensions: [");
-        error_msg.push_str("...extensions...]");
-        return Err(error_msg);
+        return Err(format!(
+            "Extension combination failed: {}. Extensions: [...extensions...]",
+            description
+        ));
     }
 
     Ok(())

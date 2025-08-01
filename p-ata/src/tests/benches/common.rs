@@ -2,7 +2,7 @@
 
 use {
     crate::tests::{
-        address_gen::structured_pk, benches::account_templates::StandardAccountSet,
+        benches::account_templates::StandardAccountSet,
         setup_mollusk_unified, MolluskAtaSetup, MolluskTokenSetup,
     },
     mollusk_svm::Mollusk,
@@ -205,24 +205,12 @@ impl BenchmarkSetup {
         use solana_instruction::{AccountMeta, Instruction};
 
         // Simple validation test - create a basic instruction and ensure it doesn't crash
-        let payer = structured_pk(
-            &AtaVariant::SplAta,
+        let [payer, mint, wallet] = crate::pk_array![
+            AtaVariant::SplAta,
             TestBankId::Benchmarks,
             1,
-            AccountTypeId::Payer,
-        );
-        let mint = structured_pk(
-            &AtaVariant::SplAta,
-            TestBankId::Benchmarks,
-            1,
-            AccountTypeId::Mint,
-        );
-        let wallet = structured_pk(
-            &AtaVariant::SplAta,
-            TestBankId::Benchmarks,
-            1,
-            AccountTypeId::Wallet,
-        );
+            [AccountTypeId::Payer, AccountTypeId::Mint, AccountTypeId::Wallet]
+        ];
         let (ata, _bump) = Pubkey::find_program_address(
             &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()],
             program_id,

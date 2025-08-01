@@ -7,13 +7,18 @@ use {
         recover::CLOSE_ACCOUNT_DISCM,
     },
     pinocchio::pubkey::Pubkey,
+    rstest::rstest,
     std::collections::HashSet,
     test_case::test_case,
 };
 
-#[test]
-fn test_build_initialize_account3_data() {
-    let owner = Pubkey::from([1u8; 32]);
+#[rstest]
+#[case([1u8; 32])]   // owner_1
+#[case([2u8; 32])]   // owner_2
+#[case([42u8; 32])]  // owner_42
+#[case([255u8; 32])] // owner_255
+fn test_build_initialize_account3_data(#[case] owner_bytes: [u8; 32]) {
+    let owner = Pubkey::from(owner_bytes);
     let data = build_initialize_account3_data(&owner);
 
     assert_eq!(data.len(), 33);
@@ -51,10 +56,11 @@ fn test_build_transfer_data(amount: u64, decimals: u8) {
     assert_eq!(data[9], decimals);
 }
 
-#[test]
-fn test_build_transfer_data_endianness() {
-    let amount = 0x0123456789abcdef_u64;
-    let decimals = 6;
+#[rstest]
+#[case(0x0123456789abcdef_u64, 6)]  // big_endian_value
+#[case(0x1234_u64, 9)]              // small_value
+#[case(u64::MAX, 18)]               // max_value
+fn test_build_transfer_data_endianness(#[case] amount: u64, #[case] decimals: u8) {
     let data = build_transfer_checked_data(amount, decimals);
 
     // Verify little-endian encoding
@@ -62,16 +68,25 @@ fn test_build_transfer_data_endianness() {
     assert_eq!(&data[1..9], &expected_bytes);
 }
 
-#[test]
-fn test_instruction_data_deterministic() {
-    let owner = Pubkey::from([42u8; 32]);
+#[rstest]
+#[case([42u8; 32])] // owner_test
+#[case([0u8; 32])]  // owner_zeros
+#[case([1u8; 32])]  // owner_ones
+fn test_instruction_data_deterministic_owner(#[case] owner_bytes: [u8; 32]) {
+    let owner = Pubkey::from(owner_bytes);
 
     let data1 = build_initialize_account3_data(&owner);
     let data2 = build_initialize_account3_data(&owner);
     assert_eq!(data1, data2);
+}
 
-    let transfer1 = build_transfer_checked_data(1000, 6);
-    let transfer2 = build_transfer_checked_data(1000, 6);
+#[rstest]
+#[case(1000, 6)]      // transfer_1
+#[case(500, 9)]       // transfer_2
+#[case(u64::MAX, 18)] // transfer_3
+fn test_instruction_data_deterministic_transfer(#[case] amount: u64, #[case] decimals: u8) {
+    let transfer1 = build_transfer_checked_data(amount, decimals);
+    let transfer2 = build_transfer_checked_data(amount, decimals);
     assert_eq!(transfer1, transfer2);
 }
 

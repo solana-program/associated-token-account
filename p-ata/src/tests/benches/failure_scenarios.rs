@@ -901,28 +901,14 @@ impl FailureTestBuilder {
         let test_number =
             common_builders::calculate_failure_test_number(BaseTestType::Create, TestVariant::BASE);
 
-        // Transaction payer (attacker's wallet that can sign)
-        let attacker_wallet = structured_pk(
-            &ata_impl.variant,
-            common::TestBankId::Failures,
-            test_number,
-            common::AccountTypeId::Payer,
-        );
-
-        // Simulate victim's wallet (we don't control this)
-        let victim_wallet = structured_pk(
-            &ata_impl.variant,
-            common::TestBankId::Failures,
-            test_number.wrapping_add(10),
-            common::AccountTypeId::Wallet,
-        );
-
-        let victim_mint = structured_pk(
-            &ata_impl.variant,
-            common::TestBankId::Failures,
-            test_number.wrapping_add(1),
-            common::AccountTypeId::Mint,
-        );
+        // Generate attacker, victim wallet, and victim mint efficiently
+        let [attacker_wallet, victim_wallet, victim_mint] = [
+            (test_number, common::AccountTypeId::Payer),
+            (test_number.wrapping_add(10), common::AccountTypeId::Wallet),
+            (test_number.wrapping_add(1), common::AccountTypeId::Mint),
+        ].map(|(num, account_type)| {
+            structured_pk(&ata_impl.variant, common::TestBankId::Failures, num, account_type)
+        });
 
         // Victim's ATA - properly derived PDA from victim's wallet and mint
         let (victim_ata, _victim_bump) = Pubkey::find_program_address(

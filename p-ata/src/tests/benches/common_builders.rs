@@ -4,8 +4,8 @@ use {
     crate::tests::{
         account_builder::AccountBuilder,
         address_gen::{
-            derive_address_with_bump, find_optimal_wallet_for_mints, random_seeded_pk,
-            structured_pk,
+            derive_address_with_bump, find_optimal_wallet_for_mints, find_optimal_wallet_for_nested_ata,
+            random_seeded_pk, structured_pk,
         },
         benches::{account_templates::*, common::*, constants::*},
     },
@@ -306,26 +306,14 @@ impl CommonTestCaseBuilder {
                     },
                     SpecialAccountMod::MultisigWallet {
                         threshold: 2,
-                        signers: vec![
-                            structured_pk(
-                                &crate::tests::benches::common::AtaVariant::SplAta,
-                                crate::tests::benches::common::TestBankId::Benchmarks,
-                                base_test as u8,
-                                crate::tests::benches::common::AccountTypeId::Signer1,
-                            ),
-                            structured_pk(
-                                &crate::tests::benches::common::AtaVariant::SplAta,
-                                crate::tests::benches::common::TestBankId::Benchmarks,
-                                base_test as u8,
-                                crate::tests::benches::common::AccountTypeId::Signer2,
-                            ),
-                            structured_pk(
-                                &crate::tests::benches::common::AtaVariant::SplAta,
-                                crate::tests::benches::common::TestBankId::Benchmarks,
-                                base_test as u8,
-                                crate::tests::benches::common::AccountTypeId::Signer3,
-                            ),
-                        ],
+                        signers: crate::pk_array![
+                            AtaVariant::SplAta,
+                            TestBankId::Benchmarks,
+                            base_test as u8,
+                            [AccountTypeId::Signer1, 
+                             AccountTypeId::Signer2, 
+                             AccountTypeId::Signer3]
+                        ].to_vec(),
                     },
                 ],
                 failure_mode: None,
@@ -337,26 +325,17 @@ impl CommonTestCaseBuilder {
                 setup_topup: false,
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
-                special_account_mods: vec![SpecialAccountMod::FixedAddresses {
-                    payer: structured_pk(
-                        &crate::tests::benches::common::AtaVariant::SplAta,
-                        crate::tests::benches::common::TestBankId::Benchmarks,
+                special_account_mods: {
+                    let [payer, wallet, mint] = crate::pk_array![
+                        AtaVariant::SplAta,
+                        TestBankId::Benchmarks,
                         base_test as u8,
-                        crate::tests::benches::common::AccountTypeId::Payer,
-                    ),
-                    wallet: structured_pk(
-                        &crate::tests::benches::common::AtaVariant::SplAta,
-                        crate::tests::benches::common::TestBankId::Benchmarks,
-                        base_test as u8,
-                        crate::tests::benches::common::AccountTypeId::Wallet,
-                    ),
-                    mint: structured_pk(
-                        &crate::tests::benches::common::AtaVariant::SplAta,
-                        crate::tests::benches::common::TestBankId::Benchmarks,
-                        base_test as u8,
-                        crate::tests::benches::common::AccountTypeId::Mint,
-                    ),
-                }],
+                        [AccountTypeId::Payer,
+                         AccountTypeId::Wallet,
+                         AccountTypeId::Mint]
+                    ];
+                    vec![SpecialAccountMod::FixedAddresses { payer, wallet, mint }]
+                },
                 failure_mode: None,
             },
         }
@@ -434,51 +413,13 @@ impl CommonTestCaseBuilder {
                         all_implementations.pata_prefunded_impl.program_id,
                     ];
 
-                    let mut attempt_entropy = search_entropy;
-                    while {
-                        // 1. Find wallet optimal for Owner ATA and Destination ATA
-                        let candidate_wallet = find_optimal_wallet_for_mints(
-                            &config.token_program,
-                            &[*owner_mint, *nested_mint],
-                            &ata_program_ids[..],
-                            attempt_entropy,
-                        );
-
-                        // 2. Check if Nested ATA also has bump 255 for all programs
-                        let mut all_nested_optimal = true;
-                        for ata_program_id in &ata_program_ids {
-                            let (owner_ata_address, _) = Pubkey::find_program_address(
-                                &[
-                                    candidate_wallet.as_ref(),
-                                    config.token_program.as_ref(),
-                                    owner_mint.as_ref(),
-                                ],
-                                ata_program_id,
-                            );
-
-                            let (_, nested_bump) = Pubkey::find_program_address(
-                                &[
-                                    owner_ata_address.as_ref(),
-                                    config.token_program.as_ref(),
-                                    nested_mint.as_ref(),
-                                ],
-                                ata_program_id,
-                            );
-
-                            if nested_bump != 255 {
-                                all_nested_optimal = false;
-                                break;
-                            }
-                        }
-
-                        if all_nested_optimal {
-                            wallet = candidate_wallet;
-                            false // exit while loop
-                        } else {
-                            attempt_entropy = attempt_entropy.wrapping_add(1);
-                            true // continue while loop
-                        }
-                    } {}
+                    wallet = find_optimal_wallet_for_nested_ata(
+                        &config.token_program,
+                        owner_mint,
+                        nested_mint,
+                        &ata_program_ids[..],
+                        search_entropy,
+                    );
                 }
             } else if matches!(config.base_test, BaseTestType::RecoverMultisig) {
                 // For RecoverMultisig, don't modify the wallet address because it needs to

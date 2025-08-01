@@ -1,3 +1,9 @@
+//! This build script is used to generate `generated_tests.rs` use the SPL ATA
+//! tests and the mollusk adapter in src/tests/utils/mollusk_adapter.rs.
+//!
+//! If feature `build-programs` is enabled, it also updates submodules and builds
+//! module and submodule programs.
+
 use std::env;
 use std::fs;
 use std::path::Path;

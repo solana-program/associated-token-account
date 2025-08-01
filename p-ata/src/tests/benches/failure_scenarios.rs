@@ -72,231 +72,247 @@ enum TestBuilderType {
     Custom,
 }
 
-/// Static configuration for all failure tests
-static FAILURE_TESTS: &[FailureTestConfig] = &[
-    // Basic Account Ownership Failure Tests
+// Helper functions for test configuration to reduce repetition
+fn basic_create_test(
+    name: &'static str,
+    category: TestCategory,
+    failure_mode: FailureMode,
+) -> FailureTestConfig {
     FailureTestConfig {
-        name: "fail_wrong_payer_owner",
-        category: TestCategory::BasicAccountOwnership,
+        name,
+        category,
         base_test: BaseTestType::Create,
         variant: TestVariant::BASE,
-        failure_mode: FailureMode::WrongPayerOwner(FAKE_TOKEN_PROGRAM_ID),
+        failure_mode,
         builder_type: TestBuilderType::Simple,
-    },
+    }
+}
+
+fn basic_idempotent_test(
+    name: &'static str,
+    category: TestCategory,
+    failure_mode: FailureMode,
+) -> FailureTestConfig {
     FailureTestConfig {
-        name: "fail_payer_not_signed",
-        category: TestCategory::BasicAccountOwnership,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::PayerNotSigned,
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_wrong_system_program",
-        category: TestCategory::BasicAccountOwnership,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::WrongSystemProgram(FAKE_SYSTEM_PROGRAM_ID),
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_wrong_token_program",
-        category: TestCategory::BasicAccountOwnership,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::WrongTokenProgram(FAKE_TOKEN_PROGRAM_ID),
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_insufficient_funds",
-        category: TestCategory::BasicAccountOwnership,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::InsufficientFunds(1000),
-        builder_type: TestBuilderType::Simple,
-    },
-    // Address Derivation and Structure Failure Tests
-    FailureTestConfig {
-        name: "fail_wrong_ata_address",
-        category: TestCategory::AddressDerivationStructure,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::WrongAtaAddress(
-            // This will be dynamically generated in the builder
-            Pubkey::new_from_array([173u8; 32]), // Placeholder
-        ),
-        builder_type: TestBuilderType::Custom, // Needs dynamic address generation
-    },
-    FailureTestConfig {
-        name: "fail_mint_wrong_owner",
-        category: TestCategory::AddressDerivationStructure,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::MintWrongOwner(solana_system_interface::program::id()),
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_invalid_mint_structure",
-        category: TestCategory::AddressDerivationStructure,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::InvalidMintStructure(50),
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_invalid_token_account_structure",
-        category: TestCategory::AddressDerivationStructure,
+        name,
+        category,
         base_test: BaseTestType::CreateIdempotent,
         variant: TestVariant::BASE,
-        failure_mode: FailureMode::InvalidTokenAccountStructure,
+        failure_mode,
         builder_type: TestBuilderType::Simple,
-    },
+    }
+}
+
+fn recovery_test(
+    name: &'static str,
+    base_test: BaseTestType,
+    failure_mode: FailureMode,
+) -> FailureTestConfig {
     FailureTestConfig {
-        name: "fail_invalid_discriminator",
-        category: TestCategory::AddressDerivationStructure,
-        base_test: BaseTestType::Create,
+        name,
+        category: TestCategory::RecoveryOperations,
+        base_test,
         variant: TestVariant::BASE,
-        failure_mode: FailureMode::InvalidDiscriminator(99),
+        failure_mode,
         builder_type: TestBuilderType::Simple,
-    },
+    }
+}
+
+fn bump_test(
+    name: &'static str,
+    category: TestCategory,
+    failure_mode: FailureMode,
+) -> FailureTestConfig {
     FailureTestConfig {
-        name: "fail_invalid_bump_value",
-        category: TestCategory::AddressDerivationStructure,
+        name,
+        category,
         base_test: BaseTestType::Create,
         variant: TestVariant {
             bump_arg: true,
             ..TestVariant::BASE
         },
-        failure_mode: FailureMode::InvalidBumpValue(99),
+        failure_mode,
         builder_type: TestBuilderType::Simple,
-    },
-    // Recovery Operation Failure Tests
-    FailureTestConfig {
-        name: "fail_recover_wallet_not_signer",
-        category: TestCategory::RecoveryOperations,
-        base_test: BaseTestType::RecoverNested,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::RecoverWalletNotSigner,
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_recover_multisig_insufficient_signers",
-        category: TestCategory::RecoveryOperations,
-        base_test: BaseTestType::RecoverMultisig,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::RecoverMultisigInsufficientSigners,
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_recover_multisig_duplicate_signers",
-        category: TestCategory::RecoveryOperations,
-        base_test: BaseTestType::RecoverMultisig,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::RecoverMultisigDuplicateSigners,
-        builder_type: TestBuilderType::Custom,
-    },
-    FailureTestConfig {
-        name: "fail_recover_multisig_non_signer_account",
-        category: TestCategory::RecoveryOperations,
-        base_test: BaseTestType::RecoverMultisig,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::RecoverMultisigNonSignerAccount,
-        builder_type: TestBuilderType::Custom,
-    },
-    FailureTestConfig {
-        name: "fail_recover_multisig_wrong_wallet_owner",
-        category: TestCategory::RecoveryOperations,
-        base_test: BaseTestType::RecoverMultisig,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::RecoverMultisigWrongWalletOwner(
-            solana_system_interface::program::id(),
+    }
+}
+
+/// Get all failure test configurations
+fn get_failure_tests() -> Vec<FailureTestConfig> {
+    vec![
+        // Basic Account Ownership Failure Tests
+        basic_create_test(
+            "fail_wrong_payer_owner",
+            TestCategory::BasicAccountOwnership,
+            FailureMode::WrongPayerOwner(FAKE_TOKEN_PROGRAM_ID),
         ),
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_recover_wrong_nested_ata_address",
-        category: TestCategory::RecoveryOperations,
-        base_test: BaseTestType::RecoverNested,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::RecoverWrongNestedAta(Pubkey::new_from_array([0u8; 32])), // Placeholder
-        builder_type: TestBuilderType::Custom, // Has complex custom logic
-    },
-    FailureTestConfig {
-        name: "fail_recover_wrong_destination_address",
-        category: TestCategory::RecoveryOperations,
-        base_test: BaseTestType::RecoverNested,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::RecoverWrongDestination(Pubkey::new_from_array([0u8; 32])), // Placeholder
-        builder_type: TestBuilderType::Custom, // Has complex custom logic
-    },
-    FailureTestConfig {
-        name: "fail_recover_invalid_bump_value",
-        category: TestCategory::RecoveryOperations,
-        base_test: BaseTestType::RecoverNested,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::InvalidBumpValue(99),
-        builder_type: TestBuilderType::Custom, // Has custom instruction data
-    },
-    // Additional Validation Coverage Tests
-    FailureTestConfig {
-        name: "fail_ata_owned_by_system_program",
-        category: TestCategory::AdditionalValidation,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::AtaWrongOwner(solana_system_interface::program::id()),
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_wrong_token_account_size",
-        category: TestCategory::AdditionalValidation,
-        base_test: BaseTestType::CreateIdempotent,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::TokenAccountWrongSize(100),
-        builder_type: TestBuilderType::Custom, // Has custom account setup
-    },
-    FailureTestConfig {
-        name: "fail_token_account_wrong_mint",
-        category: TestCategory::AdditionalValidation,
-        base_test: BaseTestType::CreateIdempotent,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::TokenAccountWrongMint(Pubkey::new_from_array([0u8; 32])), // Placeholder
-        builder_type: TestBuilderType::Custom, // Has custom account setup
-    },
-    FailureTestConfig {
-        name: "fail_token_account_wrong_owner",
-        category: TestCategory::AdditionalValidation,
-        base_test: BaseTestType::CreateIdempotent,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::TokenAccountWrongOwner(Pubkey::new_from_array([0u8; 32])), // Placeholder
-        builder_type: TestBuilderType::Custom, // Has custom account setup
-    },
-    FailureTestConfig {
-        name: "fail_immutable_account",
-        category: TestCategory::AdditionalValidation,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::AtaNotWritable,
-        builder_type: TestBuilderType::Simple,
-    },
-    FailureTestConfig {
-        name: "fail_drain_lamports_from_uninitialized_ata",
-        category: TestCategory::AdditionalValidation,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        failure_mode: FailureMode::AtaAddressMismatchLamportDrain,
-        builder_type: TestBuilderType::Custom,
-    },
-    // Additional Validation: Using Token-v1 program with an extended (Token-2022 style) mint
-    FailureTestConfig {
-        name: "fail_create_extended_mint_v1",
-        category: TestCategory::AdditionalValidation,
-        base_test: BaseTestType::Create,
-        variant: TestVariant::BASE,
-        // failure_mode placeholder – actual mutation done in custom builder
-        failure_mode: FailureMode::InvalidMintStructure(98),
-        builder_type: TestBuilderType::Custom,
-    },
-];
+        basic_create_test(
+            "fail_payer_not_signed",
+            TestCategory::BasicAccountOwnership,
+            FailureMode::PayerNotSigned,
+        ),
+        basic_create_test(
+            "fail_wrong_system_program",
+            TestCategory::BasicAccountOwnership,
+            FailureMode::WrongSystemProgram(FAKE_SYSTEM_PROGRAM_ID),
+        ),
+        basic_create_test(
+            "fail_wrong_token_program",
+            TestCategory::BasicAccountOwnership,
+            FailureMode::WrongTokenProgram(FAKE_TOKEN_PROGRAM_ID),
+        ),
+        basic_create_test(
+            "fail_insufficient_funds",
+            TestCategory::BasicAccountOwnership,
+            FailureMode::InsufficientFunds(1000),
+        ),
+        // Address Derivation and Structure Failure Tests
+        FailureTestConfig {
+            name: "fail_wrong_ata_address",
+            category: TestCategory::AddressDerivationStructure,
+            base_test: BaseTestType::Create,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::WrongAtaAddress(
+                // This will be dynamically generated in the builder
+                Pubkey::new_from_array([173u8; 32]), // Placeholder
+            ),
+            builder_type: TestBuilderType::Custom, // Needs dynamic address generation
+        },
+        basic_create_test(
+            "fail_mint_wrong_owner",
+            TestCategory::AddressDerivationStructure,
+            FailureMode::MintWrongOwner(solana_system_interface::program::id()),
+        ),
+        basic_create_test(
+            "fail_invalid_mint_structure",
+            TestCategory::AddressDerivationStructure,
+            FailureMode::InvalidMintStructure(50),
+        ),
+        basic_idempotent_test(
+            "fail_invalid_token_account_structure",
+            TestCategory::AddressDerivationStructure,
+            FailureMode::InvalidTokenAccountStructure,
+        ),
+        basic_create_test(
+            "fail_invalid_discriminator",
+            TestCategory::AddressDerivationStructure,
+            FailureMode::InvalidDiscriminator(99),
+        ),
+        bump_test(
+            "fail_invalid_bump_value",
+            TestCategory::AddressDerivationStructure,
+            FailureMode::InvalidBumpValue(99),
+        ),
+        // Recovery Operation Failure Tests
+        recovery_test(
+            "fail_recover_wallet_not_signer",
+            BaseTestType::RecoverNested,
+            FailureMode::RecoverWalletNotSigner,
+        ),
+        recovery_test(
+            "fail_recover_multisig_insufficient_signers",
+            BaseTestType::RecoverMultisig,
+            FailureMode::RecoverMultisigInsufficientSigners,
+        ),
+        FailureTestConfig {
+            name: "fail_recover_multisig_duplicate_signers",
+            category: TestCategory::RecoveryOperations,
+            base_test: BaseTestType::RecoverMultisig,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::RecoverMultisigDuplicateSigners,
+            builder_type: TestBuilderType::Custom,
+        },
+        FailureTestConfig {
+            name: "fail_recover_multisig_non_signer_account",
+            category: TestCategory::RecoveryOperations,
+            base_test: BaseTestType::RecoverMultisig,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::RecoverMultisigNonSignerAccount,
+            builder_type: TestBuilderType::Custom,
+        },
+        recovery_test(
+            "fail_recover_multisig_wrong_wallet_owner",
+            BaseTestType::RecoverMultisig,
+            FailureMode::RecoverMultisigWrongWalletOwner(solana_system_interface::program::id()),
+        ),
+        FailureTestConfig {
+            name: "fail_recover_wrong_nested_ata_address",
+            category: TestCategory::RecoveryOperations,
+            base_test: BaseTestType::RecoverNested,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::RecoverWrongNestedAta(Pubkey::new_from_array([0u8; 32])), // Placeholder
+            builder_type: TestBuilderType::Custom, // Has complex custom logic
+        },
+        FailureTestConfig {
+            name: "fail_recover_wrong_destination_address",
+            category: TestCategory::RecoveryOperations,
+            base_test: BaseTestType::RecoverNested,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::RecoverWrongDestination(Pubkey::new_from_array([0u8; 32])), // Placeholder
+            builder_type: TestBuilderType::Custom, // Has complex custom logic
+        },
+        FailureTestConfig {
+            name: "fail_recover_invalid_bump_value",
+            category: TestCategory::RecoveryOperations,
+            base_test: BaseTestType::RecoverNested,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::InvalidBumpValue(99),
+            builder_type: TestBuilderType::Custom, // Has custom instruction data
+        },
+        // Additional Validation Coverage Tests
+        basic_create_test(
+            "fail_ata_owned_by_system_program",
+            TestCategory::AdditionalValidation,
+            FailureMode::AtaWrongOwner(solana_system_interface::program::id()),
+        ),
+        FailureTestConfig {
+            name: "fail_wrong_token_account_size",
+            category: TestCategory::AdditionalValidation,
+            base_test: BaseTestType::CreateIdempotent,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::TokenAccountWrongSize(100),
+            builder_type: TestBuilderType::Custom, // Has custom account setup
+        },
+        FailureTestConfig {
+            name: "fail_token_account_wrong_mint",
+            category: TestCategory::AdditionalValidation,
+            base_test: BaseTestType::CreateIdempotent,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::TokenAccountWrongMint(Pubkey::new_from_array([0u8; 32])), // Placeholder
+            builder_type: TestBuilderType::Custom, // Has custom account setup
+        },
+        FailureTestConfig {
+            name: "fail_token_account_wrong_owner",
+            category: TestCategory::AdditionalValidation,
+            base_test: BaseTestType::CreateIdempotent,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::TokenAccountWrongOwner(Pubkey::new_from_array([0u8; 32])), // Placeholder
+            builder_type: TestBuilderType::Custom, // Has custom account setup
+        },
+        basic_create_test(
+            "fail_immutable_account",
+            TestCategory::AdditionalValidation,
+            FailureMode::AtaNotWritable,
+        ),
+        FailureTestConfig {
+            name: "fail_drain_lamports_from_uninitialized_ata",
+            category: TestCategory::AdditionalValidation,
+            base_test: BaseTestType::Create,
+            variant: TestVariant::BASE,
+            failure_mode: FailureMode::AtaAddressMismatchLamportDrain,
+            builder_type: TestBuilderType::Custom,
+        },
+        // Additional Validation: Using Token-v1 program with an extended (Token-2022 style) mint
+        FailureTestConfig {
+            name: "fail_create_extended_mint_v1",
+            category: TestCategory::AdditionalValidation,
+            base_test: BaseTestType::Create,
+            variant: TestVariant::BASE,
+            // failure_mode placeholder – actual mutation done in custom builder
+            failure_mode: FailureMode::InvalidMintStructure(98),
+            builder_type: TestBuilderType::Custom,
+        },
+    ]
+}
 
 // ================================ FAILURE TEST HELPERS ================================
 
@@ -1001,6 +1017,15 @@ impl FailureTestBuilder {
         (ix, accounts)
     }
 
+    /// Helper to find account balance in account list
+    fn find_account_balance(accounts: &[(Pubkey, Account)], target: &Pubkey) -> u64 {
+        accounts
+            .iter()
+            .find(|(pubkey, _)| pubkey == target)
+            .map(|(_, account)| account.lamports)
+            .unwrap_or(0)
+    }
+
     /// Verify the post-execution state for the drain lamports exploit test.
     /// This function should be called after the instruction is executed to verify
     /// that the lamport transfer occurred as expected (if the exploit succeeded).
@@ -1013,36 +1038,16 @@ impl FailureTestBuilder {
         victim_ata: &Pubkey,
         attacker_ata: &Pubkey,
     ) -> (u64, u64, bool) {
-        // Expected rent-exempt balance for token account
-        const TOKEN_ACCOUNT_RENT_EXEMPT_BALANCE: u64 = 2_000_000;
         const INITIAL_VICTIM_BALANCE: u64 = 5_000_000;
-        const EXPECTED_VICTIM_FINAL_BALANCE: u64 = 3_000_000;
 
-        // Find initial balances
-        let initial_victim_balance = pre_execution_accounts
-            .iter()
-            .find(|(pubkey, _)| pubkey == victim_ata)
-            .map(|(_, account)| account.lamports)
-            .unwrap_or(0);
-
-        let initial_attacker_balance = pre_execution_accounts
-            .iter()
-            .find(|(pubkey, _)| pubkey == attacker_ata)
-            .map(|(_, account)| account.lamports)
-            .unwrap_or(0);
-
-        // Find final balances
-        let final_victim_balance = post_execution_accounts
-            .iter()
-            .find(|(pubkey, _)| pubkey == victim_ata)
-            .map(|(_, account)| account.lamports)
-            .unwrap_or(0);
-
-        let final_attacker_balance = post_execution_accounts
-            .iter()
-            .find(|(pubkey, _)| pubkey == attacker_ata)
-            .map(|(_, account)| account.lamports)
-            .unwrap_or(0);
+        let (initial_victim_balance, initial_attacker_balance) = (
+            Self::find_account_balance(pre_execution_accounts, victim_ata),
+            Self::find_account_balance(pre_execution_accounts, attacker_ata),
+        );
+        let (final_victim_balance, final_attacker_balance) = (
+            Self::find_account_balance(post_execution_accounts, victim_ata),
+            Self::find_account_balance(post_execution_accounts, attacker_ata),
+        );
 
         // Check if the expected transfer occurred
         let expected_transfer = initial_victim_balance == INITIAL_VICTIM_BALANCE
@@ -1345,10 +1350,11 @@ impl FailureTestRunner {
         let mut results = Vec::new();
 
         // Group tests by category and run them in organized sections
+        let failure_tests = get_failure_tests();
         let mut tests_by_category: std::collections::HashMap<String, Vec<&FailureTestConfig>> =
             std::collections::HashMap::new();
 
-        for config in FAILURE_TESTS {
+        for config in &failure_tests {
             let category_name = config.category.to_string();
             tests_by_category
                 .entry(category_name)
@@ -1455,6 +1461,24 @@ impl FailureTestRunner {
         std::fs::write("benchmark_results/failure_results.json", output).unwrap();
     }
 
+    /// Print P-ATA and SPL ATA results for a comparison
+    fn print_result_comparison(result: &ComparisonResult, spl_label: &str) {
+        for (impl_name, bench_result) in [("P-ATA", &result.p_ata), (spl_label, &result.spl_ata)] {
+            if bench_result.success {
+                println!("    {}:     Success", impl_name);
+            } else {
+                println!(
+                    "    {}:     {}",
+                    impl_name,
+                    bench_result
+                        .error_message
+                        .as_deref()
+                        .unwrap_or("Unknown error")
+                );
+            }
+        }
+    }
+
     /// Print failure test summary with compatibility analysis
     fn print_failure_summary(results: &[ComparisonResult]) {
         use std::collections::BTreeMap;
@@ -1462,8 +1486,9 @@ impl FailureTestRunner {
         println!("\n=== FAILURE SCENARIO COMPATIBILITY SUMMARY ===");
 
         // Use BTreeMap to keep categories in a consistent order
+        let failure_tests = get_failure_tests();
         let mut categorized_results: BTreeMap<String, Vec<&ComparisonResult>> = BTreeMap::new();
-        let mut all_configs: std::collections::HashMap<String, &FailureTestConfig> = FAILURE_TESTS
+        let mut all_configs: std::collections::HashMap<String, &FailureTestConfig> = failure_tests
             .iter()
             .map(|c| (c.name.to_string(), c))
             .collect();
@@ -1544,84 +1569,15 @@ impl FailureTestRunner {
                 match &result.compatibility_status {
                     CompatibilityStatus::IncompatibleFailure => {
                         println!("  {} - Different Error Messages:", result.test_name);
-                        if result.p_ata.success {
-                            println!("    P-ATA:     Success");
-                        } else {
-                            println!(
-                                "    P-ATA:     {}",
-                                result
-                                    .p_ata
-                                    .error_message
-                                    .as_deref()
-                                    .unwrap_or("Unknown error")
-                            );
-                        }
-                        if result.spl_ata.success {
-                            println!("    SPL ATA:  Success");
-                        } else {
-                            println!(
-                                "   SPL ATA:  {}",
-                                result
-                                    .spl_ata
-                                    .error_message
-                                    .as_deref()
-                                    .unwrap_or("Unknown error")
-                            );
-                        }
+                        Self::print_result_comparison(result, "SPL ATA");
                     }
                     CompatibilityStatus::OptimizedBehavior => {
                         println!("  {} - Optimized Behavior:", result.test_name);
-                        if result.p_ata.success {
-                            println!("    P-ATA:     Success");
-                        } else {
-                            println!(
-                                "    P-ATA:     {}",
-                                result
-                                    .p_ata
-                                    .error_message
-                                    .as_deref()
-                                    .unwrap_or("Unknown error")
-                            );
-                        }
-                        if result.spl_ata.success {
-                            println!("    SPL ATA:  Success");
-                        } else {
-                            println!(
-                                "    Original:  {}",
-                                result
-                                    .spl_ata
-                                    .error_message
-                                    .as_deref()
-                                    .unwrap_or("Unknown error")
-                            );
-                        }
+                        Self::print_result_comparison(result, "Original");
                     }
                     CompatibilityStatus::IncompatibleSuccess => {
                         println!("  {} - Incompatible Success/Failure:", result.test_name);
-                        if result.p_ata.success {
-                            println!("    P-ATA:     Success");
-                        } else {
-                            println!(
-                                "    P-ATA:     {}",
-                                result
-                                    .p_ata
-                                    .error_message
-                                    .as_deref()
-                                    .unwrap_or("Unknown error")
-                            );
-                        }
-                        if result.spl_ata.success {
-                            println!("    SPL ATA:  Success");
-                        } else {
-                            println!(
-                                "    SPL ATA:  {}",
-                                result
-                                    .spl_ata
-                                    .error_message
-                                    .as_deref()
-                                    .unwrap_or("Unknown error")
-                            );
-                        }
+                        Self::print_result_comparison(result, "SPL ATA");
                     }
                     _ => {
                         println!("  {} - {:?}", result.test_name, result.compatibility_status);

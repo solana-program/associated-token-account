@@ -48,6 +48,21 @@ pub enum AccountTypeId {
 
 // ========================== SHARED BENCHMARK SETUP ============================
 
+/// Helper function to handle logging setup with conditional debug features
+fn setup_logging(enable_debug: bool) {
+    if enable_debug {
+        std::env::set_var("RUST_LOG", "debug");
+        solana_logger::setup_with(
+            "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
+        );
+    } else {
+        std::env::set_var("RUST_LOG", "error");
+        let _ = solana_logger::setup_with(
+            "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
+        );
+    }
+}
+
 pub struct BenchmarkSetup;
 
 pub struct AllProgramIds {
@@ -94,18 +109,11 @@ impl BenchmarkSetup {
             if full_target_path.exists() && !link_path.exists() {
                 println!("Creating symlink {} -> {}", filename, target_path);
                 #[cfg(unix)]
-                {
-                    std::os::unix::fs::symlink(&full_target_path, &link_path).unwrap_or_else(|e| {
-                        panic!("Failed to create symlink for {}: {}", filename, e)
-                    });
-                }
+                std::os::unix::fs::symlink(&full_target_path, &link_path)
+                    .unwrap_or_else(|e| panic!("Failed to create symlink for {}: {}", filename, e));
                 #[cfg(windows)]
-                {
-                    std::os::windows::fs::symlink_file(&full_target_path, &link_path)
-                        .unwrap_or_else(|e| {
-                            panic!("Failed to create symlink for {}: {}", filename, e)
-                        });
-                }
+                std::os::windows::fs::symlink_file(&full_target_path, &link_path)
+                    .unwrap_or_else(|e| panic!("Failed to create symlink for {}: {}", filename, e));
             }
         }
 
@@ -118,7 +126,7 @@ impl BenchmarkSetup {
         use solana_signer::Signer;
         use std::fs;
 
-        let programs_to_load: Vec<(&str, &str)> = vec![
+        let programs_to_load = [
             (
                 "/target/deploy/pinocchio_ata_program-keypair.json",
                 "pinocchio_ata_program",
@@ -141,7 +149,7 @@ impl BenchmarkSetup {
             ),
         ];
 
-        let mut program_ids: AllProgramIds = AllProgramIds {
+        let mut program_ids = AllProgramIds {
             spl_ata_program_id: Pubkey::default(),
             pata_prefunded_program_id: Pubkey::default(),
             pata_legacy_program_id: Pubkey::default(),
@@ -150,15 +158,15 @@ impl BenchmarkSetup {
         };
 
         for (keypair_path, program_name) in programs_to_load {
-            let keypair_path = format!("{}/{}", manifest_dir, keypair_path);
-            let keypair_data = fs::read_to_string(&keypair_path)
-                .expect(&format!("Failed to read {}", keypair_path));
+            let full_path = format!("{}/{}", manifest_dir, keypair_path);
+            let keypair_data = fs::read_to_string(&full_path)
+                .unwrap_or_else(|_| panic!("Failed to read {}", full_path));
             let keypair_bytes: Vec<u8> = serde_json::from_str(&keypair_data)
-                .unwrap_or_else(|_| panic!("Failed to parse keypair JSON for {}", keypair_path));
+                .unwrap_or_else(|_| panic!("Failed to parse keypair JSON for {}", full_path));
             let keypair = Keypair::try_from(&keypair_bytes[..])
-                .unwrap_or_else(|_| panic!("Invalid keypair for {}", keypair_path));
+                .unwrap_or_else(|_| panic!("Invalid keypair for {}", full_path));
             let program_id = keypair.pubkey();
-            // println!("Loaded {} program ID: {}", program_name, program_id);
+
             match program_name {
                 "pinocchio_ata_program" => program_ids.pata_legacy_program_id = program_id,
                 "pinocchio_ata_program_prefunded" => {
@@ -274,7 +282,7 @@ pub struct AllAtaImplementations {
 
 impl AllAtaImplementations {
     pub fn iter(&self) -> impl Iterator<Item = &AtaImplementation> {
-        vec![
+        [
             &self.spl_impl,
             &self.pata_prefunded_impl,
             &self.pata_legacy_impl,
@@ -405,22 +413,12 @@ impl BenchmarkRunner {
 
             #[cfg(feature = "full-debug-logs")]
             let result = {
-                // Enable debug logging for full-debug-logs feature
                 let _original_rust_log =
                     std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
-                std::env::set_var("RUST_LOG", "debug");
-                solana_logger::setup_with(
-                    "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
-                );
-
+                setup_logging(true);
                 let result = mollusk.process_instruction(ix, accounts);
-
-                // Restore original logging
                 std::env::set_var("RUST_LOG", &_original_rust_log);
-                solana_logger::setup_with(
-                    "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
-                );
-
+                setup_logging(false);
                 result
             };
 
@@ -446,13 +444,11 @@ impl BenchmarkRunner {
         } else {
             0
         };
-
-        // Consider the benchmark successful if at least one iteration succeeded
         let overall_success = success_count > 0;
-        let error_message = if !overall_success {
-            last_error_message
-        } else {
+        let error_message = if overall_success {
             None
+        } else {
+            last_error_message
         };
 
         BenchmarkResult {
@@ -494,22 +490,12 @@ impl BenchmarkRunner {
 
             #[cfg(feature = "full-debug-logs")]
             let result = {
-                // Enable debug logging for full-debug-logs feature
                 let _original_rust_log =
                     std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
-                std::env::set_var("RUST_LOG", "debug");
-                solana_logger::setup_with(
-                    "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
-                );
-
+                setup_logging(true);
                 let result = mollusk.process_instruction(&ix, &accounts_slice);
-
-                // Restore original logging
                 std::env::set_var("RUST_LOG", &_original_rust_log);
-                solana_logger::setup_with(
-                    "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
-                );
-
+                setup_logging(false);
                 result
             };
 
@@ -535,13 +521,11 @@ impl BenchmarkRunner {
         } else {
             0
         };
-
-        // Consider the benchmark successful if at least one iteration succeeded
         let overall_success = success_count > 0;
-        let error_message = if !overall_success {
-            last_error_message
-        } else {
+        let error_message = if overall_success {
             None
+        } else {
+            last_error_message
         };
 
         BenchmarkResult {
@@ -612,11 +596,7 @@ impl BenchmarkRunner {
     ) -> BenchmarkResult {
         // Temporarily enable debug logging
         let original_rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
-        std::env::set_var("RUST_LOG", "debug");
-
-        solana_logger::setup_with(
-            "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
-        );
+        setup_logging(true);
 
         let mollusk = Self::create_mollusk_for_all_ata_implementations(token_program_id);
 
@@ -630,9 +610,7 @@ impl BenchmarkRunner {
         #[cfg(not(feature = "full-debug-logs"))]
         {
             std::env::set_var("RUST_LOG", &original_rust_log);
-            let _ = solana_logger::setup_with(
-                "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
-            );
+            setup_logging(false);
         }
 
         let success = matches!(

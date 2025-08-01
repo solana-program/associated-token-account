@@ -14,7 +14,6 @@ use {pinocchio::pubkey::Pubkey, pinocchio_pubkey::pubkey};
 #[cfg(any(test, feature = "std"))]
 use std::{vec, vec::Vec};
 
-/// Shared constants that are used across both tests and benchmarks
 pub mod shared_constants {
 
     use solana_pubkey::Pubkey as SolanaPubkey;
@@ -22,10 +21,8 @@ pub mod shared_constants {
 
     /// Standard SPL token account size (fixed for all SPL token accounts)
     pub const TOKEN_ACCOUNT_SIZE: usize = 165;
-
     /// Standard mint account size (base size without extensions)
     pub const MINT_ACCOUNT_SIZE: usize = 82;
-
     /// Multisig account size
     pub const MULTISIG_ACCOUNT_SIZE: usize = 355;
 
@@ -45,12 +42,10 @@ pub mod shared_constants {
     pub const SPL_TOKEN_PROGRAM_ID: Pubkey = pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
 }
 
-/// Unified account data creation that works with both Pubkey types
 pub mod unified_builders {
     use super::shared_constants::*;
     use std::{vec, vec::Vec};
 
-    /// Create token account data that works with any pubkey type
     pub fn create_token_account_data_unified(
         mint: &[u8; 32],
         owner: &[u8; 32],
@@ -78,8 +73,7 @@ pub mod unified_builders {
         data
     }
 
-    /// Create mint account data
-    pub fn create_mint_data_unified(decimals: u8) -> Vec<u8> {
+    pub fn create_mint_data(decimals: u8) -> Vec<u8> {
         let mut data = vec![0u8; MINT_ACCOUNT_SIZE];
         data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
         data[44] = decimals;
@@ -123,10 +117,14 @@ pub mod unified_builders {
         crate::debug_log!("    n: {}", data[1]);
         crate::debug_log!("    initialized: {}", data[2]);
         crate::debug_log!("    data len: {}", data.len());
+        #[cfg(feature = "full-debug-logs")]
         for i in 0..signer_pubkeys.len() {
-            let offset = 3 + i * 32;
-            let signer_bytes = &data[offset..offset + 32];
-            crate::debug_log!("    signer[{}] at offset {}: {:?}", i, offset, signer_bytes);
+            crate::debug_log!(
+                "    signer[{}] at offset {}: {:?}",
+                i,
+                3 + i * 32,
+                &data[(3 + i * 32)..(3 + i * 32 + 32)]
+            );
         }
 
         data
@@ -138,11 +136,12 @@ pub mod unified_builders {
         exemption_threshold: f64,
         burn_percent: u8,
     ) -> Vec<u8> {
-        let mut data = Vec::new();
-        data.extend_from_slice(&lamports_per_byte_year.to_le_bytes());
-        data.extend_from_slice(&exemption_threshold.to_le_bytes());
-        data.push(burn_percent);
-        data
+        lamports_per_byte_year
+            .to_le_bytes()
+            .into_iter()
+            .chain(exemption_threshold.to_le_bytes())
+            .chain([burn_percent])
+            .collect()
     }
 }
 
@@ -179,7 +178,6 @@ use {
 /// Configuration for ATA programs to load in Mollusk
 #[cfg(any(test, feature = "std"))]
 pub enum MolluskAtaSetup {
-    /// Load P-ATA as drop-in replacement using SPL ATA's program ID (for tests)
     PAtaDropIn,
     /// Load all ATA implementations for comparison (benchmarks)
     AllImplementations,
@@ -209,7 +207,6 @@ pub fn setup_mollusk_unified(
     // Setup ATA programs based on configuration
     match ata_setup {
         MolluskAtaSetup::PAtaDropIn => {
-            // Load P-ATA binary using SPL ATA's program ID (drop-in replacement for tests)
             let ata_program_id = spl_associated_token_account::id();
             mollusk.add_program(
                 &ata_program_id,
@@ -301,25 +298,19 @@ pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(SolanaPubkey, Accou
                 rent_epoch: 0,
             },
         ),
-        // Properly initialize the Rent sysvar with realistic parameters instead of an all-zero placeholder.
         {
-            // Use the same default rent values that Mollusk exposes so tests use the exact same
-            // parameters as the program logic. This prevents mismatches when calculating the
-            // minimum balance required for rent-exemption.
             use solana_sdk::rent::Rent;
-
             let rent = Rent::default();
-            let rent_data = create_rent_data(
-                rent.lamports_per_byte_year,
-                rent.exemption_threshold,
-                rent.burn_percent,
-            );
 
             (
                 sysvar::rent::id(),
                 Account {
                     lamports: 0,
-                    data: rent_data,
+                    data: create_rent_data(
+                        rent.lamports_per_byte_year,
+                        rent.exemption_threshold,
+                        rent.burn_percent,
+                    ),
                     owner: sysvar::id(),
                     executable: false,
                     rent_epoch: 0,
@@ -327,7 +318,7 @@ pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(SolanaPubkey, Accou
             )
         },
     ]
-    .to_vec()
+    .into()
 }
 
 /// Create standard base accounts with token program
@@ -362,9 +353,7 @@ pub fn create_mollusk_base_accounts_with_token_and_wallet(
     // Start with the standard base accounts (payer, system program, rent sysvar, token program)
     let mut accounts = create_mollusk_base_accounts_with_token(payer, token_program_id);
 
-    // Add the wallet account with zero lamports, owned by the system program. This is
-    // frequently required by tests that reference the wallet but previously had to push it
-    // manually.
+    // Add the wallet account with zero lamports, owned by the system program.
     accounts.push((*wallet, Account::new(0, 0, &system_program::id())));
 
     accounts
@@ -419,22 +408,18 @@ pub fn build_create_ata_instruction(
     token_program: SolanaPubkey,
     instruction_type: CreateAtaInstructionType,
 ) -> Instruction {
-    let accounts = [
-        AccountMeta::new(payer, true),
-        AccountMeta::new(ata_address, false),
-        AccountMeta::new_readonly(wallet, false),
-        AccountMeta::new_readonly(mint, false),
-        AccountMeta::new_readonly(system_program::id(), false),
-        AccountMeta::new_readonly(token_program, false),
-        AccountMeta::new_readonly(sysvar::rent::id(), false),
-    ];
-
-    let data = encode_create_ata_instruction_data(&instruction_type);
-
     Instruction {
         program_id: ata_program_id,
-        accounts: accounts.to_vec(),
-        data,
+        accounts: vec![
+            AccountMeta::new(payer, true),
+            AccountMeta::new(ata_address, false),
+            AccountMeta::new_readonly(wallet, false),
+            AccountMeta::new_readonly(mint, false),
+            AccountMeta::new_readonly(system_program::id(), false),
+            AccountMeta::new_readonly(token_program, false),
+            AccountMeta::new_readonly(sysvar::rent::id(), false),
+        ],
+        data: encode_create_ata_instruction_data(&instruction_type),
     }
 }
 
@@ -455,7 +440,7 @@ pub fn create_mollusk_token_account_data(
 /// Create mint account data for mollusk testing
 #[cfg(any(test, feature = "std"))]
 pub fn create_mollusk_mint_data(decimals: u8) -> Vec<u8> {
-    unified_builders::create_mint_data_unified(decimals)
+    unified_builders::create_mint_data(decimals)
 }
 
 /// Create valid token account data for testing
@@ -469,12 +454,14 @@ pub fn create_token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> 
 
 /// Create valid multisig data for testing
 pub fn create_multisig_data(m: u8, n: u8, signers: &[Pubkey]) -> Vec<u8> {
-    let byte_refs: Vec<&[u8; 32]> = signers
-        .iter()
-        .take(n as usize)
-        .map(|pk| pk.as_ref().try_into().expect("Pubkey is 32 bytes"))
-        .collect();
-    unified_builders::create_multisig_data_unified(m, &byte_refs)
+    unified_builders::create_multisig_data_unified(
+        m,
+        &signers
+            .iter()
+            .take(n as usize)
+            .map(|pk| pk.as_ref().try_into().expect("Pubkey is 32 bytes"))
+            .collect::<Vec<_>>(),
+    )
 }
 
 /// Create rent sysvar data for testing
@@ -538,11 +525,9 @@ mod tests {
         let data = create_token_account_data(&mint, &owner, 1000);
 
         assert!(validate_token_account_structure(&data, &mint, &owner));
-
-        let wrong_mint = Pubkey::from([99u8; 32]);
         assert!(!validate_token_account_structure(
             &data,
-            &wrong_mint,
+            &Pubkey::from([99u8; 32]),
             &owner
         ));
     }
@@ -566,15 +551,13 @@ mod tests {
             Pubkey::from([2u8; 32]),
             Pubkey::from([3u8; 32]),
         ];
-
         let data = create_multisig_data(2, 3, &signers);
 
         assert_eq!(data.len(), shared_constants::MULTISIG_ACCOUNT_SIZE);
         assert_eq!(data[0], 2); // m
         assert_eq!(data[1], 3); // n
         assert_eq!(data[2], 1); // initialized
-
-        // Signer array starts immediately after the 3-byte header.
+                                // Signer array starts immediately after the 3-byte header.
         assert_eq!(&data[3..35], signers[0].as_ref());
     }
 
@@ -675,6 +658,26 @@ mod tests {
 }
 
 #[cfg(any(test, feature = "std"))]
+/// Helper function to update account data in accounts vector after instruction execution
+fn update_account_from_result(
+    mollusk: &Mollusk,
+    instruction: &Instruction,
+    accounts: &mut Vec<(SolanaPubkey, Account)>,
+    target_pubkey: SolanaPubkey,
+) {
+    if let Some((_, acct)) = mollusk
+        .process_instruction(instruction, accounts)
+        .resulting_accounts
+        .into_iter()
+        .find(|(pk, _)| *pk == target_pubkey)
+    {
+        if let Some((_, a)) = accounts.iter_mut().find(|(pk, _)| *pk == target_pubkey) {
+            *a = acct;
+        }
+    }
+}
+
+#[cfg(any(test, feature = "std"))]
 /// Creates and initializes a mint account with the given parameters.
 /// Returns a vector of accounts including the initialized mint and all necessary
 /// base accounts for testing.
@@ -720,36 +723,17 @@ pub fn create_test_mint(
     .unwrap();
 
     // Refresh the mint account data after creation.
-    if let Some((_, acct)) = mollusk
-        .process_instruction(&create_mint_ix, &accounts)
-        .resulting_accounts
-        .into_iter()
-        .find(|(pk, _)| *pk == mint_account.pubkey())
-    {
-        if let Some((_, a)) = accounts
-            .iter_mut()
-            .find(|(pk, _)| *pk == mint_account.pubkey())
-        {
-            *a = acct;
-        }
-    }
+    update_account_from_result(
+        mollusk,
+        &create_mint_ix,
+        &mut accounts,
+        mint_account.pubkey(),
+    );
 
     mollusk.process_and_validate_instruction(&init_mint_ix, &accounts, &[Check::success()]);
 
     // Final refresh so callers see the initialized state.
-    if let Some((_, acct)) = mollusk
-        .process_instruction(&init_mint_ix, &accounts)
-        .resulting_accounts
-        .into_iter()
-        .find(|(pk, _)| *pk == mint_account.pubkey())
-    {
-        if let Some((_, a)) = accounts
-            .iter_mut()
-            .find(|(pk, _)| *pk == mint_account.pubkey())
-        {
-            *a = acct;
-        }
-    }
+    update_account_from_result(mollusk, &init_mint_ix, &mut accounts, mint_account.pubkey());
 
     accounts
 }
@@ -766,16 +750,10 @@ pub fn create_ata_test_accounts(
     vec![
         (
             payer.pubkey(),
-            Account::new(1_000_000_000, 0, &system_program::id()), // Payer with 1 SOL
-        ),
-        (
-            ata_address,
-            Account::new(0, 0, &system_program::id()), // ATA account (will be created)
-        ),
-        (
-            wallet,
-            Account::new(0, 0, &system_program::id()), // Wallet account
-        ),
+            Account::new(1_000_000_000, 0, &system_program::id()),
+        ), // Payer with 1 SOL
+        (ata_address, Account::new(0, 0, &system_program::id())), // ATA account (will be created)
+        (wallet, Account::new(0, 0, &system_program::id())),      // Wallet account
         (
             mint,
             Account {
@@ -806,9 +784,6 @@ pub fn create_ata_test_accounts(
                 rent_epoch: 0,
             },
         ),
-        (
-            sysvar::rent::id(),
-            Account::new(1009200, 17, &sysvar::id()), // Rent sysvar
-        ),
+        (sysvar::rent::id(), Account::new(1009200, 17, &sysvar::id())), // Rent sysvar
     ]
 }

@@ -2,9 +2,8 @@ use {
     super::test_bump_utils::{
         find_wallet_with_non_canonical_opportunity, setup_mollusk_for_bump_tests,
     },
-    crate::tests::test_utils::{
-        create_mollusk_mint_data, create_mollusk_token_account_data, NATIVE_LOADER_ID,
-    },
+    crate::tests::account_builder::AccountBuilder,
+    crate::tests::test_utils::NATIVE_LOADER_ID,
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check},
     solana_program,
     solana_pubkey::Pubkey,
@@ -68,17 +67,6 @@ fn find_wallet_with_on_curve_opportunity(
     None
 }
 
-/// Simple off-curve check for testing (mirrors the logic in processor.rs)
-fn is_off_curve_test(address: &Pubkey) -> bool {
-    use curve25519_dalek::edwards::CompressedEdwardsY;
-
-    let compressed = CompressedEdwardsY(address.to_bytes());
-    match compressed.decompress() {
-        None => true,                    // invalid encoding → off-curve
-        Some(pt) => pt.is_small_order(), // small-order = off-curve, otherwise on-curve
-    }
-}
-
 /// Build a RecoverNested instruction with provided bumps
 fn build_recover_nested_instruction(
     ata_program_id: Pubkey,
@@ -129,7 +117,7 @@ fn create_recover_nested_accounts(
             owner_mint,
             Account {
                 lamports: 1_461_600,
-                data: create_mollusk_mint_data(6),
+                data: AccountBuilder::mint(6, &token_program).data,
                 owner: token_program,
                 executable: false,
                 rent_epoch: 0,
@@ -139,7 +127,7 @@ fn create_recover_nested_accounts(
             nested_mint,
             Account {
                 lamports: 1_461_600,
-                data: create_mollusk_mint_data(6),
+                data: AccountBuilder::mint(6, &token_program).data,
                 owner: token_program,
                 executable: false,
                 rent_epoch: 0,
@@ -149,7 +137,7 @@ fn create_recover_nested_accounts(
             owner_ata,
             Account {
                 lamports: 2_039_280,
-                data: create_mollusk_token_account_data(&owner_mint, &wallet, 0),
+                data: AccountBuilder::token_account(&owner_mint, &wallet, 0, &spl_token::id()).data,
                 owner: token_program,
                 executable: false,
                 rent_epoch: 0,
@@ -159,7 +147,10 @@ fn create_recover_nested_accounts(
             nested_ata,
             Account {
                 lamports: 2_039_280,
-                data: create_mollusk_token_account_data(&nested_mint, &owner_ata, 100), // Has tokens to recover
+                data: {
+                    AccountBuilder::token_account(&nested_mint, &owner_ata, 100, &spl_token::id())
+                        .data
+                }, // Has tokens to recover
                 owner: token_program,
                 executable: false,
                 rent_epoch: 0,
@@ -169,7 +160,8 @@ fn create_recover_nested_accounts(
             destination_ata,
             Account {
                 lamports: 2_039_280,
-                data: create_mollusk_token_account_data(&nested_mint, &wallet, 0),
+                data: AccountBuilder::token_account(&nested_mint, &wallet, 0, &spl_token::id())
+                    .data,
                 owner: token_program,
                 executable: false,
                 rent_epoch: 0,

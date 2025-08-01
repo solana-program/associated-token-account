@@ -61,7 +61,7 @@ pub(crate) fn parse_recover_accounts(
 /// nested account to recover rent.
 ///
 /// ## Account Layout
-/// ```
+/// ```ignore
 /// [0] nested_associated_token_account  (writable) - source account to drain
 /// [1] nested_mint                                 - mint of tokens being recovered  
 /// [2] destination_associated_token_account (writable) - canonical destination ATA

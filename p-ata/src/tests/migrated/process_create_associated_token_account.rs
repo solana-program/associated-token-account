@@ -3,10 +3,11 @@
 use {
     crate::tests::test_utils::{
         build_create_ata_instruction, calculate_account_rent,
-        create_mollusk_base_accounts_with_token, create_test_mint, setup_mollusk_with_programs,
-        CreateAtaInstructionType, NATIVE_LOADER_ID,
+        create_mollusk_base_accounts_with_token, create_test_mint, setup_mollusk_unified,
+        setup_mollusk_with_programs, CreateAtaInstructionType, MolluskAtaSetup, MolluskTokenSetup,
+        NATIVE_LOADER_ID,
     },
-    mollusk_svm::{result::Check, Mollusk},
+    mollusk_svm::result::Check,
     solana_instruction::{AccountMeta, Instruction},
     solana_program::program_error::ProgramError,
     solana_pubkey::Pubkey,
@@ -15,8 +16,6 @@ use {
     spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
     std::vec::Vec,
 };
-
-use mollusk_svm::program::loader_keys::LOADER_V3;
 
 const SPL_TOKEN_ACCOUNT_SIZE: usize = 165;
 
@@ -36,7 +35,10 @@ fn process_create_associated_token_account() {
         &token_program_id,
     );
 
-    let mollusk = setup_mollusk_with_programs(&token_program_id);
+    let mollusk = setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(token_program_id),
+    );
 
     // Step 1: Create and initialize mint
     let mut accounts = create_test_mint(
@@ -106,7 +108,10 @@ fn process_create_associated_token_account_with_invalid_mint() {
         &token_program_id,
     );
 
-    let mollusk = setup_mollusk_with_programs(&token_program_id);
+    let mollusk = setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(token_program_id),
+    );
 
     let create_ix = build_create_ata_instruction(
         ata_program_id,
@@ -164,7 +169,10 @@ fn process_create_associated_token_account_with_invalid_system_program() {
         &token_program_id,
     );
 
-    let mollusk = setup_mollusk_with_programs(&token_program_id);
+    let mollusk = setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(token_program_id),
+    );
 
     // Create and initialize mint first
     let accounts = create_test_mint(
@@ -234,7 +242,10 @@ fn process_create_associated_token_account_with_invalid_rent_sysvar() {
         &token_program_id,
     );
 
-    let mollusk = setup_mollusk_with_programs(&token_program_id);
+    let mollusk = setup_mollusk_unified(
+        MolluskAtaSetup::PAtaDropIn,
+        MolluskTokenSetup::Single(token_program_id),
+    );
 
     // Create and initialize mint first
     let accounts = create_test_mint(
@@ -301,19 +312,7 @@ fn test_create_with_fewer_lamports() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Create and initialize mint first
     let mut accounts = create_test_mint(
@@ -387,19 +386,7 @@ fn test_create_with_excess_lamports() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Create and initialize mint first
     let mut accounts = create_test_mint(
@@ -471,19 +458,7 @@ fn test_create_associated_token_account_using_legacy_implicit_instruction() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Create and initialize mint first
     let mut accounts = create_test_mint(

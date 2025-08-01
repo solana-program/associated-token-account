@@ -1,9 +1,10 @@
 //! Migrated test for idempotent creation functionality using mollusk
 
 use {
+    crate::tests::account_builder::AccountBuilder,
     crate::tests::test_utils::{
-        build_create_ata_instruction, create_mollusk_token_account_data, create_test_mint,
-        setup_mollusk_with_programs, CreateAtaInstructionType,
+        build_create_ata_instruction, create_test_mint, setup_mollusk_with_programs,
+        CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
@@ -13,8 +14,6 @@ use {
     solana_system_interface::program as system_program,
     spl_associated_token_account_client::address::get_associated_token_address_with_program_id,
 };
-
-use mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk};
 
 #[test]
 fn create_with_a_lamport_with_idempotent() {
@@ -238,21 +237,7 @@ fn create_with_wrong_mint_fails() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    // Add our p-ata program
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    // Add token program
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Step 1: Create and initialize the correct mint
     let mut accounts = create_test_mint(
@@ -312,19 +297,7 @@ fn create_with_mismatch_fails() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Step 1: Create and initialize mint
     let mut accounts = create_test_mint(
@@ -383,19 +356,7 @@ fn fail_account_exists_with_wrong_owner() {
         &token_program_id,
     );
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Create and initialize mint first
     let mut accounts = create_test_mint(
@@ -407,15 +368,12 @@ fn fail_account_exists_with_wrong_owner() {
         6,
     );
 
-    let data = create_mollusk_token_account_data(&token_mint_address, &wrong_owner, 0);
-
     // Create a token account at the ATA address but with wrong owner
-    let wrong_token_account = Account {
-        lamports: 1_000_000_000,
-        data,
-        owner: token_program_id,
-        executable: false,
-        rent_epoch: 0,
+    let wrong_token_account = {
+        let mut account =
+            AccountBuilder::token_account(&token_mint_address, &wrong_owner, 0, &token_program_id);
+        account.lamports = 1_000_000_000;
+        account
     };
 
     accounts.extend([
@@ -462,19 +420,7 @@ fn fail_non_ata() {
     // This is NOT the associated token address - it's a manually created account
     let non_ata_account = Keypair::new();
 
-    let mut mollusk = Mollusk::default();
-
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
-
-    mollusk.add_program(
-        &token_program_id,
-        "programs/token/target/deploy/pinocchio_token_program",
-        &LOADER_V3,
-    );
+    let mollusk = setup_mollusk_with_programs(&token_program_id);
 
     // Create and initialize mint first
     let mut accounts = create_test_mint(
@@ -486,16 +432,17 @@ fn fail_non_ata() {
         6,
     );
 
-    let data = create_mollusk_token_account_data(&token_mint_address, &wallet_address, 0);
-
     // Create a valid token account but at a non-ATA address
     let token_account_balance = 3_500_880;
-    let valid_token_account = Account {
-        lamports: token_account_balance,
-        data,
-        owner: token_program_id,
-        executable: false,
-        rent_epoch: 0,
+    let valid_token_account = {
+        let mut account = AccountBuilder::token_account(
+            &token_mint_address,
+            &wallet_address,
+            0,
+            &token_program_id,
+        );
+        account.lamports = token_account_balance;
+        account
     };
 
     accounts.extend([

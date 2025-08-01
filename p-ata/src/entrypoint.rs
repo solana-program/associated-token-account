@@ -27,27 +27,27 @@ nostd_panic_handler!();
 /// ## Instruction Format
 ///
 /// ### Create ATA (Non-Idempotent) - Discriminator: 0 or Empty
-/// ```
+/// ```ignore
 /// [0] or []                     -> compute bump and ATA account data length on-chain  
 /// [0, bump]                     -> use provided bump, compute ATA account data length
 /// [0, bump, len_low, len_high]  -> use provided bump and ATA account data length
 /// ```
 ///
 /// ### Create ATA (Idempotent) - Discriminator: 1  
-/// ```
+/// ```ignore
 /// [1]                           -> compute bump and ATA account data length on-chain
 /// [1, bump]                     -> use provided bump, compute ATA account data length  
 /// [1, bump, len_low, len_high]  -> use provided bump and ATA account data length
 /// ```
 ///
 /// ### Recover Nested ATA - Discriminator: 2
-/// ```
+/// ```ignore
 /// [2]                                      -> compute all bumps on-chain
 /// [2, owner_bump, nested_bump, dest_bump]  -> use provided bumps
 /// ```
 ///
 /// ## Account Layout (Create)
-/// ```
+/// ```ignore
 /// [0] payer                    (signer, writable) - pays for account creation (and rent if applicable)
 /// [1] associated_token_account (writable)         - account to create  
 /// [2] wallet                   (signer)           - token account owner

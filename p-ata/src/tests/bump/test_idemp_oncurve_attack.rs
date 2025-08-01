@@ -2,9 +2,8 @@ use {
     super::test_bump_utils::{
         find_wallet_with_on_curve_attack_opportunity, setup_mollusk_for_bump_tests,
     },
-    crate::tests::test_utils::{
-        build_create_ata_instruction, create_mollusk_token_account_data, CreateAtaInstructionType,
-    },
+    crate::tests::account_builder::AccountBuilder,
+    crate::tests::test_utils::{build_create_ata_instruction, CreateAtaInstructionType},
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check},
     solana_pubkey::Pubkey,
     solana_sdk::{
@@ -18,7 +17,7 @@ use {
 /// Manually create a token account at a given address with proper token account data.
 /// This simulates an attacker manually creating an account outside of the ATA program.
 fn create_manual_token_account(mint: Pubkey, owner: Pubkey, token_program: Pubkey) -> Account {
-    let token_account_data = create_mollusk_token_account_data(&mint, &owner, 0);
+    let token_account_data = AccountBuilder::token_account(&mint, &owner, 0, &spl_token::id()).data;
 
     Account {
         lamports: 2_039_280,
@@ -66,7 +65,7 @@ fn test_rejects_on_curve_address_in_idempotent_check() {
             mint_pubkey,
             Account {
                 lamports: 1_461_600,
-                data: crate::tests::test_utils::create_mollusk_mint_data(6),
+                data: AccountBuilder::mint(6, &spl_token::id()).data,
                 owner: token_program_id,
                 executable: false,
                 rent_epoch: 0,

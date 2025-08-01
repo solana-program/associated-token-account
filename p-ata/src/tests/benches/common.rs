@@ -1,247 +1,23 @@
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
+
 use {
-    mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
+    crate::tests::{
+        address_gen::structured_pk, benches::account_templates::StandardAccountSet,
+        setup_mollusk_unified, MolluskAtaSetup, MolluskTokenSetup,
+    },
+    mollusk_svm::Mollusk,
     solana_account::Account,
     solana_instruction,
     solana_pubkey::Pubkey,
-    solana_sysvar::rent,
-    spl_token_2022::extension::ExtensionType,
-    spl_token_interface::state::Transmutable,
-    std::env,
+    std::{
+        boxed::Box,
+        format, println,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    },
     strum::{Display, EnumIter},
 };
-
-pub mod account_templates;
-pub mod constants;
-
-use account_templates::*;
-use constants::{account_sizes::*, lamports::*};
-
-// ================================ CONSTANTS ================================
-
-pub const SYSTEM_PROGRAM_ID: Pubkey = Pubkey::new_from_array([0u8; 32]);
-pub const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
-    5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
-    101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
-]);
-
-// ============================= ACCOUNT BUILDERS =============================
-
-pub struct AccountBuilder;
-
-impl AccountBuilder {
-    pub fn rent_sysvar() -> Account {
-        let mollusk = Mollusk::default();
-        let (_, mollusk_rent_account) = mollusk.sysvars.keyed_account_for_rent_sysvar();
-
-        Account {
-            lamports: mollusk_rent_account.lamports,
-            data: mollusk_rent_account.data,
-            owner: rent::id(),
-            executable: false,
-            rent_epoch: 0,
-        }
-    }
-
-    pub fn token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
-        #[cfg(feature = "full-debug-logs")]
-        println!(
-            "🔧 Creating token account data | Mint: {} | Owner: {}",
-            mint.to_string()[0..8].to_string(),
-            owner.to_string()[0..8].to_string()
-        );
-
-        build_token_account_data_core(
-            mint.as_ref().try_into().expect("Pubkey is 32 bytes"),
-            owner.as_ref().try_into().expect("Pubkey is 32 bytes"),
-            amount,
-        )
-        .to_vec()
-    }
-
-    pub fn mint_data(decimals: u8) -> Vec<u8> {
-        build_mint_data_core(decimals).to_vec()
-    }
-
-    pub fn extended_mint_data(decimals: u8) -> Vec<u8> {
-        let required_len =
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[
-                ExtensionType::ImmutableOwner,
-            ])
-            .expect("calc len");
-
-        let mut data = Self::mint_data(decimals);
-        data.resize(required_len, 0u8);
-
-        let cursor = MINT_ACCOUNT_SIZE;
-        let immutable_owner_header = [7u8, 0u8, 0u8, 0u8];
-        data[cursor..cursor + 4].copy_from_slice(&immutable_owner_header);
-
-        data
-    }
-
-    /// Create mint data with multiple common extensions using Token-2022's official methods
-    /// Uses extensions that are supported by our inline account size calculation to avoid CPI
-    pub fn extended_mint_data_with_common_extensions(decimals: u8) -> Vec<u8> {
-        use solana_program_option::COption;
-        use spl_token_2022::{
-            extension::{
-                default_account_state::DefaultAccountState, metadata_pointer::MetadataPointer,
-                non_transferable::NonTransferable, transfer_fee::TransferFeeConfig,
-                transfer_hook::TransferHook, BaseStateWithExtensionsMut, PodStateWithExtensionsMut,
-            },
-            pod::PodMint,
-            state::AccountState,
-        };
-
-        // Use extensions that are supported by our inline helper
-        let extension_types = vec![
-            ExtensionType::TransferFeeConfig, // Adds TransferFeeAmount to account
-            ExtensionType::NonTransferable,   // Adds NonTransferableAccount to account
-            ExtensionType::TransferHook,      // Adds TransferHookAccount to account
-            ExtensionType::DefaultAccountState, // Mint-only extension
-            ExtensionType::MetadataPointer,   // Mint-only extension
-        ];
-
-        let required_size =
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(
-                &extension_types,
-            )
-            .expect("Failed to calculate account length");
-
-        let mut data = vec![0u8; required_size];
-
-        let mut mint = PodStateWithExtensionsMut::<PodMint>::unpack_uninitialized(&mut data)
-            .expect("Failed to unpack mint");
-
-        // Initialize base mint fields
-        mint.base.mint_authority = COption::None.try_into().unwrap();
-        mint.base.supply = 0u64.into();
-        mint.base.decimals = decimals;
-        mint.base.is_initialized = true.into();
-        mint.base.freeze_authority = COption::None.try_into().unwrap();
-
-        // Initialize TransferFeeConfig extension
-        let transfer_fee_config = mint
-            .init_extension::<TransferFeeConfig>(true)
-            .expect("Failed to init TransferFeeConfig");
-        transfer_fee_config.transfer_fee_config_authority = COption::None.try_into().unwrap();
-        transfer_fee_config.withdraw_withheld_authority = COption::None.try_into().unwrap();
-        transfer_fee_config.withheld_amount = 0u64.into();
-
-        // Initialize NonTransferable extension
-        let _non_transferable = mint
-            .init_extension::<NonTransferable>(true)
-            .expect("Failed to init NonTransferable");
-
-        // Initialize TransferHook extension
-        let transfer_hook = mint
-            .init_extension::<TransferHook>(true)
-            .expect("Failed to init TransferHook");
-        transfer_hook.authority = COption::None.try_into().unwrap();
-        transfer_hook.program_id = COption::None.try_into().unwrap();
-
-        // Initialize DefaultAccountState extension
-        let default_account_state = mint
-            .init_extension::<DefaultAccountState>(true)
-            .expect("Failed to init DefaultAccountState");
-        default_account_state.state = AccountState::Initialized.into();
-
-        // Initialize MetadataPointer extension
-        let metadata_pointer = mint
-            .init_extension::<MetadataPointer>(true)
-            .expect("Failed to init MetadataPointer");
-        metadata_pointer.authority = COption::None.try_into().unwrap();
-        metadata_pointer.metadata_address = COption::None.try_into().unwrap();
-
-        // Initialize the account type to mark as a proper mint
-        mint.init_account_type()
-            .expect("Failed to init account type");
-
-        data
-    }
-
-    pub fn multisig_data(m: u8, signer_pubkeys: &[Pubkey]) -> Vec<u8> {
-        let byte_refs: Vec<&[u8; 32]> = signer_pubkeys
-            .iter()
-            .map(|pk| pk.as_ref().try_into().expect("Pubkey is 32 bytes"))
-            .collect();
-        build_multisig_data_core(m, &byte_refs)
-    }
-
-    pub fn system_account(lamports: u64) -> Account {
-        Account::new(lamports, 0, &SYSTEM_PROGRAM_ID)
-    }
-
-    pub fn executable_program(owner: Pubkey) -> Account {
-        Account {
-            lamports: 0,
-            data: Vec::new(),
-            owner,
-            executable: true,
-            rent_epoch: 0,
-        }
-    }
-
-    pub fn token_account(
-        mint: &Pubkey,
-        owner: &Pubkey,
-        amount: u64,
-        token_program_id: &Pubkey,
-    ) -> Account {
-        Account {
-            lamports: TOKEN_ACCOUNT_RENT_EXEMPT,
-            data: Self::token_account_data(mint, owner, amount),
-            owner: *token_program_id,
-            executable: false,
-            rent_epoch: 0,
-        }
-    }
-
-    pub fn mint(decimals: u8, token_program_id: &Pubkey) -> Account {
-        Account {
-            lamports: MINT_ACCOUNT_RENT_EXEMPT,
-            data: Self::mint_data(decimals),
-            owner: *token_program_id,
-            executable: false,
-            rent_epoch: 0,
-        }
-    }
-
-    pub fn extended_mint(decimals: u8, token_program_id: &Pubkey) -> Account {
-        Account {
-            lamports: EXTENDED_MINT_ACCOUNT_RENT_EXEMPT, // Use extended mint rent amount
-            data: Self::extended_mint_data_with_common_extensions(decimals),
-            owner: *token_program_id,
-            executable: false,
-            rent_epoch: 0,
-        }
-    }
-
-    pub fn mint_account(decimals: u8, token_program_id: &Pubkey, extended: bool) -> Account {
-        if extended {
-            Self::extended_mint(decimals, token_program_id)
-        } else {
-            Self::mint(decimals, token_program_id)
-        }
-    }
-
-    pub fn token_2022_mint_account(decimals: u8, token_program_id: &Pubkey) -> Account {
-        Self::mint(decimals, token_program_id)
-    }
-
-    pub fn token_2022_mint_data(decimals: u8) -> Vec<u8> {
-        let mint_authority = structured_pk(
-            &AtaVariant::SplAta,
-            TestBankId::Benchmarks,
-            123,
-            AccountTypeId::Mint,
-        );
-
-        base_mint_data(1, &mint_authority, decimals).to_vec()
-    }
-}
-
-// ========================== STRUCTURED ADDRESS ALLOCATION ==========================
 
 /// Test bank identifier  
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -268,284 +44,6 @@ pub enum AccountTypeId {
     Signer1 = 11,
     Signer2 = 12,
     Signer3 = 13,
-}
-
-/// Convert AtaVariant to byte value
-fn variant_to_byte(variant: &AtaVariant) -> u8 {
-    match variant {
-        AtaVariant::PAtaLegacy => 1, // avoid system program ID
-        AtaVariant::PAtaPrefunded => 2,
-        AtaVariant::SplAta => 3,
-    }
-}
-
-/// Generate a structured pubkey from 4-byte coordinate system
-/// [variant, test_bank, test_number, account_type].
-/// Avoids some issues with test cross-contamination by using predictable
-/// but different keys for different tests.
-pub fn structured_pk(
-    variant: &AtaVariant,
-    test_bank: TestBankId,
-    test_number: u8,
-    account_type: AccountTypeId,
-) -> Pubkey {
-    // For proper byte-for-byte comparison between implementations,
-    // use consistent addresses for wallet/owner and mint accounts
-    let effective_variant = match account_type {
-        AccountTypeId::Wallet
-        | AccountTypeId::Mint
-        | AccountTypeId::OwnerMint
-        | AccountTypeId::NestedMint => &AtaVariant::SplAta, // Always use Original for consistency
-        _ => variant, // Use actual variant for other account types (Payer, ATA addresses, etc.)
-    };
-
-    let mut bytes = [0u8; 32];
-    bytes[0] = variant_to_byte(effective_variant);
-    bytes[1] = test_bank as u8;
-    bytes[2] = test_number;
-    bytes[3] = account_type as u8;
-
-    Pubkey::new_from_array(bytes)
-}
-
-/// Generate multiple structured pubkeys at once.
-/// Avoids some issues with test cross-contamination by using predictable
-/// but different keys for different tests.
-#[allow(dead_code)]
-pub fn structured_pk_multi<const N: usize>(
-    variant: &AtaVariant,
-    test_bank: TestBankId,
-    test_number: u8,
-    account_types: [AccountTypeId; N],
-) -> [Pubkey; N] {
-    account_types.map(|account_type| structured_pk(variant, test_bank, test_number, account_type))
-}
-
-/// Generate a random pubkey for benchmark testing
-///
-/// Creates a random wallet address with some deterministic seed for test reproducibility
-/// but without optimal bump hunting. This provides truly random compute unit results.
-///
-/// # Arguments
-/// * `variant` - The ATA variant to use for seeding
-/// * `test_bank` - The test bank ID for seeding
-/// * `test_number` - The test number for seeding  
-/// * `account_type` - The account type for seeding
-/// * `iteration` - Current iteration number for additional randomness
-/// * `run_entropy` - A run-specific entropy value to use for seeding
-///
-/// # Returns
-/// A random pubkey seeded by the test parameters and current iteration
-pub fn random_seeded_pk(
-    variant: &AtaVariant,
-    test_bank: TestBankId,
-    test_number: u8,
-    account_type: AccountTypeId,
-    iteration: usize,
-    run_entropy: u64,
-) -> Pubkey {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    // Create a deterministic but random-looking seed from test parameters
-    let mut hasher = DefaultHasher::new();
-    variant_to_byte(variant).hash(&mut hasher);
-    (test_bank as u8).hash(&mut hasher);
-    test_number.hash(&mut hasher);
-    (account_type as u8).hash(&mut hasher);
-    iteration.hash(&mut hasher);
-
-    // Add run-specific entropy so single runs vary between executions
-    // This run_entropy should be the same for P-ATA and SPL ATA within a single test
-    run_entropy.hash(&mut hasher);
-
-    let hash = hasher.finish();
-
-    // Convert hash to 32-byte array for pubkey
-    let mut bytes = [0u8; 32];
-    bytes[0..8].copy_from_slice(&hash.to_le_bytes());
-    bytes[8..16].copy_from_slice(&(hash.wrapping_mul(0x9E3779B9)).to_le_bytes());
-    bytes[16..24].copy_from_slice(&(hash.wrapping_mul(0x85EBCA6B)).to_le_bytes());
-    bytes[24..32].copy_from_slice(&(hash.wrapping_mul(0xC2B2AE35)).to_le_bytes());
-
-    Pubkey::new_from_array(bytes)
-}
-
-/// Find a wallet that produces bump 255 for ALL given mints
-///
-/// Modular function that searches for a wallet that when used in find_program_address
-/// with [wallet, token_program, mint] produces bump 255 for EVERY mint in the array.
-///
-/// # Arguments
-/// * `token_program` - Token program ID for ATA derivation
-/// * `mints` - Array of mint addresses that must ALL produce bump 255  
-/// * `ata_program` - ATA program ID for derivation
-/// * `base_entropy` - Base entropy for deterministic starting point
-///
-/// # Returns
-/// A wallet pubkey that produces bump 255 for [wallet, token_program, mint] for ALL mints
-///
-/// # Usage
-/// - Create operations: `find_optimal_wallet_for_mints(&[mint])`
-/// - Recover operations: `find_optimal_wallet_for_mints(&[owner_mint, nested_mint])`
-pub fn find_optimal_wallet_for_mints(
-    token_program: &Pubkey,
-    mints: &[Pubkey],
-    ata_programs: &[Pubkey],
-    base_entropy: u64,
-) -> Pubkey {
-    let mut modifier = base_entropy;
-
-    loop {
-        // Generate candidate wallet from modifier
-        let mut wallet_bytes = [0u8; 32];
-        wallet_bytes[0..8].copy_from_slice(&modifier.to_le_bytes());
-        wallet_bytes[8..16].copy_from_slice(&(modifier.wrapping_mul(0x9E3779B9)).to_le_bytes());
-        wallet_bytes[16..24].copy_from_slice(&(modifier.wrapping_mul(0x85EBCA6B)).to_le_bytes());
-        wallet_bytes[24..32].copy_from_slice(&(modifier.wrapping_mul(0xC2B2AE35)).to_le_bytes());
-
-        let candidate_wallet = Pubkey::new_from_array(wallet_bytes);
-
-        // Check if this wallet produces bump 255 for ALL mints across ALL ATA programs
-        let all_optimal = mints.iter().all(|mint| {
-            ata_programs.iter().all(|ata_program| {
-                let (_, bump) = Pubkey::find_program_address(
-                    &[
-                        candidate_wallet.as_ref(),
-                        token_program.as_ref(),
-                        mint.as_ref(),
-                    ],
-                    ata_program,
-                );
-                bump == 255
-            })
-        });
-
-        if all_optimal {
-            #[cfg(feature = "full-debug-logs")]
-            println!(
-                "🎯 Found optimal wallet with bump 255 for {} mints after {} attempts: {}",
-                mints.len(),
-                attempts + 1,
-                candidate_wallet.to_string()[0..8].to_string()
-            );
-            return candidate_wallet;
-        }
-
-        modifier = modifier.wrapping_add(1);
-    }
-}
-
-/// Generate a pubkey with optimal bump (255) for consistent single-iteration benchmarking
-///
-/// When benchmarking with iterations=1, this ensures predictable results by finding
-/// wallets that produce bump=255, which is optimal for ATA derivation performance.
-/// Falls back to random generation for multiple iterations to maintain test variety.
-///
-/// # Arguments
-/// * `variant` - The ATA variant to use for seeding
-/// * `test_bank` - The test bank ID for seeding
-/// * `test_number` - The test number for seeding  
-/// * `account_type` - The account type for seeding
-/// * `iteration` - Current iteration number
-/// * `run_entropy` - A run-specific entropy value to use for seeding
-/// * `token_program_id` - Token program ID for ATA derivation
-/// * `ata_program_id` - ATA program ID for derivation
-/// * `mint` - Mint address for ATA derivation
-/// * `max_iterations` - Total number of benchmark iterations (to detect single-iteration mode)
-///
-/// # Returns
-/// A pubkey that produces optimal bump when used as wallet for ATA derivation
-pub fn const_pk_with_optimal_bump(
-    variant: &AtaVariant,
-    test_bank: TestBankId,
-    test_number: u8,
-    account_type: AccountTypeId,
-    iteration: usize,
-    run_entropy: u64,
-    token_program_id: &Pubkey,
-    ata_program_ids: &[Pubkey],
-    mint: &Pubkey,
-    max_iterations: usize,
-) -> Pubkey {
-    // For multiple iterations or non-wallet account types, use random generation
-    if max_iterations > 1 || account_type != AccountTypeId::Wallet {
-        return random_seeded_pk(
-            variant,
-            test_bank,
-            test_number,
-            account_type,
-            iteration,
-            run_entropy,
-        );
-    }
-
-    // For single iterations on wallet generation, find optimal bump (255)
-    let search_entropy = run_entropy
-        .wrapping_add(test_number as u64)
-        .wrapping_add(iteration as u64);
-
-    find_optimal_wallet_for_mints(token_program_id, &[*mint], ata_program_ids, search_entropy)
-}
-
-pub fn build_multisig_data_core(m: u8, signer_pubkeys: &[&[u8; 32]]) -> Vec<u8> {
-    use spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS};
-
-    assert!(
-        m as usize <= signer_pubkeys.len(),
-        "m cannot exceed number of provided signers"
-    );
-    assert!(m >= 1, "m must be at least 1");
-    assert!(
-        signer_pubkeys.len() <= MAX_SIGNERS as usize,
-        "too many signers provided"
-    );
-
-    let mut data = vec![0u8; Multisig::LEN];
-    data[0] = m;
-    data[1] = signer_pubkeys.len() as u8;
-    data[2] = 1;
-
-    for (i, pk) in signer_pubkeys.iter().enumerate() {
-        let offset = 3 + i * 32;
-        data[offset..offset + 32].copy_from_slice(*pk);
-    }
-    data
-}
-
-#[inline(always)]
-fn build_mint_data_core(decimals: u8) -> [u8; MINT_ACCOUNT_SIZE] {
-    base_mint_data(0, &Pubkey::default(), decimals)
-}
-
-/// Generic helper to create the 82-byte SPL mint layout.
-///
-/// * `state` – 0 = Uninitialized, 1 = Initialized (matches SPL/Token-2022 enum).
-/// * `mint_authority` – 32-byte pubkey (all zeros if none).
-/// * `decimals` – mint decimals.
-#[inline(always)]
-fn base_mint_data(state: u32, mint_authority: &Pubkey, decimals: u8) -> [u8; MINT_ACCOUNT_SIZE] {
-    let mut data = [0u8; MINT_ACCOUNT_SIZE];
-    data[0..4].copy_from_slice(&state.to_le_bytes());
-    data[4..36].copy_from_slice(mint_authority.as_ref());
-    data[44] = decimals;
-    data[45] = 1; // is_initialized flag mirrors the state field
-                  // supply (bytes 46..50) already zeroed
-    data
-}
-
-#[inline(always)]
-fn build_token_account_data_core(
-    mint: &[u8; 32],
-    owner: &[u8; 32],
-    amount: u64,
-) -> [u8; TOKEN_ACCOUNT_SIZE] {
-    let mut data = [0u8; TOKEN_ACCOUNT_SIZE];
-    data[0..32].copy_from_slice(mint);
-    data[32..64].copy_from_slice(owner);
-    data[64..72].copy_from_slice(&amount.to_le_bytes());
-    data[108] = 1;
-    data
 }
 
 // ========================== SHARED BENCHMARK SETUP ============================
@@ -699,7 +197,7 @@ impl BenchmarkSetup {
 
     #[allow(dead_code)]
     /// Validate that the benchmark setup works with a simple test
-    pub(crate) fn validate_setup(
+    pub fn validate_setup(
         mollusk: &Mollusk,
         program_id: &Pubkey,
         token_program_id: &Pubkey,
@@ -739,7 +237,7 @@ impl BenchmarkSetup {
                 AccountMeta::new(ata, false),
                 AccountMeta::new_readonly(wallet, false),
                 AccountMeta::new_readonly(mint, false),
-                AccountMeta::new_readonly(SYSTEM_PROGRAM_ID, false),
+                AccountMeta::new_readonly(solana_system_interface::program::id(), false),
                 AccountMeta::new_readonly(*token_program_id, false),
             ],
             data: vec![0u8], // Create instruction
@@ -816,7 +314,7 @@ impl AtaImplementation {
         }
     }
 
-    pub(crate) fn p_ata_prefunded(program_id: Pubkey) -> Self {
+    pub fn p_ata_prefunded(program_id: Pubkey) -> Self {
         Self {
             name: "p-ata-prefunded",
             program_id,
@@ -847,11 +345,8 @@ pub enum CompatibilityStatus {
     ///   - `lamports`: Exact same balance  
     ///   - `owner`: Same program owner
     /// - Read-only accounts are not compared (they shouldn't change)
-    ///
-    /// **IMPLEMENTATION NOTES:**
     /// - Mint and owner addresses are intentionally kept consistent between P-ATA and SPL ATA
     ///   tests to enable true byte-for-byte comparison of ATA accounts
-    /// - SysvarRent differences are handled separately and don't affect this status
     ///
     /// **DOES NOT GUARANTEE:**
     /// - Identical compute unit consumption (tracked separately)
@@ -913,7 +408,7 @@ impl BenchmarkRunner {
         let mut last_error_message = None;
 
         // Run the benchmark multiple times to get average compute units
-        for i in 0..iterations {
+        for _i in 0..iterations {
             // Run with quiet logging unless full-debug-logs feature is enabled
             #[cfg(not(feature = "full-debug-logs"))]
             let result = mollusk.process_instruction(ix, accounts);
@@ -1191,25 +686,18 @@ impl BenchmarkRunner {
         (result, captured_text)
     }
 
+    /// Create mollusk instance with all ATA implementations loaded
+    /// Uses the unified setup function for all ATA implementations
     pub fn create_mollusk_for_all_ata_implementations(token_program_id: &Pubkey) -> Mollusk {
-        let mut mollusk = Mollusk::default();
+        // Convert from pinocchio Pubkey to solana Pubkey for unified function
+        let solana_token_program_id =
+            solana_pubkey::Pubkey::new_from_array(token_program_id.to_bytes());
 
-        for implementation in AtaImplementation::all().iter() {
-            mollusk.add_program(
-                &implementation.program_id,
-                implementation.binary_name,
-                &LOADER_V3,
-            );
-        }
-
-        mollusk.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
-
-        let token_2022_id = Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
-            "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-        ));
-        mollusk.add_program(&token_2022_id, "spl_token_2022", &LOADER_V3);
-
-        mollusk
+        // Use the unified setup to load all ATA implementations + token programs
+        setup_mollusk_unified(
+            MolluskAtaSetup::AllImplementations,
+            MolluskTokenSetup::WithToken2022(solana_token_program_id),
+        )
     }
 
     /// Create comparison result with compatibility checking

@@ -1,19 +1,25 @@
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
+
 use {
+    crate::tests::{
+        account_builder::AccountBuilder,
+        address_gen::{
+            derive_address_with_bump, find_optimal_wallet_for_mints, random_seeded_pk,
+            structured_pk,
+        },
+        benches::{account_templates::*, common::*, constants::*},
+    },
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
     solana_sysvar::rent,
     spl_token_2022::extension::ExtensionType,
+    std::vec,
+    std::vec::Vec,
 };
 
-use crate::{
-    account_templates::{FailureAccountBuilder, FailureInstructionBuilder, *},
-    AccountBuilder, AtaImplementation, BaseTestType, TestVariant, SYSTEM_PROGRAM_ID,
-};
-
-use crate::common::constants::account_sizes::*;
-
-// ======================= CONSOLIDATED TEST CASE BUILDERS =======================
+#[cfg(feature = "full-debug-logs")]
+use std::{println, string::String, string::ToString};
 
 /// Configuration for building test cases
 #[derive(Debug, Clone)]
@@ -259,17 +265,17 @@ impl CommonTestCaseBuilder {
                 special_account_mods: vec![SpecialAccountMod::NestedAta {
                     // No need to explicitly use AtaVariant::Original anymore
                     // structured_pk now automatically uses consistent addresses for mint types
-                    owner_mint: crate::common::structured_pk(
-                        &crate::common::AtaVariant::PAtaLegacy, // Can use any variant now
-                        crate::common::TestBankId::Benchmarks,
+                    owner_mint: structured_pk(
+                        &crate::tests::benches::common::AtaVariant::PAtaLegacy, // Can use any variant now
+                        crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
-                        crate::common::AccountTypeId::OwnerMint,
+                        crate::tests::benches::common::AccountTypeId::OwnerMint,
                     ),
-                    nested_mint: crate::common::structured_pk(
-                        &crate::common::AtaVariant::PAtaLegacy, // Can use any variant now
-                        crate::common::TestBankId::Benchmarks,
+                    nested_mint: structured_pk(
+                        &crate::tests::benches::common::AtaVariant::PAtaLegacy, // Can use any variant now
+                        crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
-                        crate::common::AccountTypeId::NestedMint,
+                        crate::tests::benches::common::AccountTypeId::NestedMint,
                     ),
                 }],
                 failure_mode: None,
@@ -285,39 +291,39 @@ impl CommonTestCaseBuilder {
                     SpecialAccountMod::NestedAta {
                         // No need to explicitly use AtaVariant::Original anymore
                         // structured_pk now automatically uses consistent addresses for mint types
-                        owner_mint: crate::common::structured_pk(
-                            &crate::common::AtaVariant::PAtaLegacy, // Can use any variant now
-                            crate::common::TestBankId::Benchmarks,
+                        owner_mint: structured_pk(
+                            &crate::tests::benches::common::AtaVariant::PAtaLegacy, // Can use any variant now
+                            crate::tests::benches::common::TestBankId::Benchmarks,
                             base_test as u8,
-                            crate::common::AccountTypeId::OwnerMint,
+                            crate::tests::benches::common::AccountTypeId::OwnerMint,
                         ),
-                        nested_mint: crate::common::structured_pk(
-                            &crate::common::AtaVariant::PAtaLegacy, // Can use any variant now
-                            crate::common::TestBankId::Benchmarks,
+                        nested_mint: structured_pk(
+                            &crate::tests::benches::common::AtaVariant::PAtaLegacy, // Can use any variant now
+                            crate::tests::benches::common::TestBankId::Benchmarks,
                             base_test as u8,
-                            crate::common::AccountTypeId::NestedMint,
+                            crate::tests::benches::common::AccountTypeId::NestedMint,
                         ),
                     },
                     SpecialAccountMod::MultisigWallet {
                         threshold: 2,
                         signers: vec![
-                            crate::common::structured_pk(
-                                &crate::common::AtaVariant::SplAta,
-                                crate::common::TestBankId::Benchmarks,
+                            structured_pk(
+                                &crate::tests::benches::common::AtaVariant::SplAta,
+                                crate::tests::benches::common::TestBankId::Benchmarks,
                                 base_test as u8,
-                                crate::common::AccountTypeId::Signer1,
+                                crate::tests::benches::common::AccountTypeId::Signer1,
                             ),
-                            crate::common::structured_pk(
-                                &crate::common::AtaVariant::SplAta,
-                                crate::common::TestBankId::Benchmarks,
+                            structured_pk(
+                                &crate::tests::benches::common::AtaVariant::SplAta,
+                                crate::tests::benches::common::TestBankId::Benchmarks,
                                 base_test as u8,
-                                crate::common::AccountTypeId::Signer2,
+                                crate::tests::benches::common::AccountTypeId::Signer2,
                             ),
-                            crate::common::structured_pk(
-                                &crate::common::AtaVariant::SplAta,
-                                crate::common::TestBankId::Benchmarks,
+                            structured_pk(
+                                &crate::tests::benches::common::AtaVariant::SplAta,
+                                crate::tests::benches::common::TestBankId::Benchmarks,
                                 base_test as u8,
-                                crate::common::AccountTypeId::Signer3,
+                                crate::tests::benches::common::AccountTypeId::Signer3,
                             ),
                         ],
                     },
@@ -332,23 +338,23 @@ impl CommonTestCaseBuilder {
                 setup_existing_ata: false,
                 use_fixed_mint_owner_payer: true,
                 special_account_mods: vec![SpecialAccountMod::FixedAddresses {
-                    payer: crate::common::structured_pk(
-                        &crate::common::AtaVariant::SplAta,
-                        crate::common::TestBankId::Benchmarks,
+                    payer: structured_pk(
+                        &crate::tests::benches::common::AtaVariant::SplAta,
+                        crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
-                        crate::common::AccountTypeId::Payer,
+                        crate::tests::benches::common::AccountTypeId::Payer,
                     ),
-                    wallet: crate::common::structured_pk(
-                        &crate::common::AtaVariant::SplAta,
-                        crate::common::TestBankId::Benchmarks,
+                    wallet: structured_pk(
+                        &crate::tests::benches::common::AtaVariant::SplAta,
+                        crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
-                        crate::common::AccountTypeId::Wallet,
+                        crate::tests::benches::common::AccountTypeId::Wallet,
                     ),
-                    mint: crate::common::structured_pk(
-                        &crate::common::AtaVariant::SplAta,
-                        crate::common::TestBankId::Benchmarks,
+                    mint: structured_pk(
+                        &crate::tests::benches::common::AtaVariant::SplAta,
+                        crate::tests::benches::common::TestBankId::Benchmarks,
                         base_test as u8,
-                        crate::common::AccountTypeId::Mint,
+                        crate::tests::benches::common::AccountTypeId::Mint,
                     ),
                 }],
                 failure_mode: None,
@@ -391,9 +397,9 @@ impl CommonTestCaseBuilder {
     ) -> (Instruction, Vec<(Pubkey, Account)>) {
         // Use structured addressing to prevent cross-contamination
         let test_bank = if config.failure_mode.is_some() {
-            crate::common::TestBankId::Failures
+            crate::tests::benches::common::TestBankId::Failures
         } else {
-            crate::common::TestBankId::Benchmarks
+            crate::tests::benches::common::TestBankId::Benchmarks
         };
         // For address generation, always use the actual variant for test number calculation
         // This ensures P-ATA and SPL ATA use the same test number for the same variant,
@@ -409,11 +415,8 @@ impl CommonTestCaseBuilder {
                 .wrapping_add(test_number as u64)
                 .wrapping_add(iteration as u64);
 
-            if matches!(
-                config.base_test,
-                BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
-            ) {
-                // For recover operations, find wallet optimal for both owner_mint and nested_mint
+            if matches!(config.base_test, BaseTestType::RecoverNested) {
+                // For RecoverNested operations, find wallet optimal for both owner_mint and nested_mint
                 if let Some(SpecialAccountMod::NestedAta {
                     owner_mint,
                     nested_mint,
@@ -423,7 +426,8 @@ impl CommonTestCaseBuilder {
                     .find(|m| matches!(m, SpecialAccountMod::NestedAta { .. }))
                 {
                     // For recover operations, optimize ALL three ATAs: Owner, Destination, AND Nested
-                    let all_implementations = crate::common::AtaImplementation::all();
+                    let all_implementations =
+                        crate::tests::benches::common::AtaImplementation::all();
                     let ata_program_ids = vec![
                         all_implementations.spl_impl.program_id,
                         all_implementations.pata_legacy_impl.program_id,
@@ -433,7 +437,7 @@ impl CommonTestCaseBuilder {
                     let mut attempt_entropy = search_entropy;
                     while {
                         // 1. Find wallet optimal for Owner ATA and Destination ATA
-                        let candidate_wallet = crate::common::find_optimal_wallet_for_mints(
+                        let candidate_wallet = find_optimal_wallet_for_mints(
                             &config.token_program,
                             &[*owner_mint, *nested_mint],
                             &ata_program_ids[..],
@@ -476,15 +480,25 @@ impl CommonTestCaseBuilder {
                         }
                     } {}
                 }
+            } else if matches!(config.base_test, BaseTestType::RecoverMultisig) {
+                // For RecoverMultisig, don't modify the wallet address because it needs to
+                // be consistent with the multisig signer configuration. The signers are
+                // generated with specific structured addresses that must match the wallet.
+                // Optimal bump search would break this relationship.
+                #[cfg(feature = "full-debug-logs")]
+                {
+                    println!("🔍 [DEBUG] Skipping optimal bump for RecoverMultisig to preserve multisig relationship");
+                    println!("    Using deterministic wallet: {}", wallet);
+                }
             } else if !matches!(config.base_test, BaseTestType::WorstCase) {
                 // For standard create operations, find wallet optimal for mint across all ATA programs
-                let all_implementations = crate::common::AtaImplementation::all();
+                let all_implementations = crate::tests::benches::common::AtaImplementation::all();
                 let ata_program_ids = vec![
                     all_implementations.spl_impl.program_id,
                     all_implementations.pata_legacy_impl.program_id,
                     all_implementations.pata_prefunded_impl.program_id,
                 ];
-                wallet = crate::common::find_optimal_wallet_for_mints(
+                wallet = find_optimal_wallet_for_mints(
                     &config.token_program,
                     &[mint],
                     &ata_program_ids[..],
@@ -522,6 +536,7 @@ impl CommonTestCaseBuilder {
         ) {
             let actual_wallet = wallet;
 
+            #[allow(unused_variables)]
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
                 nested_mint,
@@ -556,14 +571,28 @@ impl CommonTestCaseBuilder {
             )
         } else {
             // Standard tests: find the correct bump for the random wallet
-            Pubkey::find_program_address(
-                &[
+            // Special handling for InvalidBumpValue failure mode
+            if let Some(FailureMode::InvalidBumpValue(invalid_bump)) = &config.failure_mode {
+                // For InvalidBumpValue tests, derive address using the invalid bump
+                let seeds = &[
                     wallet.as_ref(),
                     config.token_program.as_ref(),
                     mint.as_ref(),
-                ],
-                &derivation_program_id,
-            )
+                ];
+                let invalid_address =
+                    derive_address_with_bump(seeds, *invalid_bump, &derivation_program_id);
+                (invalid_address, *invalid_bump)
+            } else {
+                // Normal case: find the canonical bump
+                Pubkey::find_program_address(
+                    &[
+                        wallet.as_ref(),
+                        config.token_program.as_ref(),
+                        mint.as_ref(),
+                    ],
+                    &derivation_program_id,
+                )
+            }
         };
 
         let mut accounts = Self::build_accounts(
@@ -577,7 +606,12 @@ impl CommonTestCaseBuilder {
         );
         let mut ix = Self::build_instruction(&config, variant, ata_implementation, &accounts, bump);
 
+        #[cfg(feature = "full-debug-logs")]
+        println!("🐛 [DEBUG] Built instruction with data: {:?}", ix.data);
+
         if let Some(failure_mode) = &config.failure_mode {
+            #[cfg(feature = "full-debug-logs")]
+            println!("🐛 [DEBUG] Applying failure mode: {:?}", failure_mode);
             Self::apply_failure_mode(
                 failure_mode,
                 &mut ix,
@@ -596,7 +630,7 @@ impl CommonTestCaseBuilder {
 
     fn get_structured_addresses(
         config: &TestCaseConfig,
-        test_bank: crate::common::TestBankId,
+        test_bank: crate::tests::benches::common::TestBankId,
         test_number: u8,
         iteration: usize,
         run_entropy: u64,
@@ -617,26 +651,27 @@ impl CommonTestCaseBuilder {
         }
 
         // Use consistent variant for mint and wallet to enable byte-for-byte comparison
-        let consistent_variant = &crate::common::AtaVariant::SplAta;
+        let consistent_variant = &crate::tests::benches::common::AtaVariant::SplAta;
 
-        let payer = crate::common::structured_pk(
+        let payer = structured_pk(
             consistent_variant,
             test_bank,
             test_number,
-            crate::common::AccountTypeId::Payer,
+            crate::tests::benches::common::AccountTypeId::Payer,
         );
 
-        let mint = crate::common::structured_pk(
+        let mint = structured_pk(
             consistent_variant,
             test_bank,
             test_number,
-            crate::common::AccountTypeId::Mint,
+            crate::tests::benches::common::AccountTypeId::Mint,
         );
         let wallet = if matches!(
             config.base_test,
             BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
         ) {
             // For recover tests, the wallet must be engineered using the owner_mint as a seed.
+            #[allow(unused_variables)]
             let (owner_mint, _) = if let Some(SpecialAccountMod::NestedAta {
                 owner_mint,
                 nested_mint,
@@ -651,29 +686,41 @@ impl CommonTestCaseBuilder {
                 panic!("Could not find NestedAta config for recover test");
             };
 
-            // Use random seeded pubkey for recover tests - optimal bump logic will be added later
-            crate::common::random_seeded_pk(
-                consistent_variant,
-                test_bank,
-                test_number,
-                crate::common::AccountTypeId::Wallet,
-                iteration,
-                run_entropy,
-            )
+            // For multisig tests, generate a deterministic multisig account address
+            // For nested tests, use random seeded pubkey
+            if matches!(config.base_test, BaseTestType::RecoverMultisig) {
+                // Generate deterministic multisig wallet address using same base parameters as signers
+                structured_pk(
+                    consistent_variant,
+                    test_bank,
+                    test_number,
+                    crate::tests::benches::common::AccountTypeId::Wallet,
+                )
+            } else {
+                // Use random seeded pubkey for recover nested tests
+                random_seeded_pk(
+                    consistent_variant,
+                    test_bank,
+                    test_number,
+                    crate::tests::benches::common::AccountTypeId::Wallet,
+                    iteration,
+                    run_entropy,
+                )
+            }
         } else if matches!(config.base_test, BaseTestType::WorstCase) {
-            crate::common::structured_pk(
+            structured_pk(
                 consistent_variant,
                 test_bank,
                 test_number,
-                crate::common::AccountTypeId::Wallet,
+                crate::tests::benches::common::AccountTypeId::Wallet,
             )
         } else {
             // Use random seeded pubkey for standard tests - optimal bump logic will be added later
-            crate::common::random_seeded_pk(
+            random_seeded_pk(
                 consistent_variant,
                 test_bank,
                 test_number,
-                crate::common::AccountTypeId::Wallet,
+                crate::tests::benches::common::AccountTypeId::Wallet,
                 iteration,
                 run_entropy,
             )
@@ -786,6 +833,14 @@ impl CommonTestCaseBuilder {
             &ata_implementation.program_id,
         );
 
+        #[cfg(feature = "full-debug-logs")]
+        if matches!(config.base_test, BaseTestType::RecoverMultisig) {
+            println!("🔍 [DEBUG] Calculated addresses:");
+            println!("    nested_ata: {}", nested_ata);
+            println!("    dest_ata: {}", dest_ata);
+            println!("    nested_mint: {}", nested_mint);
+        }
+
         let mut account_set = RecoverAccountSet::new(
             nested_ata,
             nested_mint,
@@ -818,7 +873,8 @@ impl CommonTestCaseBuilder {
         bump: u8,
     ) -> Instruction {
         let metas = Self::build_metas(config, variant, accounts);
-        let data = Self::build_instruction_data(config, variant, bump);
+        let data =
+            Self::build_instruction_data(config, variant, ata_implementation, accounts, bump);
 
         Instruction {
             program_id: ata_implementation.program_id,
@@ -880,13 +936,68 @@ impl CommonTestCaseBuilder {
             AccountMeta::new_readonly(accounts[4].0, false), // owner_mint
             AccountMeta::new(accounts[5].0, wallet_is_signer), // wallet
             AccountMeta::new_readonly(accounts[6].0, false), // token_program
-            AccountMeta::new_readonly(accounts[7].0, false), // spl_token_interface
         ];
 
         // Add multisig signers if present
         if matches!(config.base_test, BaseTestType::RecoverMultisig) {
+            #[cfg(feature = "full-debug-logs")]
+            {
+                println!("🔍 [DEBUG] RecoverMultisig meta building:");
+                println!("    Total accounts: {}", accounts.len());
+                for (i, (pubkey, _)) in accounts.iter().enumerate() {
+                    println!("    accounts[{}]: {}", i, pubkey);
+                }
+
+                // Show what we're passing to the program
+                println!("🔍 [DEBUG] RecoverMultisig instruction accounts:");
+                println!("    [0] nested_ata: {}", accounts[0].0);
+                println!("    [1] nested_mint: {}", accounts[1].0);
+                println!("    [2] dest_ata: {}", accounts[2].0);
+                println!("    [3] owner_ata: {}", accounts[3].0);
+                println!("    [4] owner_mint: {}", accounts[4].0);
+                println!("    [5] wallet (multisig): {}", accounts[5].0);
+                println!("    [6] token_program: {}", accounts[6].0);
+            }
+
             // For 2-of-3 multisig, only pass in the 2 accounts that are actually signing
             let signer_start = accounts.len() - 3;
+
+            #[cfg(feature = "full-debug-logs")]
+            {
+                println!("    Signer start index: {}", signer_start);
+                println!("    Signer 1: {}", accounts[signer_start].0);
+                println!("    Signer 2: {}", accounts[signer_start + 1].0);
+                println!(
+                    "    Signer 3 (not included): {}",
+                    accounts[signer_start + 2].0
+                );
+
+                // Also check what's in the multisig account data
+                let multisig_data = &accounts[5].1.data;
+                // Minimum length = header (3 bytes) + first signer (32 bytes)
+                if multisig_data.len() >= 35 {
+                    let m = multisig_data[0];
+                    let n = multisig_data[1];
+                    let initialized = multisig_data[2];
+                    println!(
+                        "    Multisig config: m={}, n={}, initialized={}",
+                        m, n, initialized
+                    );
+
+                    for i in 0..n {
+                        let offset = 3 + (i as usize) * 32;
+                        if offset + 32 <= multisig_data.len() {
+                            let signer_bytes = &multisig_data[offset..offset + 32];
+                            let signer_pubkey = Pubkey::try_from(signer_bytes).unwrap_or_default();
+                            println!("    Multisig signer {}: {}", i, signer_pubkey);
+                        }
+                    }
+                }
+
+                // Show the final instruction meta that will be sent
+                println!("🔍 [DEBUG] Final instruction metas being built:");
+            }
+
             metas.push(AccountMeta::new_readonly(accounts[signer_start].0, true));
             metas.push(AccountMeta::new_readonly(
                 accounts[signer_start + 1].0,
@@ -895,11 +1006,100 @@ impl CommonTestCaseBuilder {
             // Don't include the third signer since it's not signing
         }
 
+        #[cfg(feature = "full-debug-logs")]
+        if matches!(config.base_test, BaseTestType::RecoverMultisig) {
+            println!("🔍 [DEBUG] Final instruction metas for RecoverMultisig:");
+            for (i, meta) in metas.iter().enumerate() {
+                println!(
+                    "    meta[{}]: {} (writable: {}, signer: {})",
+                    i, meta.pubkey, meta.is_writable, meta.is_signer
+                );
+            }
+        }
+
         metas
     }
 
     /// Build instruction data
-    fn build_instruction_data(config: &TestCaseConfig, variant: TestVariant, bump: u8) -> Vec<u8> {
+    fn build_instruction_data(
+        config: &TestCaseConfig,
+        variant: TestVariant,
+        ata_implementation: &AtaImplementation,
+        accounts: &[(Pubkey, Account)],
+        bump: u8,
+    ) -> Vec<u8> {
+        // Delegate to shared encoder for standard Create / CreateIdempotent cases to avoid duplicate logic.
+        if config.instruction_discriminator <= 1 {
+            use crate::tests::test_utils::{
+                encode_create_ata_instruction_data, CreateAtaInstructionType,
+            };
+            // Compute optional account length when token_account_len_arg is requested.
+            let account_len_opt: Option<u16> = if variant.token_account_len_arg {
+                if config.token_program
+                    == Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
+                        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                    ))
+                {
+                    // Token-2022 path
+                    if matches!(config.base_test, BaseTestType::CreateExtended) {
+                        let account_extensions =
+                            ExtensionType::get_required_init_account_extensions(&[
+                                ExtensionType::TransferFeeConfig,
+                                ExtensionType::NonTransferable,
+                                ExtensionType::TransferHook,
+                                ExtensionType::DefaultAccountState,
+                                ExtensionType::MetadataPointer,
+                            ]);
+                        Some(
+                            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
+                                &account_extensions,
+                            )
+                            .expect("failed to calculate extended account length") as u16,
+                        )
+                    } else {
+                        Some(
+                            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&[
+                                ExtensionType::ImmutableOwner,
+                            ])
+                            .expect("failed to calculate Token-2022 account length") as u16,
+                        )
+                    }
+                } else {
+                    // Standard SPL Token account size
+                    Some(165u16)
+                }
+            } else {
+                None
+            };
+
+            let instruction_type = if config.instruction_discriminator == 0 {
+                // Create
+                CreateAtaInstructionType::Create {
+                    bump: if variant.bump_arg || variant.token_account_len_arg {
+                        Some(bump)
+                    } else {
+                        None
+                    },
+                    account_len: account_len_opt,
+                }
+            } else {
+                // CreateIdempotent
+                CreateAtaInstructionType::CreateIdempotent {
+                    bump: if variant.bump_arg { Some(bump) } else { None },
+                }
+            };
+
+            #[cfg(feature = "full-debug-logs")]
+            println!(
+                "🐛 [DEBUG] Early return path - building instruction with instruction_type: {:?}",
+                instruction_type
+            );
+            let data = encode_create_ata_instruction_data(&instruction_type);
+            #[cfg(feature = "full-debug-logs")]
+            println!("🐛 [DEBUG] Early return path - encoded data: {:?}", data);
+            return data;
+        }
+
         let mut data = vec![config.instruction_discriminator];
 
         // Special handling for RecoverNested/RecoverMultisig bump variants
@@ -910,52 +1110,45 @@ impl CommonTestCaseBuilder {
         {
             // For recover operations with bump optimization, we need 3 bumps:
             // owner_bump, nested_bump, destination_bump
-            // We'll use the provided bump as the owner_bump and calculate the others
+            // Calculate each bump correctly based on the account addresses in the instruction
+
+            // Use the provided bump as the owner_bump (already calculated correctly)
             data.push(bump); // owner_bump (already calculated)
-            data.push(bump); // nested_bump (use same for test simplicity)
-            data.push(bump); // destination_bump (use same for test simplicity)
+
+            // Calculate the actual nested_bump and destination_bump from the account addresses
+            // Account layout for recover operations:
+            // accounts[0]: nested_ata, accounts[1]: nested_mint, accounts[2]: dest_ata,
+            // accounts[3]: owner_ata, accounts[4]: owner_mint, accounts[5]: wallet,
+            // accounts[6]: token_program
+
+            // Calculate nested_bump: find_program_address([owner_ata, token_program, nested_mint], ata_program)
+            let (_, nested_bump) = Pubkey::find_program_address(
+                &[
+                    accounts[3].0.as_ref(), // owner_ata
+                    accounts[6].0.as_ref(), // token_program
+                    accounts[1].0.as_ref(), // nested_mint
+                ],
+                &ata_implementation.program_id,
+            );
+
+            // Calculate destination_bump: find_program_address([wallet, token_program, nested_mint], ata_program)
+            let (_, destination_bump) = Pubkey::find_program_address(
+                &[
+                    accounts[5].0.as_ref(), // wallet
+                    accounts[6].0.as_ref(), // token_program
+                    accounts[1].0.as_ref(), // nested_mint
+                ],
+                &ata_implementation.program_id,
+            );
+
+            data.push(nested_bump);
+            data.push(destination_bump);
             return data;
         }
 
-        // If token_account_len_arg is specified, we MUST also include bump (P-ATA requirement)
-        if variant.bump_arg || variant.token_account_len_arg {
+        // Bump / length logic for discriminator > 1 (Recover etc.)
+        if variant.bump_arg {
             data.push(bump);
-        }
-
-        if variant.token_account_len_arg {
-            let account_len: u16 = if config.token_program
-                == Pubkey::new_from_array(pinocchio_pubkey::pubkey!(
-                    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-                )) {
-                // For CreateExtended test, calculate account size based on the mint extensions
-                if matches!(config.base_test, BaseTestType::CreateExtended) {
-                    // Calculate account extensions required by the extended mint
-                    let account_extensions =
-                        ExtensionType::get_required_init_account_extensions(&[
-                            ExtensionType::TransferFeeConfig,   // → requires TransferFeeAmount
-                            ExtensionType::NonTransferable,     // → requires NonTransferableAccount
-                            ExtensionType::TransferHook,        // → requires TransferHookAccount
-                            ExtensionType::DefaultAccountState, // → mint-only (no account extension)
-                            ExtensionType::MetadataPointer, // → mint-only (no account extension)
-                        ]);
-
-                    ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
-                        &account_extensions,
-                    )
-                    .expect("failed to calculate extended account length")
-                        as u16
-                } else {
-                    // Standard Token-2022 with just ImmutableOwner
-                    ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(&[
-                        ExtensionType::ImmutableOwner,
-                    ])
-                    .expect("failed to calculate Token-2022 account length")
-                        as u16
-                }
-            } else {
-                165 // Standard token account size
-            };
-            data.extend_from_slice(&account_len.to_le_bytes());
         }
 
         data
@@ -1119,13 +1312,20 @@ impl CommonTestCaseBuilder {
                 }
             }
             FailureMode::RecoverMultisigInsufficientSigners => {
-                if ix.accounts.len() > 9 {
-                    FailureInstructionBuilder::set_account_signer_status_by_index(ix, 8, true);
-                    FailureInstructionBuilder::set_account_signer_status_by_index(ix, 9, false);
-                    if ix.accounts.len() > 10 {
-                        FailureInstructionBuilder::set_account_signer_status_by_index(
-                            ix, 10, false,
-                        );
+                // metas layout: 0..6 standard accounts, 7.. signers (max 3 signers in test)
+                // Keep only the *first* signer account as a true signer and clear the rest.
+                if ix.accounts.len() > 7 {
+                    // signer 0 remains signer
+                    FailureInstructionBuilder::set_account_signer_status_by_index(ix, 7, true);
+
+                    // signer 1 – unset signer flag
+                    if ix.accounts.len() > 8 {
+                        FailureInstructionBuilder::set_account_signer_status_by_index(ix, 8, false);
+                    }
+
+                    // signer 2 – unset signer flag (if present)
+                    if ix.accounts.len() > 9 {
+                        FailureInstructionBuilder::set_account_signer_status_by_index(ix, 9, false);
                     }
                 }
             }
@@ -1147,7 +1347,7 @@ impl CommonTestCaseBuilder {
                 FailureInstructionBuilder::replace_account_everywhere(
                     ix,
                     accounts,
-                    SYSTEM_PROGRAM_ID,
+                    solana_system_interface::program::id(),
                     *wrong_id,
                 );
             }
@@ -1186,7 +1386,17 @@ impl CommonTestCaseBuilder {
                 FailureInstructionBuilder::set_discriminator(ix, *disc);
             }
             FailureMode::InvalidBumpValue(invalid_bump) => {
+                #[cfg(feature = "full-debug-logs")]
+                println!(
+                    "🐛 [DEBUG] Applying InvalidBumpValue({}) to instruction. Data before: {:?}",
+                    invalid_bump, ix.data
+                );
                 FailureInstructionBuilder::set_bump_value(ix, *invalid_bump);
+                #[cfg(feature = "full-debug-logs")]
+                println!(
+                    "🐛 [DEBUG] InvalidBumpValue applied. Data after: {:?}",
+                    ix.data
+                );
             }
 
             // Complex recovery modifications

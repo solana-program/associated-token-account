@@ -1,8 +1,19 @@
-#![allow(dead_code)]
+#![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 //! Account templates for benchmark tests
 
-use crate::{constants::lamports::*, AccountBuilder, NATIVE_LOADER_ID, SYSTEM_PROGRAM_ID};
-use {solana_account::Account, solana_pubkey::Pubkey, solana_sysvar::rent};
+use {
+    crate::tests::{
+        account_builder::AccountBuilder,
+        test_utils::shared_constants::{NATIVE_LOADER_ID, ONE_SOL},
+    },
+    solana_account::Account,
+    solana_pubkey::Pubkey,
+    solana_sysvar::rent,
+    std::{vec, vec::Vec},
+};
+
+#[cfg(feature = "full-debug-logs")]
+use std::println;
 
 /// Standard account set for most ATA benchmark tests
 ///
@@ -42,12 +53,9 @@ impl StandardAccountSet {
             payer: (payer, AccountBuilder::system_account(ONE_SOL)),
             ata: (ata, AccountBuilder::system_account(0)), // Will be created by instruction
             wallet: (wallet, AccountBuilder::system_account(0)),
-            mint: (
-                mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
+            mint: (mint, AccountBuilder::mint(0, token_program_id)),
             system_program: (
-                SYSTEM_PROGRAM_ID,
+                solana_system_interface::program::id(),
                 AccountBuilder::executable_program(NATIVE_LOADER_ID),
             ),
             token_program: (
@@ -76,7 +84,8 @@ impl StandardAccountSet {
     ) -> Self {
         // Protect against accidental re-initialisation when helpers are chained in the wrong order.
         assert_eq!(
-            self.ata.1.owner, SYSTEM_PROGRAM_ID,
+            self.ata.1.owner,
+            solana_system_interface::program::id(),
             "with_existing_ata() called after ATA owner was already set – check builder call order"
         );
         assert!(
@@ -98,7 +107,8 @@ impl StandardAccountSet {
     /// Panics if the ATA has already been initialized or given a non-zero balance.
     pub fn with_topup_ata(mut self) -> Self {
         assert_eq!(
-            self.ata.1.owner, SYSTEM_PROGRAM_ID,
+            self.ata.1.owner,
+            solana_system_interface::program::id(),
             "with_topup_ata() called after ATA owner was already set – check builder call order"
         );
         assert_eq!(
@@ -107,7 +117,7 @@ impl StandardAccountSet {
         );
         self.ata.1.lamports = 1_000_000; // Below rent-exempt threshold
         self.ata.1.data = vec![]; // No data allocated yet
-        self.ata.1.owner = SYSTEM_PROGRAM_ID; // Still system-owned
+        self.ata.1.owner = solana_system_interface::program::id(); // Still system-owned
         self
     }
 
@@ -123,7 +133,7 @@ impl StandardAccountSet {
 
     /// Update the mint to use Token-2022 specific layout
     pub fn with_token_2022_mint(mut self, decimals: u8) -> Self {
-        self.mint.1 = AccountBuilder::token_2022_mint_account(decimals, &self.token_program.0);
+        self.mint.1 = AccountBuilder::mint(decimals, &self.token_program.0);
         self
     }
 
@@ -227,10 +237,7 @@ impl RecoverAccountSet {
                     token_program_id,
                 ),
             ),
-            nested_mint: (
-                nested_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
+            nested_mint: (nested_mint, AccountBuilder::mint(0, token_program_id)),
             dest_ata: (
                 dest_ata,
                 AccountBuilder::token_account(&nested_mint, &wallet, 0, token_program_id),
@@ -239,10 +246,7 @@ impl RecoverAccountSet {
                 owner_ata,
                 AccountBuilder::token_account(&owner_mint, &wallet, 0, token_program_id),
             ),
-            owner_mint: (
-                owner_mint,
-                AccountBuilder::mint_account(0, token_program_id, false),
-            ),
+            owner_mint: (owner_mint, AccountBuilder::mint(0, token_program_id)),
             wallet: (wallet, AccountBuilder::system_account(ONE_SOL)),
             token_program: (
                 *token_program_id,
@@ -260,10 +264,31 @@ impl RecoverAccountSet {
     ///
     /// Used for RecoverMultisig tests
     pub fn with_multisig(mut self, threshold: u8, signers: Vec<Pubkey>) -> Self {
+        #[cfg(feature = "full-debug-logs")]
+        {
+            println!(
+                "🔍 [DEBUG] Setting up multisig with threshold: {}, signers: {}",
+                threshold,
+                signers.len()
+            );
+            for (i, signer) in signers.iter().enumerate() {
+                println!("    Signer {}: {}", i, signer);
+            }
+        }
+
         // Replace wallet with multisig account
         self.wallet.1 = Account {
             lamports: ONE_SOL,
-            data: AccountBuilder::multisig_data(threshold, &signers),
+            data: {
+                let byte_refs: Vec<&[u8; 32]> = signers
+                    .iter()
+                    .take(signers.len())
+                    .map(|pk| pk.as_ref().try_into().expect("Pubkey is 32 bytes"))
+                    .collect();
+                crate::tests::test_utils::unified_builders::create_multisig_data_unified(
+                    threshold, &byte_refs,
+                )
+            },
             owner: self.token_program.0,
             executable: false,
             rent_epoch: 0,
@@ -273,6 +298,12 @@ impl RecoverAccountSet {
         for signer in &signers {
             self.multisig_signers
                 .push((*signer, AccountBuilder::system_account(ONE_SOL)));
+        }
+
+        #[cfg(feature = "full-debug-logs")]
+        {
+            println!("    Multisig wallet address: {}", self.wallet.0);
+            println!("    Added {} signer accounts", self.multisig_signers.len());
         }
 
         self
@@ -377,10 +408,7 @@ impl FailureAccountBuilder {
         }
         // Add the wrong mint account if it doesn't exist
         if !accounts.iter().any(|(addr, _)| *addr == wrong_mint) {
-            accounts.push((
-                wrong_mint,
-                AccountBuilder::mint_account(0, token_program, false),
-            ));
+            accounts.push((wrong_mint, AccountBuilder::mint(0, token_program)));
         }
     }
 
@@ -411,7 +439,7 @@ impl FailureAccountBuilder {
             .position(|(addr, _)| *addr == target_address)
         {
             accounts[pos].1.data =
-                vec![0xFF; crate::common::constants::account_sizes::TOKEN_ACCOUNT_SIZE];
+                vec![0xFF; crate::tests::benches::constants::account_sizes::TOKEN_ACCOUNT_SIZE];
             accounts[pos].1.owner = *token_program;
             accounts[pos].1.lamports = 2_000_000;
         }
@@ -446,7 +474,7 @@ impl FailureAccountBuilder {
             .position(|(addr, _)| *addr == target_address)
         {
             accounts[pos].1.data =
-                vec![0xFF; crate::common::constants::account_sizes::MULTISIG_ACCOUNT_SIZE];
+                vec![0xFF; crate::tests::benches::constants::account_sizes::MULTISIG_ACCOUNT_SIZE];
             accounts[pos].1.owner = *token_program;
         }
     }

@@ -10,7 +10,9 @@ mod processor;
 mod recover;
 mod size;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "std"))]
 extern crate std;
-#[cfg(test)]
-mod tests;
+#[cfg(any(test, feature = "std"))]
+pub mod tests;
+#[cfg(any(test, feature = "std"))]
+extern crate self as pinocchio_ata_program;

@@ -10,7 +10,7 @@ edition = "2021"
 build = "build.rs"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 # Build script (build.rs) compiles token programs during benchmarks
 
@@ -22,6 +22,41 @@ default = ["create-prefunded-account"]
 full-debug-logs = []
 bench-transfer-unchecked = []
 test-debug = []
+
+# extend std feature list with newly added optional crates
+std = [
+    "mollusk-svm",
+    "mollusk-svm-bencher",
+    "solana-account",
+    "solana-instruction",
+    "solana-logger",
+    "solana-pubkey",
+    "solana-sysvar",
+    "solana-program-test",
+    "solana-system-interface",
+    "solana-program",
+    "solana-sdk",
+    "solana-keypair",
+    "solana-signature",
+    "solana-signer",
+    "spl-token",
+    "spl-token-2022",
+    "spl-associated-token-account",
+    "spl-associated-token-account-client",
+    "spl-token-group-interface",
+    "spl-token-metadata-interface",
+    "curve25519-dalek",
+    "comfy-table",
+    "strum",
+    "bs58",
+    "colored",
+    "itertools",
+    "serde",
+    "serde_json",
+    "bincode",
+    "solana-sdk-ids",
+    "test-case",
+] # updated list with remaining crates
 
 [build-dependencies]
 serde_json = "1.0"
@@ -47,6 +82,47 @@ pinocchio-token = "0.3.0"
 solana-program-option = "2.2.1"
 spl-token-interface = { version = "^0", git = "https://github.com/solana-program/token.git" }
 
+# Additional optional dependencies needed for benchmarks/tests
+solana-program = { version = "2.3.0", optional = true }
+solana-sdk = { version = "2.3.1", optional = true }
+solana-keypair = { version = "2.2.3", optional = true }
+solana-signature = { version = "2.3.0", optional = true }
+solana-signer = { version = "2.2.1", optional = true }
+spl-associated-token-account = { version = "7.0.0", optional = true }
+spl-associated-token-account-client = { version = "2.0.0", optional = true }
+bincode = { version = "1.3.3", optional = true }
+solana-sdk-ids = { version = "2.2.1", optional = true }
+test-case = { version = "3.3.1", optional = true }
+# End optional additions
+
+# ---------------------- std-only optional dependencies ----------------------
+solana-account = { version = "2.2.1", optional = true }
+solana-instruction = { version = "2.3.0", optional = true }
+solana-logger = { version = "2.3.0", optional = true }
+solana-pubkey = { version = "2.2.1", features = ["curve25519"], optional = true }
+solana-sysvar = { version = "2.2.2", optional = true }
+solana-system-interface = { version = "1.0.0", git = "https://github.com/rustopian/system.git", branch = "create-prefunded-account", optional = true }
+solana-program-test = { version = "3.0", git = "https://github.com/rustopian/agave.git", branch = "create-prefunded-account", optional = true }
+
+mollusk-svm = { version = "0.4.1", git = "https://github.com/rustopian/mollusk.git", branch = "rustopian/create-prefunded-account", features = ["all-builtins"], optional = true }
+mollusk-svm-bencher = { version = "0.4.1", git = "https://github.com/rustopian/mollusk.git", branch = "rustopian/create-prefunded-account", optional = true }
+
+curve25519-dalek = { version = "4.1.3", default-features = false, optional = true }
+
+spl-token = { version = "8.0.0", features = ["no-entrypoint"], optional = true }
+spl-token-2022 = { version = "8.0.1", features = ["no-entrypoint"], optional = true }
+spl-token-group-interface = { version = "0.6.0", optional = true }
+spl-token-metadata-interface = { version = "0.7.0", optional = true }
+
+comfy-table = { version = "7", optional = true }
+strum = { version = "0.27.1", features = ["derive"], optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+bs58 = { version = "0.4.0", optional = true }
+colored = { version = "2.0", optional = true }
+itertools = { version = "0.12", optional = true }
+# ---------------------------------------------------------------------------
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 curve25519-dalek = { version = "4.1.3", default-features = false }
@@ -57,7 +133,6 @@ solana-instruction = "2.3.0"
 solana-keypair = "2.2.3"
 solana-logger = "2.3.0"
 solana-pubkey = { version = "2.2.1", features = ["curve25519"] }
-solana-sdk-ids = "2.2.1"
 solana-signature = "2.3.0"
 solana-signer = "2.2.1"
 solana-sysvar = "2.2.2"
@@ -72,7 +147,6 @@ serde_json = "^1.0"
 serde = { version = "^1.0", features = ["derive"] }
 comfy-table = "7"
 strum = { version = "0.27.1", features = ["derive"] }
-test-case = "3.3.1"
 bs58 = "0.4.0"
 colored = "2.0"
 itertools = "0.12"
@@ -84,12 +158,18 @@ bincode = "1.3.3"
 tokio = { version = "1.46.1", features = ["macros", "rt-multi-thread", "sync"] }
 spl-token-metadata-interface = "0.7.0"
 spl-token-group-interface = "0.6.0"
+solana-sdk-ids = "2.2.1"
+test-case = "3.3.1"
 
 [[bench]]
 name = "ata_instruction_benches"
+path = "src/tests/benches/ata_instruction_benches.rs"
 harness = false
+required-features = ["std"]
 
 [[bench]]
 name = "failure_scenarios"
+path = "src/tests/benches/failure_scenarios.rs"
 harness = false
+required-features = ["std"]
 

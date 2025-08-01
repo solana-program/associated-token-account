@@ -2,10 +2,8 @@ use {
     super::test_bump_utils::setup_mollusk_for_bump_tests,
     crate::tests::test_utils::{build_create_ata_instruction, CreateAtaInstructionType},
     mollusk_svm::result::Check,
-    solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
     solana_sdk::{program_error::ProgramError, signature::Keypair, signer::Signer},
-    solana_sdk_ids::{system_program, sysvar},
     std::vec::Vec,
 };
 

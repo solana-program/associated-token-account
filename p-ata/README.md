@@ -22,17 +22,22 @@ p-ata (pinocchio-ata) is a drop-in replacement for SPL ATA. Following in the foo
 - A few assertions are removed to save compute, when ignoring them fails later in the ATA transaction anyway. This results in different errors in a few cases (see below).
 
 ## Test Suites
-The test suites included are:
+General test capabilities included are:
 1. `/src/tests/utils/mollusk_adapter.rs` - The original SPL ATA suite is run with a Mollusk adapter, allowing the unmodified solana_program_test files for SPL ATA to be run on p-ata.
 2. `/src/tests/migrated` - (Redundancy) A migrated version of the same tests, written to run on Mollusk.
 3. `/src/tests` - Unit tests for the various helper functions in processor.rs.
 4. `/src/tests/token_account_len` - Tests for token account data length logic, whether passed in or calculated in-program. Includes exhaustive tests for the `calculate_account_size_from_mint_extensions` function, testing the results of this function for all possible combinations of token extensions against the results from Token-2022's `GetAccountDataSize` logic.
-5. `/src/tests/bump` - Mollusk tests ensuring the safety of various scenarios where `bump` is passed in. 
-5. `/src/tests/benches` A benchmark suite, which benches categories of operations in p-ata against SPL ATA and verifies that accounts are changed in the same way, byte-for-byte. See "Benchmarking" below.
+5. `/src/tests/bump` - Mollusk tests ensuring the safety of various scenarios where `bump` is passed in.
+6. `/src/tests/benches` - A benchmark suite, which benches categories of operations in p-ata against SPL ATA and verifies that accounts are changed in the same way, byte-for-byte. See "Benchmarking" below.
+7. `/src/tests/benches/failure_scenarios.rs` - 26 failure tests which compare errors yielded by p-ata against those by SPL ATA. All scenarios must ensure that baseline succeeds before mutating inputs to failure state.
+
+Items 1 to 5 are run on `cargo test`
 
 ```
 cargo build --features build-programs && cargo test
 ```
+
+Items 6 and 7 are run on `cargo bench --features std`
 
 ## Benchmarking
 Set `BENCH_ITERATIONS` to average a number of runs. If only 1 iteration is used, optimal bump wallets will be found instead of random wallets each run.

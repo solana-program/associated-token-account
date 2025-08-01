@@ -220,6 +220,7 @@ impl RecoverAccountSet {
     /// * `wallet` - The ultimate owner wallet
     /// * `token_program_id` - The token program ID
     /// * `token_amount` - Amount of tokens in the nested ATA
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         nested_ata: Pubkey,
         nested_mint: Pubkey,
@@ -334,7 +335,7 @@ pub struct FailureAccountBuilder;
 impl FailureAccountBuilder {
     /// Set account owner to wrong program (for failure tests)
     pub fn set_wrong_owner(
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         target_address: Pubkey,
         wrong_owner: Pubkey,
     ) {
@@ -348,7 +349,7 @@ impl FailureAccountBuilder {
 
     /// Set account balance to insufficient amount (for failure tests)
     pub fn set_insufficient_balance(
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         target_address: Pubkey,
         balance: u64,
     ) {
@@ -362,7 +363,7 @@ impl FailureAccountBuilder {
 
     /// Replace account with wrong address (for failure tests)
     pub fn replace_account_address(
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         old_address: Pubkey,
         new_address: Pubkey,
     ) -> bool {
@@ -377,7 +378,7 @@ impl FailureAccountBuilder {
 
     /// Set account data to wrong size (for failure tests)
     pub fn set_wrong_data_size(
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         target_address: Pubkey,
         size: usize,
     ) {
@@ -411,7 +412,7 @@ impl FailureAccountBuilder {
 
     /// Replace account with a token account having wrong owner (for failure tests)
     pub fn set_token_account_wrong_owner(
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         target_address: Pubkey,
         mint: &Pubkey,
         wrong_owner: &Pubkey,
@@ -427,7 +428,7 @@ impl FailureAccountBuilder {
 
     /// Set account with invalid token account structure (for failure tests)
     pub fn set_invalid_token_account_structure(
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         target_address: Pubkey,
         token_program: &Pubkey,
     ) {
@@ -444,7 +445,7 @@ impl FailureAccountBuilder {
 
     /// Set account with custom data, owner, and lamports (for failure tests)
     pub fn set_custom_account_state(
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         target_address: Pubkey,
         data: Vec<u8>,
         owner: Pubkey,
@@ -462,7 +463,7 @@ impl FailureAccountBuilder {
 
     /// Set account with invalid multisig data (for failure tests)
     pub fn set_invalid_multisig_data(
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         target_address: Pubkey,
         token_program: &Pubkey,
     ) {
@@ -558,7 +559,7 @@ impl FailureInstructionBuilder {
     /// Update both instruction meta and account address (for failure tests)
     pub fn replace_account_everywhere(
         ix: &mut solana_instruction::Instruction,
-        accounts: &mut Vec<(Pubkey, Account)>,
+        accounts: &mut [(Pubkey, Account)],
         old_address: Pubkey,
         new_address: Pubkey,
     ) {

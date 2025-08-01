@@ -91,12 +91,10 @@ pub fn print_matrix_results(
                     } else {
                         0
                     }
+                } else if result.p_ata.success && result.p_ata.compute_units > 0 {
+                    result.p_ata.compute_units
                 } else {
-                    if result.p_ata.success && result.p_ata.compute_units > 0 {
-                        result.p_ata.compute_units
-                    } else {
-                        0
-                    }
+                    0
                 }
             });
             cells.push(cu.map(|v| v.to_string()).unwrap_or_default());

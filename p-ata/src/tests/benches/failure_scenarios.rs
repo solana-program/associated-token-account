@@ -1352,7 +1352,7 @@ impl FailureTestRunner {
             let category_name = config.category.to_string();
             tests_by_category
                 .entry(category_name)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(config);
         }
 
@@ -1642,7 +1642,7 @@ fn main() {
     std::env::set_var("RUST_LOG", "error");
 
     // Setup quiet logging by default - only show warnings and errors
-    let _ = solana_logger::setup_with(
+    solana_logger::setup_with(
         "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
     );
 

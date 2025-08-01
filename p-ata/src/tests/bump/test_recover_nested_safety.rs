@@ -99,6 +99,7 @@ fn build_recover_nested_instruction(
 }
 
 /// Create the account setup for RecoverNested tests
+#[allow(clippy::too_many_arguments)]
 fn create_recover_nested_accounts(
     payer: Pubkey,
     wallet: Pubkey,

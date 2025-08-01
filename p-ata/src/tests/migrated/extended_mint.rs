@@ -1,4 +1,5 @@
 //! Migrated test for extended mint functionality with token-2022 transfer fees using mollusk
+#![cfg(test)]
 
 use {
     crate::tests::test_utils::{

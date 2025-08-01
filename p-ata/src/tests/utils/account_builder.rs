@@ -12,7 +12,7 @@ use {
 };
 
 #[cfg(feature = "full-debug-logs")]
-use std::{println, string::String, string::ToString};
+use std::string::ToString;
 
 pub struct AccountBuilder;
 
@@ -110,11 +110,11 @@ impl AccountBuilder {
             .expect("Failed to unpack mint");
 
         // Initialize base mint fields
-        mint.base.mint_authority = COption::None.try_into().unwrap();
+        mint.base.mint_authority = COption::None.into();
         mint.base.supply = 0u64.into();
         mint.base.decimals = decimals;
         mint.base.is_initialized = true.into();
-        mint.base.freeze_authority = COption::None.try_into().unwrap();
+        mint.base.freeze_authority = COption::None.into();
 
         // Initialize TransferFeeConfig extension
         let transfer_fee_config = mint

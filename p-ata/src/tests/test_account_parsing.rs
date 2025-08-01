@@ -1,11 +1,15 @@
-use {
-    crate::{processor::parse_create_accounts, recover::parse_recover_accounts},
-    pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey},
-};
+#![cfg(test)]
+
+use pinocchio::program_error::ProgramError;
+
+use pinocchio::{account_info::AccountInfo, pubkey::Pubkey};
 
 use std::{ptr, vec::Vec};
 
-use crate::tests::test_utils::AccountLayout;
+use crate::{
+    processor::parse_create_accounts, recover::parse_recover_accounts,
+    tests::test_utils::AccountLayout,
+};
 
 fn with_test_accounts<F, R>(count: usize, test_fn: F) -> R
 where

@@ -113,29 +113,25 @@ impl MolluskBanksClient {
                 let account_key = transaction.message.account_keys[account_index as usize];
 
                 // Determine if this account is a signer
-                let is_signer = if (account_index as usize)
-                    < transaction.message.header.num_required_signatures as usize
-                {
-                    true
-                } else {
-                    false
-                };
+                let is_signer = (account_index as usize)
+                    < transaction.message.header.num_required_signatures as usize;
 
-                // Determine if this account is writable
-                let is_writable = if (account_index as usize)
-                    < (transaction.message.header.num_required_signatures as usize
-                        - transaction.message.header.num_readonly_signed_accounts as usize)
-                {
-                    true // Writable signer
-                } else if (account_index as usize)
-                    >= transaction.message.header.num_required_signatures as usize
-                    && (account_index as usize)
-                        < (transaction.message.account_keys.len()
-                            - transaction.message.header.num_readonly_unsigned_accounts as usize)
-                {
-                    true // Writable non-signer
-                } else {
-                    false // Read-only
+                // Determine if this account is writable based on Solana's account ordering
+                let account_idx = account_index as usize;
+                let header = &transaction.message.header;
+
+                // Account boundaries in the transaction
+                let writable_signer_end = header.num_required_signatures as usize
+                    - header.num_readonly_signed_accounts as usize;
+                let all_signers_end = header.num_required_signatures as usize;
+                let writable_nonsigner_end = transaction.message.account_keys.len()
+                    - header.num_readonly_unsigned_accounts as usize;
+
+                let is_writable = match account_idx {
+                    idx if idx < writable_signer_end => true,
+                    idx if idx < all_signers_end => false,
+                    idx if idx < writable_nonsigner_end => true,
+                    _ => false,
                 };
 
                 if is_writable {
@@ -178,7 +174,7 @@ impl MolluskBanksClient {
                         // This is a successful recover_nested instruction
                         // The nested account (first account) should be deleted
                         // (Mollusk keeps the closed account)
-                        if let Some(nested_account_key) = mollusk_instruction.accounts.get(0) {
+                        if let Some(nested_account_key) = mollusk_instruction.accounts.first() {
                             self.accounts
                                 .borrow_mut()
                                 .remove(&nested_account_key.pubkey);

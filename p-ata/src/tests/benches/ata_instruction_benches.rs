@@ -175,7 +175,7 @@ impl PerformanceTestOrchestrator {
     ) -> &'a AtaImplementation {
         match base_test.required_pata_variant() {
             AtaVariant::PAtaPrefunded => {
-                println!("Using P-ATA prefunded binary for {}", base_test.to_string());
+                println!("Using P-ATA prefunded binary for {}", base_test);
                 prefunded_impl
             }
             _ => legacy_impl,
@@ -225,7 +225,7 @@ impl PerformanceTestOrchestrator {
         // Run all test configurations
         for config in TEST_CONFIGS {
             let base_test = config.base_test;
-            println!("\n--- Testing variant {} ---", base_test.to_string());
+            println!("\n--- Testing variant {} ---", base_test);
 
             // Select appropriate P-ATA implementation for this test
             let pata_impl =
@@ -235,7 +235,7 @@ impl PerformanceTestOrchestrator {
 
             // Run all configured variants for this test row
             for &variant in config.variants {
-                let test_name = format!("{}_{}", base_test.to_string(), variant.test_suffix());
+                let test_name = format!("{}_{}", base_test, variant.test_suffix());
                 let comparison = Self::run_single_test_comparison(
                     &test_name,
                     base_test,
@@ -264,6 +264,7 @@ impl PerformanceTestOrchestrator {
         all_results
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn run_single_test_comparison(
         test_name: &str,
         base_test: BaseTestType,
@@ -315,10 +316,7 @@ impl PerformanceTestOrchestrator {
                 test_name: test_name.to_string(),
                 success: false,
                 compute_units: 0,
-                error_message: Some(format!(
-                    "Original ATA doesn't support {}",
-                    base_test.to_string()
-                )),
+                error_message: Some(format!("Original ATA doesn't support {}", base_test)),
                 captured_output: String::new(),
             }
         };

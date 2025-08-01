@@ -153,12 +153,10 @@ impl BenchmarkSetup {
             let keypair_path = format!("{}/{}", manifest_dir, keypair_path);
             let keypair_data = fs::read_to_string(&keypair_path)
                 .expect(&format!("Failed to read {}", keypair_path));
-            let keypair_bytes: Vec<u8> = serde_json::from_str(&keypair_data).expect(&format!(
-                "Failed to parse keypair JSON for {}",
-                keypair_path
-            ));
+            let keypair_bytes: Vec<u8> = serde_json::from_str(&keypair_data)
+                .unwrap_or_else(|_| panic!("Failed to parse keypair JSON for {}", keypair_path));
             let keypair = Keypair::try_from(&keypair_bytes[..])
-                .expect(&format!("Invalid keypair for {}", keypair_path));
+                .unwrap_or_else(|_| panic!("Invalid keypair for {}", keypair_path));
             let program_id = keypair.pubkey();
             // println!("Loaded {} program ID: {}", program_name, program_id);
             match program_name {
@@ -411,7 +409,7 @@ impl BenchmarkRunner {
                 let _original_rust_log =
                     std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
                 std::env::set_var("RUST_LOG", "debug");
-                let _ = solana_logger::setup_with(
+                solana_logger::setup_with(
                     "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
                 );
 
@@ -419,7 +417,7 @@ impl BenchmarkRunner {
 
                 // Restore original logging
                 std::env::set_var("RUST_LOG", &_original_rust_log);
-                let _ = solana_logger::setup_with(
+                solana_logger::setup_with(
                     "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
                 );
 
@@ -500,7 +498,7 @@ impl BenchmarkRunner {
                 let _original_rust_log =
                     std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
                 std::env::set_var("RUST_LOG", "debug");
-                let _ = solana_logger::setup_with(
+                solana_logger::setup_with(
                     "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
                 );
 
@@ -508,7 +506,7 @@ impl BenchmarkRunner {
 
                 // Restore original logging
                 std::env::set_var("RUST_LOG", &_original_rust_log);
-                let _ = solana_logger::setup_with(
+                solana_logger::setup_with(
                     "error,solana_runtime=error,solana_program_runtime=error,mollusk=error",
                 );
 
@@ -616,7 +614,7 @@ impl BenchmarkRunner {
         let original_rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| "error".to_string());
         std::env::set_var("RUST_LOG", "debug");
 
-        let _ = solana_logger::setup_with(
+        solana_logger::setup_with(
             "debug,solana_runtime=debug,solana_program_runtime=debug,mollusk=debug",
         );
 
@@ -786,12 +784,10 @@ impl BenchmarkRunner {
 
         // Savings analysis (mainly relevant for successful tests)
         if let Some(savings) = result.compute_savings {
-            if savings > 0 {
-                println!("  Savings: {:>8} CUs ", savings,);
-            } else if savings < 0 {
-                println!("  Overhead: {:>7} CUs ", -savings,);
-            } else {
-                println!("  Equal compute usage");
+            match savings {
+                savings if savings > 0 => println!("  Savings: {:>8} CUs ", savings,),
+                savings if savings < 0 => println!("  Overhead: {:>7} CUs ", -savings,),
+                _ => println!("  Equal compute usage"),
             }
         }
 

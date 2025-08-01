@@ -726,10 +726,12 @@ pub fn create_test_mint(
         .into_iter()
         .find(|(pk, _)| *pk == mint_account.pubkey())
     {
-        accounts
+        if let Some((_, a)) = accounts
             .iter_mut()
             .find(|(pk, _)| *pk == mint_account.pubkey())
-            .map(|(_, a)| *a = acct);
+        {
+            *a = acct;
+        }
     }
 
     mollusk.process_and_validate_instruction(&init_mint_ix, &accounts, &[Check::success()]);
@@ -741,10 +743,12 @@ pub fn create_test_mint(
         .into_iter()
         .find(|(pk, _)| *pk == mint_account.pubkey())
     {
-        accounts
+        if let Some((_, a)) = accounts
             .iter_mut()
             .find(|(pk, _)| *pk == mint_account.pubkey())
-            .map(|(_, a)| *a = acct);
+        {
+            *a = acct;
+        }
     }
 
     accounts

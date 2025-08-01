@@ -712,13 +712,11 @@ impl CommonTestCaseBuilder {
         }
 
         // Convert to accounts vector, adding rent sysvar if needed
-        let accounts = if variant.rent_arg {
+        if variant.rent_arg {
             account_set.with_rent_sysvar().to_vec()
         } else {
             account_set.to_vec()
-        };
-
-        accounts
+        }
     }
 
     /// Build recover-specific accounts using RecoverAccountSet template
@@ -1091,6 +1089,7 @@ impl CommonTestCaseBuilder {
     }
 
     /// Apply failure mode to instruction and accounts using focused helper functions
+    #[allow(clippy::too_many_arguments)]
     fn apply_failure_mode(
         failure_mode: &FailureMode,
         ix: &mut Instruction,

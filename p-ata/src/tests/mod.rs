@@ -1,3 +1,7 @@
+//! This module contains all the tests for the program.
+//! It is not top-level marked as #[cfg(test)] since
+//! helpers are used by the benches module.
+
 pub mod test_account_parsing;
 pub mod test_account_validation;
 pub mod test_address_derivation;
@@ -23,14 +27,9 @@ pub mod utils {
     pub mod test_utils;
 }
 
+#[cfg(test)]
 // Migrated tests from /program/tests
-mod migrated {
-    pub mod create_idempotent;
-    pub mod extended_mint;
-    pub mod process_create_associated_token_account;
-    pub mod recover_nested;
-    pub mod spl_token_create;
-}
+mod migrated;
 
 // Original tests from /program/tests
 include!(concat!(env!("OUT_DIR"), "/generated_tests.rs"));

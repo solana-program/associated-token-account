@@ -1,4 +1,5 @@
 //! Migrated test for SPL token create functionality using mollusk
+#![cfg(test)]
 
 use {
     crate::tests::test_utils::{

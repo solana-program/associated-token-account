@@ -1,3 +1,5 @@
+#![cfg(test)]
+
 pub mod address_gen;
 pub mod account_builder;
 pub mod test_utils;

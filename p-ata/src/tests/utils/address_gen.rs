@@ -198,6 +198,7 @@ pub fn is_off_curve(address: &Pubkey) -> bool {
 ///
 /// # Returns
 /// A pubkey that produces optimal bump when used as wallet for ATA derivation
+#[allow(clippy::too_many_arguments)]
 pub fn const_pk_with_optimal_bump(
     variant: &AtaVariant,
     test_bank: TestBankId,

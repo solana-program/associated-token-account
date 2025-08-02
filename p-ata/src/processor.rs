@@ -430,24 +430,11 @@ pub(crate) fn is_off_curve(address: &Pubkey) -> bool {
     {
         // Host build (tests, benches): replicate the on-chain `sol_curve_validate_point` logic
         // using curve25519-dalek. A pubkey is "off-curve" if it cannot be decompressed into
-        // an Edwards point **or** it decomposes to a small-order point
-        // (matches Solana’s runtime rules).
+        // an Edwards point.
 
-        use curve25519_dalek::edwards::CompressedEdwardsY;
-
-        let mut bytes = MaybeUninit::<[u8; 32]>::uninit();
-        let bytes_ptr = bytes.as_mut_ptr() as *mut u8;
-        // SAFETY: We initialize all 32 bytes before calling assume_init()
-        let bytes = unsafe {
-            core::ptr::copy_nonoverlapping(address.as_ref().as_ptr(), bytes_ptr, 32);
-            bytes.assume_init()
-        };
-        let compressed = CompressedEdwardsY(bytes);
-
-        match compressed.decompress() {
-            None => true,                    // invalid encoding → off-curve
-            Some(pt) => pt.is_small_order(), // small-order = off-curve, otherwise on-curve
-        }
+        curve25519_dalek::edwards::CompressedEdwardsY(*address)
+            .decompress()
+            .is_none()
     }
     #[cfg(all(not(target_os = "solana"), not(test)))]
     {

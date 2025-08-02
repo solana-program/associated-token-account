@@ -50,15 +50,15 @@ BENCH_ITERATIONS=1 cargo bench --features std
 
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |  notes                       |
 |-----------------------|--------:|------:|---------:|------------------:|-----------------:|
-| create_idempotent     |   3669  |  1776 |     634  |               634 |  |
-| create                |  12364  |  4941 |    3381  |              3274 |  |
-| create_token2022      |  14692  |  7788 |    6184  |              6046 |  |
-| create_topup          |  15817  |  4809 |    3249  |              3142 | `CreateAccountPrefunded` |
+| create_idempotent     |   3669  |  1776 |     639  |               639 |  |
+| create                |  12364  |  4941 |    3383  |              3277 |  |
+| create_token2022      |  14692  |  7788 |    6186  |              6049 |  |
+| create_topup          |  15817  |  4809 |    3250  |              3144 | `CreateAccountPrefunded` |
 | create_topup_nocap    |  15817  |  7578 |    6008  |              5906 | no `CreateAccountPrefunded` |
-| create_extended       |  17620  |  9883 |    8323  |              8056 |  |
+| create_extended       |  17620  |  9883 |    8326  |              8059 |  |
 | recover_nested        |  12851  |  8057 |    N/A   |              8057 | rare instruction  |
 | recover_multisig      |    N/A  |  8378 |    N/A   |              8378 | rare instruction  |
-| worst_case_create     |  19864  | 15187 |    3381  |              3274 | hard-to-find bump |
+| worst_case_create     |  19864  | 15187 |    3383  |              3277 | hard-to-find bump |
 
 ### Average of 10,000 random wallets *as of 2025-08-02*
 

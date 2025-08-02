@@ -56,9 +56,9 @@ BENCH_ITERATIONS=1 cargo bench --features std
 | create_topup          |  15817  |  4809 |    3249  |              3142 | `CreateAccountPrefunded` |
 | create_topup_nocap    |  15817  |  7578 |    6008  |              5906 | no `CreateAccountPrefunded` |
 | create_extended       |  17620  |  9883 |    8323  |              8056 |  |
-| recover_nested        |  12851  |  8080 |    4305  |              4305 |  |
-| recover_multisig      |    N/A  |  8550 |    4628  |              4628 |  |
-| worst_case_create     |  19864  | 15187 |    3415  |              3313 | hard-to-find bump |
+| recover_nested        |  12851  |  8057 |    N/A   |              8057 | rare instruction  |
+| recover_multisig      |    N/A  |  8378 |    N/A   |              8378 | rare instruction  |
+| worst_case_create     |  19864  | 15187 |    3381  |              3274 | hard-to-find bump |
 
 ### Average of 10,000 random wallets *as of 2025-08-02*
 
@@ -70,13 +70,14 @@ BENCH_ITERATIONS=1 cargo bench --features std
 | create_topup          | 17317   |  6301 |     3614 |              3521 | `CreateAccountPrefunded` |
 | create_topup_no_cap   | 17287   |  9169 |     6409 |              6229 | no `CreateAccountPrefunded` |
 | create_extended       | 19420   | 11409 |     8694 |              8425 |  |
-| recover_nested        | 17066   | 12528 |     4671 |              4671 |  |
-| recover_multisig      |   N/A   | 13185 |     4628 |              4628 | hard-to-find bump |
+| recover_nested        | 17066   | 12555 |      N/A |             12555 | rare instruction  |
+| recover_multisig      |   N/A   | 12872 |      N/A |             12872 | rare instruction  |
 
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.
 
 "optimum args" are:
-- `bump`
+- no special optimizations for `recover` tests
+- for all `create` tests, `bump`
 - for Token-2022, `token_account_len` passed in (after `bump`)
 - for `create` tests other than `create_idemp`, `rent` passed in as an optional additional account
 
@@ -126,13 +127,9 @@ Using P-ATA prefunded binary for create_topup
 
 --- Testing variant recover_nested ---
 --- Testing recover_nested_ --- ✅ Byte-for-Byte Identical
---- Testing recover_nested__rent --- ✅ Byte-for-Byte Identical
---- Testing recover_nested__bump --- 🚀 P-ATA optimization working
 
 --- Testing variant recover_multisig ---
 --- Testing recover_multisig_ --- 🚀 P-ATA optimization working
---- Testing recover_multisig__rent --- 🚀 P-ATA optimization working
---- Testing recover_multisig__bump --- 🚀 P-ATA optimization working
 ```
 
 ### Should-Fail Test Results

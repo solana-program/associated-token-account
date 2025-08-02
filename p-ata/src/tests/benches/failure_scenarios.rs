@@ -250,14 +250,6 @@ fn get_failure_tests() -> Vec<FailureTestConfig> {
             failure_mode: FailureMode::RecoverWrongDestination(Pubkey::new_from_array([0u8; 32])), // Placeholder
             builder_type: TestBuilderType::Custom, // Has complex custom logic
         },
-        FailureTestConfig {
-            name: "fail_recover_invalid_bump_value",
-            category: TestCategory::RecoveryOperations,
-            base_test: BaseTestType::RecoverNested,
-            variant: TestVariant::BASE,
-            failure_mode: FailureMode::InvalidBumpValue(99),
-            builder_type: TestBuilderType::Custom, // Has custom instruction data
-        },
         // Additional Validation Coverage Tests
         basic_create_test(
             "fail_ata_owned_by_system_program",
@@ -460,9 +452,6 @@ impl FailureTestBuilder {
                             token_program_id,
                         )
                     }
-                    "fail_recover_invalid_bump_value" => {
-                        Self::build_fail_recover_invalid_bump_value(ata_impl, token_program_id)
-                    }
                     "fail_wrong_token_account_size" => {
                         Self::build_fail_wrong_token_account_size(ata_impl, token_program_id)
                     }
@@ -626,22 +615,6 @@ impl FailureTestBuilder {
                     test_number.wrapping_add(11), // Use a distinct offset to guarantee a different address
                     common::AccountTypeId::Ata,
                 );
-            },
-        )
-    }
-
-    /// Custom builder for recover invalid bump value test
-    fn build_fail_recover_invalid_bump_value(
-        ata_impl: &AtaImplementation,
-        token_program_id: &Pubkey,
-    ) -> (Instruction, Vec<(Pubkey, Account)>) {
-        Self::build_recover_nested_failure(
-            ata_impl,
-            token_program_id,
-            "fail_recover_invalid_bump_value",
-            |_accs, data| {
-                // Append an invalid bump to the instruction data
-                data.push(99u8);
             },
         )
     }
@@ -1191,8 +1164,7 @@ impl FailureTestRunner {
         F: Fn(&AtaImplementation, &Pubkey) -> (Instruction, Vec<(Pubkey, Account)>),
     {
         // Check if this is a P-ATA-only test (uses bump args that original ATA doesn't support)
-        let is_p_ata_only =
-            name == "fail_invalid_bump_value" || name == "fail_recover_invalid_bump_value";
+        let is_p_ata_only = name == "fail_invalid_bump_value";
 
         // Create verification function for P-ATA if needed
         let p_ata_verification = if name == "fail_drain_lamports_from_uninitialized_ata" {

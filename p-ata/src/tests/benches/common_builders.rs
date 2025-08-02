@@ -4,8 +4,9 @@ use {
     crate::tests::{
         account_builder::AccountBuilder,
         address_gen::{
-            derive_address_with_bump, find_optimal_wallet_for_mints,
-            find_optimal_wallet_for_nested_ata, random_seeded_pk, structured_pk,
+            derive_address_with_bump, find_optimal_multisig_for_nested_ata,
+            find_optimal_wallet_for_mints, find_optimal_wallet_for_nested_ata, random_seeded_pk,
+            structured_pk,
         },
         benches::{account_templates::*, common::*, constants::*},
     },
@@ -327,7 +328,7 @@ impl CommonTestCaseBuilder {
 
     /// Build test case with given configuration and iteration for random wallet
     fn build_with_config_and_iteration(
-        config: TestCaseConfig,
+        mut config: TestCaseConfig,
         variant: TestVariant,
         ata_implementation: &AtaImplementation,
         _test_name: Option<&str>,
@@ -383,12 +384,50 @@ impl CommonTestCaseBuilder {
                     );
                 }
             } else if matches!(config.base_test, BaseTestType::RecoverMultisig) {
-                // For RecoverMultisig, don't modify the wallet address because it needs to
-                // be consistent with the multisig signer configuration. The signers are
-                // generated with specific structured addresses that must match the wallet.
-                // Optimal bump search would break this relationship.
-                crate::debug_log!("🔍 [DEBUG] Skipping optimal bump for RecoverMultisig to preserve multisig relationship");
-                crate::debug_log!("    Using deterministic wallet: {}", wallet);
+                // For RecoverMultisig operations, find optimal signers for both owner_mint and nested_mint
+                if let Some(SpecialAccountMod::NestedAta {
+                    owner_mint,
+                    nested_mint,
+                }) = config
+                    .special_account_mods
+                    .iter()
+                    .find(|m| matches!(m, SpecialAccountMod::NestedAta { .. }))
+                {
+                    // For RecoverMultisig with single iteration, find optimal signers
+                    // that produce an optimal multisig wallet for nested ATA operations
+                    let all_implementations =
+                        crate::tests::benches::common::AtaImplementation::all();
+                    let ata_program_ids = [
+                        all_implementations.spl_impl.program_id,
+                        all_implementations.pata_legacy_impl.program_id,
+                        all_implementations.pata_prefunded_impl.program_id,
+                    ];
+
+                    let (optimal_signers, optimal_wallet) = find_optimal_multisig_for_nested_ata(
+                        &config.token_program,
+                        owner_mint,
+                        nested_mint,
+                        &ata_program_ids[..],
+                        search_entropy,
+                    );
+
+                    // Update the config with optimal signers
+                    if let Some(multisig_mod) = config
+                        .special_account_mods
+                        .iter_mut()
+                        .find(|m| matches!(m, SpecialAccountMod::MultisigWallet { .. }))
+                    {
+                        if let SpecialAccountMod::MultisigWallet { signers, .. } = multisig_mod {
+                            *signers = optimal_signers;
+                        }
+                    }
+
+                    wallet = optimal_wallet;
+                    crate::debug_log!(
+                        "🔍 [DEBUG] Found optimal multisig for RecoverMultisig: {}",
+                        wallet
+                    );
+                }
             } else if !matches!(config.base_test, BaseTestType::WorstCase) {
                 // For standard create operations, find wallet optimal for mint across all ATA programs
                 let all_implementations = crate::tests::benches::common::AtaImplementation::all();
@@ -583,27 +622,15 @@ impl CommonTestCaseBuilder {
                 panic!("Could not find NestedAta config for recover test");
             };
 
-            // For multisig tests, generate a deterministic multisig account address
-            // For nested tests, use random seeded pubkey
-            if matches!(config.base_test, BaseTestType::RecoverMultisig) {
-                // Generate deterministic multisig wallet address using same base parameters as signers
-                structured_pk(
-                    consistent_variant,
-                    test_bank,
-                    test_number,
-                    crate::tests::benches::common::AccountTypeId::Wallet,
-                )
-            } else {
-                // Use random seeded pubkey for recover nested tests
-                random_seeded_pk(
-                    consistent_variant,
-                    test_bank,
-                    test_number,
-                    crate::tests::benches::common::AccountTypeId::Wallet,
-                    iteration,
-                    run_entropy,
-                )
-            }
+            // Both recover tests should use the same address generation logic
+            random_seeded_pk(
+                consistent_variant,
+                test_bank,
+                test_number,
+                crate::tests::benches::common::AccountTypeId::Wallet,
+                iteration,
+                run_entropy,
+            )
         } else if matches!(config.base_test, BaseTestType::WorstCase) {
             structured_pk(
                 consistent_variant,
@@ -856,7 +883,6 @@ impl CommonTestCaseBuilder {
                 metas.len()
             );
         }
-
         metas
     }
 
@@ -868,7 +894,6 @@ impl CommonTestCaseBuilder {
         accounts: &[(Pubkey, Account)],
         bump: u8,
     ) -> Vec<u8> {
-        // Delegate to shared encoder for standard Create / CreateIdempotent cases to avoid duplicate logic.
         if config.instruction_discriminator <= 1 {
             use crate::tests::test_utils::{
                 encode_create_ata_instruction_data, CreateAtaInstructionType,
@@ -936,61 +961,10 @@ impl CommonTestCaseBuilder {
             );
             let data = encode_create_ata_instruction_data(&instruction_type);
             crate::debug_log!("🐛 [DEBUG] Early return path - encoded data: {:?}", data);
-            return data;
+            data
+        } else {
+            vec![config.instruction_discriminator]
         }
-
-        let mut data = vec![config.instruction_discriminator];
-
-        // Special handling for RecoverNested/RecoverMultisig bump variants
-        if (matches!(
-            config.base_test,
-            BaseTestType::RecoverNested | BaseTestType::RecoverMultisig
-        )) && variant.bump_arg
-        {
-            // For recover operations with bump optimization, we need 3 bumps:
-            // owner_bump, nested_bump, destination_bump
-            // Calculate each bump correctly based on the account addresses in the instruction
-
-            // Use the provided bump as the owner_bump (already calculated correctly)
-            data.push(bump); // owner_bump (already calculated)
-
-            // Calculate the actual nested_bump and destination_bump from the account addresses
-            // Account layout for recover operations:
-            // accounts[0]: nested_ata, accounts[1]: nested_mint, accounts[2]: dest_ata,
-            // accounts[3]: owner_ata, accounts[4]: owner_mint, accounts[5]: wallet,
-            // accounts[6]: token_program
-
-            // Calculate nested_bump: find_program_address([owner_ata, token_program, nested_mint], ata_program)
-            let (_, nested_bump) = Pubkey::find_program_address(
-                &[
-                    accounts[3].0.as_ref(), // owner_ata
-                    accounts[6].0.as_ref(), // token_program
-                    accounts[1].0.as_ref(), // nested_mint
-                ],
-                &ata_implementation.program_id,
-            );
-
-            // Calculate destination_bump: find_program_address([wallet, token_program, nested_mint], ata_program)
-            let (_, destination_bump) = Pubkey::find_program_address(
-                &[
-                    accounts[5].0.as_ref(), // wallet
-                    accounts[6].0.as_ref(), // token_program
-                    accounts[1].0.as_ref(), // nested_mint
-                ],
-                &ata_implementation.program_id,
-            );
-
-            data.push(nested_bump);
-            data.push(destination_bump);
-            return data;
-        }
-
-        // Bump / length logic for discriminator > 1 (Recover etc.)
-        if variant.bump_arg {
-            data.push(bump);
-        }
-
-        data
     }
 
     /// Helper for setting wrong account owners

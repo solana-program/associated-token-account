@@ -116,11 +116,11 @@ static TEST_CONFIGS: &[TestConfiguration] = &[
     },
     TestConfiguration {
         base_test: BaseTestType::RecoverNested,
-        variants: &[TestVariant::BASE, TestVariant::RENT, TestVariant::BUMP],
+        variants: &[TestVariant::BASE],
     },
     TestConfiguration {
         base_test: BaseTestType::RecoverMultisig,
-        variants: &[TestVariant::BASE, TestVariant::RENT, TestVariant::BUMP],
+        variants: &[TestVariant::BASE],
     },
 ];
 

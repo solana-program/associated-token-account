@@ -1,5 +1,6 @@
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use solana_pubkey::Pubkey;
+use std::{vec, vec::Vec};
 
 use crate::tests::benches::common::{AccountTypeId, AtaVariant, TestBankId};
 
@@ -231,6 +232,149 @@ pub fn const_pk_with_optimal_bump(
     find_optimal_wallet_for_mints(token_program_id, &[*mint], ata_program_ids, search_entropy)
 }
 
+/// Check if a wallet produces optimal bumps for all three nested ATA operations
+///
+/// This helper function validates that a wallet produces bump 255 for:
+/// - Owner ATA (wallet + owner_mint)
+/// - Destination ATA (wallet + nested_mint)  
+/// - Nested ATA (owner_ata + nested_mint)
+///
+/// # Returns
+/// true if all three ATAs have optimal bumps across all ATA programs
+fn is_wallet_optimal_for_nested_ata(
+    wallet: &Pubkey,
+    token_program: &Pubkey,
+    owner_mint: &Pubkey,
+    nested_mint: &Pubkey,
+    ata_programs: &[Pubkey],
+) -> bool {
+    // Step 1: Check if wallet is optimal for Owner ATA and Destination ATA
+    let wallet_optimal_for_owner_and_dest = ata_programs.iter().all(|ata_program_id| {
+        // Owner ATA: wallet + owner_mint
+        let (_, owner_bump) = Pubkey::find_program_address(
+            &[wallet.as_ref(), token_program.as_ref(), owner_mint.as_ref()],
+            ata_program_id,
+        );
+
+        // Destination ATA: wallet + nested_mint
+        let (_, dest_bump) = Pubkey::find_program_address(
+            &[
+                wallet.as_ref(),
+                token_program.as_ref(),
+                nested_mint.as_ref(),
+            ],
+            ata_program_id,
+        );
+
+        owner_bump == 255 && dest_bump == 255
+    });
+
+    if !wallet_optimal_for_owner_and_dest {
+        return false;
+    }
+
+    // Step 2: Check if Nested ATA also has bump 255 for all programs
+    ata_programs.iter().all(|ata_program_id| {
+        let (owner_ata_address, _) = Pubkey::find_program_address(
+            &[wallet.as_ref(), token_program.as_ref(), owner_mint.as_ref()],
+            ata_program_id,
+        );
+
+        let (_, nested_bump) = Pubkey::find_program_address(
+            &[
+                owner_ata_address.as_ref(),
+                token_program.as_ref(),
+                nested_mint.as_ref(),
+            ],
+            ata_program_id,
+        );
+
+        nested_bump == 255
+    })
+}
+
+/// Find optimal signers for multisig that produces optimal bumps for nested ATA operations
+///
+/// This function finds 3 signers such that the derived multisig wallet produces bump 255
+/// for ALL three ATAs (Owner, Destination, AND Nested) across all ATA program implementations.
+/// Reuses the validation logic from RecoverNested for consistency.
+///
+/// # Arguments
+/// * `token_program` - Token program ID for ATA derivation
+/// * `owner_mint` - Mint address for the owner ATA
+/// * `nested_mint` - Mint address for the nested ATA
+/// * `ata_programs` - Array of ATA program IDs to check
+/// * `base_entropy` - Base entropy for deterministic starting point
+///
+/// # Returns
+/// A tuple of (optimal_signers, derived_multisig_wallet) that produces optimal bumps
+pub fn find_optimal_multisig_for_nested_ata(
+    token_program: &Pubkey,
+    owner_mint: &Pubkey,
+    nested_mint: &Pubkey,
+    ata_programs: &[Pubkey],
+    base_entropy: u64,
+) -> (Vec<Pubkey>, Pubkey) {
+    let mut attempt_entropy = base_entropy;
+
+    loop {
+        // Generate 3 candidate signers
+        let signers = vec![
+            {
+                let modifier = attempt_entropy;
+                let mut bytes = [0u8; 32];
+                bytes[0..8].copy_from_slice(&modifier.to_le_bytes());
+                bytes[8..16].copy_from_slice(&(modifier.wrapping_mul(0x9E3779B9)).to_le_bytes());
+                bytes[16..24].copy_from_slice(&(modifier.wrapping_mul(0x85EBCA6B)).to_le_bytes());
+                bytes[24..32].copy_from_slice(&(modifier.wrapping_mul(0xC2B2AE35)).to_le_bytes());
+                Pubkey::new_from_array(bytes)
+            },
+            {
+                let modifier = attempt_entropy.wrapping_add(1);
+                let mut bytes = [0u8; 32];
+                bytes[0..8].copy_from_slice(&modifier.to_le_bytes());
+                bytes[8..16].copy_from_slice(&(modifier.wrapping_mul(0x9E3779B9)).to_le_bytes());
+                bytes[16..24].copy_from_slice(&(modifier.wrapping_mul(0x85EBCA6B)).to_le_bytes());
+                bytes[24..32].copy_from_slice(&(modifier.wrapping_mul(0xC2B2AE35)).to_le_bytes());
+                Pubkey::new_from_array(bytes)
+            },
+            {
+                let modifier = attempt_entropy.wrapping_add(2);
+                let mut bytes = [0u8; 32];
+                bytes[0..8].copy_from_slice(&modifier.to_le_bytes());
+                bytes[8..16].copy_from_slice(&(modifier.wrapping_mul(0x9E3779B9)).to_le_bytes());
+                bytes[16..24].copy_from_slice(&(modifier.wrapping_mul(0x85EBCA6B)).to_le_bytes());
+                bytes[24..32].copy_from_slice(&(modifier.wrapping_mul(0xC2B2AE35)).to_le_bytes());
+                Pubkey::new_from_array(bytes)
+            },
+        ];
+
+        // Derive multisig wallet deterministically from entropy
+        let multisig_wallet = {
+            let modifier = attempt_entropy.wrapping_add(100);
+            let mut bytes = [0u8; 32];
+            bytes[0..8].copy_from_slice(&modifier.to_le_bytes());
+            bytes[8..16].copy_from_slice(&(modifier.wrapping_mul(0x9E3779B9)).to_le_bytes());
+            bytes[16..24].copy_from_slice(&(modifier.wrapping_mul(0x85EBCA6B)).to_le_bytes());
+            bytes[24..32].copy_from_slice(&(modifier.wrapping_mul(0xC2B2AE35)).to_le_bytes());
+            Pubkey::new_from_array(bytes)
+        };
+
+        // Reuse the same validation logic as RecoverNested
+        if is_wallet_optimal_for_nested_ata(
+            &multisig_wallet,
+            token_program,
+            owner_mint,
+            nested_mint,
+            ata_programs,
+        ) {
+            return (signers, multisig_wallet);
+        }
+
+        attempt_entropy = attempt_entropy.wrapping_add(3);
+    }
+}
+
 /// Find a wallet that produces bump 255 for nested ATA operations
 ///
 /// This function finds a wallet where ALL three ATAs (Owner, Destination, AND Nested)
@@ -263,30 +407,14 @@ pub fn find_optimal_wallet_for_nested_ata(
             attempt_entropy,
         );
 
-        // 2. Check if Nested ATA also has bump 255 for all programs
-        let all_nested_optimal = ata_programs.iter().all(|ata_program_id| {
-            let (owner_ata_address, _) = Pubkey::find_program_address(
-                &[
-                    candidate_wallet.as_ref(),
-                    token_program.as_ref(),
-                    owner_mint.as_ref(),
-                ],
-                ata_program_id,
-            );
-
-            let (_, nested_bump) = Pubkey::find_program_address(
-                &[
-                    owner_ata_address.as_ref(),
-                    token_program.as_ref(),
-                    nested_mint.as_ref(),
-                ],
-                ata_program_id,
-            );
-
-            nested_bump == 255
-        });
-
-        if all_nested_optimal {
+        // 2. Reuse shared validation logic to check all three ATAs
+        if is_wallet_optimal_for_nested_ata(
+            &candidate_wallet,
+            token_program,
+            owner_mint,
+            nested_mint,
+            ata_programs,
+        ) {
             return candidate_wallet;
         }
 

@@ -46,32 +46,32 @@ Set `BENCH_ITERATIONS` to average a number of runs. If only 1 iteration is used,
 BENCH_ITERATIONS=1 cargo bench --features std
 ```
 
-### "Best run" numbers (ideal bumps) *as of 2025-07-29, 2607f50*
+### "Best run" numbers (ideal bumps) *as of 2025-08-02*
 
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |  notes                       |
 |-----------------------|--------:|------:|---------:|------------------:|-----------------:|
-| create_idempotent     |   3669  |  1779 |     635  |               635 |  |
-| create                |  12364  |  4976 |    3415  |              3313 |  |
-| create_token2022      |  14692  |  7778 |    6217  |              6084 |  |
-| create_topup          |  15817  |  4842 |    3281  |              3179 | `CreateAccountPrefunded` |
-| create_topup_nocap    |  15817  |  7609 |    6048  |              5946 | no `CreateAccountPrefunded` |
-| create_extended       |  17620  |  9927 |    8366  |              8094 |  |
-| recover_nested        |  12851  |  8104 |    4313  |              4313 |  |
-| recover_multisig      |    N/A   |  8550 |    4748  |              4748 |  |
+| create_idempotent     |   3669  |  1776 |     634  |               634 |  |
+| create                |  12364  |  4941 |    3381  |              3274 |  |
+| create_token2022      |  14692  |  7788 |    6184  |              6046 |  |
+| create_topup          |  15817  |  4809 |    3249  |              3142 | `CreateAccountPrefunded` |
+| create_topup_nocap    |  15817  |  7578 |    6008  |              5906 | no `CreateAccountPrefunded` |
+| create_extended       |  17620  |  9883 |    8323  |              8056 |  |
+| recover_nested        |  12851  |  8080 |    4305  |              4305 |  |
+| recover_multisig      |    N/A  |  8550 |    4628  |              4628 |  |
 | worst_case_create     |  19864  | 15187 |    3415  |              3313 | hard-to-find bump |
 
-### Average of 10,000 random wallets *as of 2025-07-30, 2607f50*
+### Average of 10,000 random wallets *as of 2025-08-02*
 
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |  notes                       |
 |-----------------------|--------:|------:|---------:|------------------:|-----------------:|
-| create_idempotent     |  4914   |  3283 |     1009 |              1009 |  |
-| create                | 14194   |  6654 |     3741 |              3731 |  |
-| create_token2022      | 16057   |  9366 |     6613 |              6354 |  |
-| create_topup          | 17317   |  6534 |     3749 |              3550 | `CreateAccountPrefunded` |
+| create_idempotent     |  4914   |  3264 |      999 |               999 |  |
+| create                | 14194   |  6448 |     3751 |              3645 |  |
+| create_token2022      | 16057   |  9267 |     6562 |              6414 |  |
+| create_topup          | 17317   |  6301 |     3614 |              3521 | `CreateAccountPrefunded` |
 | create_topup_no_cap   | 17287   |  9169 |     6409 |              6229 | no `CreateAccountPrefunded` |
-| create_extended       | 19420   | 11441 |     8735 |              8459 |  |
-| recover_nested        | 17066   | 12409 |     4411 |              4411 |  |
-| recover_multisig      |   N/A   | 13185 |     4849 |              4849 | hard-to-find bump |
+| create_extended       | 19420   | 11409 |     8694 |              8425 |  |
+| recover_nested        | 17066   | 12528 |     4671 |              4671 |  |
+| recover_multisig      |   N/A   | 13185 |     4628 |              4628 | hard-to-find bump |
 
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.
 

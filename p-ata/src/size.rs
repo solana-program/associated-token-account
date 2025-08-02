@@ -23,7 +23,6 @@ use crate::processor::is_spl_token_program;
 
 pub const GET_ACCOUNT_DATA_SIZE_DISCM: u8 = 21;
 pub const MINT_BASE_SIZE: usize = 82;
-pub const MINT_WITH_TYPE_SIZE: usize = MINT_BASE_SIZE + 1;
 
 /// ExtensionType, exactly as Token-2022, with additional planned extension.
 #[repr(u16)]
@@ -114,16 +113,15 @@ pub(crate) fn is_token_2022_program(program_id: &Pubkey) -> bool {
 /// - `None` - Unknown extension found, caller should fall back to CPI
 #[inline(always)]
 pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> Option<usize> {
-    const TOKEN_ACCOUNT_LEN: usize = 165;
-    const ACCOUNT_TYPE_OFFSET: usize = 165; // Account type discriminator position
-    const BASE_TOKEN_2022_ACCOUNT_SIZE: usize = TOKEN_ACCOUNT_LEN + 5;
+    const ACCOUNT_TYPE_OFFSET: usize = TokenAccount::LEN;
+    const BASE_TOKEN_2022_ACCOUNT_SIZE: usize = TokenAccount::LEN + 5;
 
     // Invalid/failed mint creation
     if mint_data.is_empty() {
         return None;
     }
 
-    // Fast-path: no mint extensions → no additional account extensions either
+    // Fast-path: no mint extensions → no additional account extensions either.
     if mint_data.len() <= ACCOUNT_TYPE_OFFSET {
         return Some(BASE_TOKEN_2022_ACCOUNT_SIZE);
     }
@@ -243,6 +241,6 @@ pub(crate) fn get_token_account_size(
 /// Check if a Token-2022 mint has extensions by examining its data length
 #[inline(always)]
 pub(crate) fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
-    // If mint data is larger than base + type, it has extensions
-    mint_account.data_len() > MINT_WITH_TYPE_SIZE
+    // If mint data is larger than base, it has extensions
+    mint_account.data_len() > MINT_BASE_SIZE
 }

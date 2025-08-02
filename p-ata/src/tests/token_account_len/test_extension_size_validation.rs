@@ -6,20 +6,24 @@ use {
 #[cfg(feature = "test-debug")]
 use std::eprintln;
 
+use crate::{
+    size::MINT_BASE_SIZE,
+    tests::token_account_len::test_extension_utils::{
+        calculate_expected_ata_data_size, create_mint_data_with_extensions,
+    },
+};
+
+const MINT_PAD_SIZE: usize = 83;
+
 /// Create a basic mint with no extensions for testing
 fn create_base_mint_data() -> Vec<u8> {
-    const MINT_BASE_SIZE: usize = 82;
-    let mut data = vec![0u8; MINT_BASE_SIZE + 5];
+    let mut data = vec![0u8; MINT_BASE_SIZE + MINT_PAD_SIZE + 5];
 
     data[0..4].copy_from_slice(&1u32.to_le_bytes());
-    data[MINT_BASE_SIZE] = 1;
+    data[MINT_BASE_SIZE + MINT_PAD_SIZE] = 1;
 
     data
 }
-
-use crate::tests::token_account_len::test_extension_utils::{
-    calculate_expected_ata_data_size, create_mint_data_with_extensions,
-};
 
 #[test]
 fn test_no_extensions() {

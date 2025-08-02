@@ -4,9 +4,10 @@ use {
     crate::{
         processor::{
             build_initialize_account3_data, build_transfer_checked_data,
-            INITIALIZE_ACCOUNT_3_DISCM, INITIALIZE_IMMUTABLE_OWNER_DISCM, TRANSFER_CHECKED_DISCM,
+            INITIALIZE_ACCOUNT_3_DISCRIMINATOR, INITIALIZE_IMMUTABLE_OWNER_DISCRIMINATOR,
+            TRANSFER_CHECKED_DISCRIMINATOR,
         },
-        recover::CLOSE_ACCOUNT_DISCM,
+        recover::CLOSE_ACCOUNT_DISCRIMINATOR,
     },
     pinocchio::pubkey::Pubkey,
     rstest::rstest,
@@ -24,7 +25,7 @@ fn test_build_initialize_account3_data(#[case] owner_bytes: [u8; 32]) {
     let data = build_initialize_account3_data(&owner);
 
     assert_eq!(data.len(), 33);
-    assert_eq!(data[0], INITIALIZE_ACCOUNT_3_DISCM);
+    assert_eq!(data[0], INITIALIZE_ACCOUNT_3_DISCRIMINATOR);
     assert_eq!(&data[1..33], owner.as_ref());
 }
 
@@ -49,7 +50,7 @@ fn test_build_transfer_data(amount: u64, decimals: u8) {
     let data = build_transfer_checked_data(amount, decimals);
 
     assert_eq!(data.len(), 10);
-    assert_eq!(data[0], TRANSFER_CHECKED_DISCM);
+    assert_eq!(data[0], TRANSFER_CHECKED_DISCRIMINATOR);
 
     let parsed_amount = u64::from_le_bytes([
         data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
@@ -95,10 +96,10 @@ fn test_instruction_data_deterministic_transfer(#[case] amount: u64, #[case] dec
 #[test]
 fn test_discriminator_uniqueness() {
     let discriminators = [
-        INITIALIZE_ACCOUNT_3_DISCM,
-        INITIALIZE_IMMUTABLE_OWNER_DISCM,
-        TRANSFER_CHECKED_DISCM,
-        CLOSE_ACCOUNT_DISCM,
+        INITIALIZE_ACCOUNT_3_DISCRIMINATOR,
+        INITIALIZE_IMMUTABLE_OWNER_DISCRIMINATOR,
+        TRANSFER_CHECKED_DISCRIMINATOR,
+        CLOSE_ACCOUNT_DISCRIMINATOR,
     ];
 
     let mut unique_discriminators = HashSet::new();

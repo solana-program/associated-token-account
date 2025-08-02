@@ -19,12 +19,12 @@ use {
         account_info::AccountInfo,
         cpi,
         instruction::{AccountMeta, Instruction},
-        msg,
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
+    pinocchio_log::log,
     pinocchio_pubkey::derive_address,
     spl_token_interface::state::{
         account::Account as TokenAccount, mint::Mint, multisig::Multisig, Transmutable,
@@ -34,14 +34,14 @@ use {
 #[cfg(target_os = "solana")]
 use pinocchio::syscalls::sol_curve_validate_point;
 
-pub const INITIALIZE_ACCOUNT_3_DISCM: u8 = 18;
-pub const INITIALIZE_IMMUTABLE_OWNER_DISCM: u8 = 22;
-pub const TRANSFER_CHECKED_DISCM: u8 = 12;
+pub const INITIALIZE_ACCOUNT_3_DISCRIMINATOR: u8 = 18;
+pub const INITIALIZE_IMMUTABLE_OWNER_DISCRIMINATOR: u8 = 22;
+pub const TRANSFER_CHECKED_DISCRIMINATOR: u8 = 12;
 
 // Token-2022 AccountType::Account discriminator value
 const ACCOUNTTYPE_ACCOUNT: u8 = 2;
 
-pub const INITIALIZE_IMMUTABLE_OWNER_DATA: [u8; 1] = [INITIALIZE_IMMUTABLE_OWNER_DISCM];
+pub const INITIALIZE_IMMUTABLE_OWNER_DATA: [u8; 1] = [INITIALIZE_IMMUTABLE_OWNER_DISCRIMINATOR];
 
 // Compile-time verifications
 const _: () = assert!(
@@ -186,7 +186,7 @@ pub(crate) fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
     let data_ptr = data.as_mut_ptr() as *mut u8;
     // SAFETY: We initialize all 33 bytes before calling assume_init()
     unsafe {
-        *data_ptr = INITIALIZE_ACCOUNT_3_DISCM;
+        *data_ptr = INITIALIZE_ACCOUNT_3_DISCRIMINATOR;
         core::ptr::copy_nonoverlapping(owner.as_ref().as_ptr(), data_ptr.add(1), 32);
         data.assume_init()
     }
@@ -199,7 +199,7 @@ pub(crate) fn build_transfer_checked_data(amount: u64, decimals: u8) -> [u8; 10]
     let data_ptr = data.as_mut_ptr() as *mut u8;
     // SAFETY: We initialize all 10 bytes before calling assume_init()
     unsafe {
-        *data_ptr = TRANSFER_CHECKED_DISCM;
+        *data_ptr = TRANSFER_CHECKED_DISCRIMINATOR;
         core::ptr::copy_nonoverlapping(amount.to_le_bytes().as_ptr(), data_ptr.add(1), 8);
         *data_ptr.add(9) = decimals;
         data.assume_init()
@@ -280,7 +280,10 @@ pub(crate) fn check_idempotent_account(
                 if !is_off_curve(&maybe_canonical_address)
                     || maybe_canonical_address != *associated_token_account.key()
                 {
-                    msg!("PROGRAM: addresses don't match");
+                    log!(
+                        "Error: Provided `expected_bump` {} is on curve and non-canonical.",
+                        bump
+                    );
                     return Err(ProgramError::InvalidSeeds);
                 }
             }
@@ -404,12 +407,13 @@ pub(crate) fn create_and_initialize_ata(
 /// - **Tests**: Uses curve25519-dalek to replicate on-chain behavior  
 /// - **Other builds**: Returns `false`
 #[inline(always)]
-pub(crate) fn is_off_curve(_address: &Pubkey) -> bool {
+#[allow(unused_variables)]
+pub(crate) fn is_off_curve(address: &Pubkey) -> bool {
     #[cfg(target_os = "solana")]
     {
         const ED25519_CURVE_ID: u64 = 0;
 
-        let point_addr = _address.as_ref().as_ptr();
+        let point_addr = address.as_ref().as_ptr();
 
         // SAFETY: We're passing valid pointers to the syscall
         // The syscall directly returns the validation result:
@@ -435,7 +439,7 @@ pub(crate) fn is_off_curve(_address: &Pubkey) -> bool {
         let bytes_ptr = bytes.as_mut_ptr() as *mut u8;
         // SAFETY: We initialize all 32 bytes before calling assume_init()
         let bytes = unsafe {
-            core::ptr::copy_nonoverlapping(_address.as_ref().as_ptr(), bytes_ptr, 32);
+            core::ptr::copy_nonoverlapping(address.as_ref().as_ptr(), bytes_ptr, 32);
             bytes.assume_init()
         };
         let compressed = CompressedEdwardsY(bytes);
@@ -554,7 +558,7 @@ pub(crate) fn process_create_associated_token_account(
     if verified_associated_token_account_to_create
         .is_some_and(|address| &address != create_accounts.associated_token_account_to_create.key())
     {
-        msg!("Error: Canonical address does not match provided address. Use correct owner and optimal bump.");
+        log!("Error: Canonical address does not match provided address. Use correct owner and bump {}.", bump);
         return Err(ProgramError::InvalidInstructionData);
     }
 

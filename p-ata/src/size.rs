@@ -21,7 +21,7 @@ use pinocchio_token::state::TokenAccount;
 
 use crate::processor::is_spl_token_program;
 
-pub const GET_ACCOUNT_DATA_SIZE_DISCM: u8 = 21;
+pub const GET_ACCOUNT_DATA_SIZE_DISCRIMINATOR: u8 = 21;
 pub const MINT_BASE_SIZE: usize = 82;
 
 /// ExtensionType, exactly as Token-2022, with additional planned extension.
@@ -99,7 +99,7 @@ pub enum ExtensionType {
 
 /// Check if the given program ID is Token-2022
 #[inline(always)]
-pub(crate) fn is_token_2022_program(program_id: &Pubkey) -> bool {
+pub(crate) fn is_spl_token_2022_program(program_id: &Pubkey) -> bool {
     const TOKEN_2022_PROGRAM_ID: Pubkey =
         pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
     *program_id == TOKEN_2022_PROGRAM_ID
@@ -201,7 +201,7 @@ pub(crate) fn get_token_account_size(
         return Ok(TokenAccount::LEN + 5);
     }
 
-    if is_token_2022_program(token_program.key()) {
+    if is_spl_token_2022_program(token_program.key()) {
         // Try inline parsing first for Token-2022
         let mint_data = unsafe { mint_account.borrow_data_unchecked() };
         if let Some(size) = calculate_account_size_from_mint_extensions(mint_data) {
@@ -211,7 +211,7 @@ pub(crate) fn get_token_account_size(
 
     // Fallback to CPI for unknown/variable-length extensions or unknown token programs
     // ImmutableOwner extension is required for Token-2022 Associated Token Accounts
-    let instruction_data = [GET_ACCOUNT_DATA_SIZE_DISCM, 7u8, 0u8]; // [7, 0] = ImmutableOwner as u16
+    const INSTRUCTION_DATA: [u8; 3] = [GET_ACCOUNT_DATA_SIZE_DISCRIMINATOR, 7u8, 0u8]; // [7, 0] = ImmutableOwner as u16
 
     let get_size_metas = &[AccountMeta {
         pubkey: mint_account.key(),
@@ -222,7 +222,7 @@ pub(crate) fn get_token_account_size(
     let get_size_ix = Instruction {
         program_id: token_program.key(),
         accounts: get_size_metas,
-        data: &instruction_data,
+        data: &INSTRUCTION_DATA,
     };
 
     cpi::invoke(&get_size_ix, &[mint_account])?;

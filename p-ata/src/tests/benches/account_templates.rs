@@ -341,7 +341,7 @@ impl FailureAccountBuilder {
     ) {
         if let Some(pos) = accounts
             .iter()
-            .position(|(addr, _)| *addr == target_address)
+            .position(|(address, _)| *address == target_address)
         {
             accounts[pos].1.owner = wrong_owner;
         }
@@ -355,7 +355,7 @@ impl FailureAccountBuilder {
     ) {
         if let Some(pos) = accounts
             .iter()
-            .position(|(addr, _)| *addr == target_address)
+            .position(|(address, _)| *address == target_address)
         {
             accounts[pos].1.lamports = balance;
         }
@@ -367,7 +367,10 @@ impl FailureAccountBuilder {
         old_address: Pubkey,
         new_address: Pubkey,
     ) -> bool {
-        if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == old_address) {
+        if let Some(pos) = accounts
+            .iter()
+            .position(|(address, _)| *address == old_address)
+        {
             let account = accounts[pos].1.clone();
             accounts[pos] = (new_address, account);
             true
@@ -384,7 +387,7 @@ impl FailureAccountBuilder {
     ) {
         if let Some(pos) = accounts
             .iter()
-            .position(|(addr, _)| *addr == target_address)
+            .position(|(address, _)| *address == target_address)
         {
             accounts[pos].1.data = vec![0u8; size];
         }
@@ -400,12 +403,12 @@ impl FailureAccountBuilder {
     ) {
         if let Some(pos) = accounts
             .iter()
-            .position(|(addr, _)| *addr == target_address)
+            .position(|(address, _)| *address == target_address)
         {
             accounts[pos].1 = AccountBuilder::token_account(&wrong_mint, wallet, 0, token_program);
         }
         // Add the wrong mint account if it doesn't exist
-        if !accounts.iter().any(|(addr, _)| *addr == wrong_mint) {
+        if !accounts.iter().any(|(address, _)| *address == wrong_mint) {
             accounts.push((wrong_mint, AccountBuilder::mint(0, token_program)));
         }
     }
@@ -420,7 +423,7 @@ impl FailureAccountBuilder {
     ) {
         if let Some(pos) = accounts
             .iter()
-            .position(|(addr, _)| *addr == target_address)
+            .position(|(address, _)| *address == target_address)
         {
             accounts[pos].1 = AccountBuilder::token_account(mint, wrong_owner, 0, token_program);
         }
@@ -434,7 +437,7 @@ impl FailureAccountBuilder {
     ) {
         if let Some(pos) = accounts
             .iter()
-            .position(|(addr, _)| *addr == target_address)
+            .position(|(address, _)| *address == target_address)
         {
             accounts[pos].1.data =
                 vec![0xFF; crate::tests::benches::constants::account_sizes::TOKEN_ACCOUNT_SIZE];
@@ -453,7 +456,7 @@ impl FailureAccountBuilder {
     ) {
         if let Some(pos) = accounts
             .iter()
-            .position(|(addr, _)| *addr == target_address)
+            .position(|(address, _)| *address == target_address)
         {
             accounts[pos].1.data = data;
             accounts[pos].1.owner = owner;
@@ -469,7 +472,7 @@ impl FailureAccountBuilder {
     ) {
         if let Some(pos) = accounts
             .iter()
-            .position(|(addr, _)| *addr == target_address)
+            .position(|(address, _)| *address == target_address)
         {
             accounts[pos].1.data =
                 vec![0xFF; crate::tests::benches::constants::account_sizes::MULTISIG_ACCOUNT_SIZE];

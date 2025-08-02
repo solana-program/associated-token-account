@@ -313,7 +313,7 @@ fn get_failure_tests() -> Vec<FailureTestConfig> {
 fn log_test_info(test_name: &str, ata_impl: &AtaImplementation, addresses: &[(&str, &Pubkey)]) {
     let short_addresses: Vec<String> = addresses
         .iter()
-        .map(|(name, addr)| format!("{}: {}", name, &addr.to_string()[0..8]))
+        .map(|(name, address)| format!("{}: {}", name, &address.to_string()[0..8]))
         .collect();
 
     debug_log!(
@@ -325,7 +325,7 @@ fn log_test_info(test_name: &str, ata_impl: &AtaImplementation, addresses: &[(&s
 
     let full_addresses: Vec<String> = addresses
         .iter()
-        .map(|(name, addr)| format!("{}: {}", name, addr))
+        .map(|(name, address)| format!("{}: {}", name, address))
         .collect();
 
     debug_log!("    Full addresses: {}", full_addresses.join(" | "));
@@ -714,7 +714,7 @@ impl FailureTestBuilder {
                 );
 
                 // Replace ATA with one pointing to wrong mint
-                if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == *ata) {
+                if let Some(pos) = accounts.iter().position(|(address, _)| *address == *ata) {
                     accounts[pos].1 =
                         AccountBuilder::token_account(&wrong_mint, wallet, 0, token_program_id);
                 }
@@ -747,7 +747,7 @@ impl FailureTestBuilder {
                 );
 
                 // Replace ATA with one having wrong owner
-                if let Some(pos) = accounts.iter().position(|(addr, _)| *addr == *ata) {
+                if let Some(pos) = accounts.iter().position(|(address, _)| *address == *ata) {
                     accounts[pos].1 =
                         AccountBuilder::token_account(mint, &wrong_owner, 0, token_program_id);
                 }

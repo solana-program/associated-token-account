@@ -17,8 +17,8 @@ use {
     spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS},
 };
 
-pub const CLOSE_ACCOUNT_DISCM: u8 = 9;
-pub const CLOSE_ACCOUNT_DATA: [u8; 1] = [CLOSE_ACCOUNT_DISCM];
+pub const CLOSE_ACCOUNT_DISCRIMINATOR: u8 = 9;
+pub const CLOSE_ACCOUNT_DATA: [u8; 1] = [CLOSE_ACCOUNT_DISCRIMINATOR];
 
 /// Parsed Recover accounts for recover operations
 pub struct RecoverNestedAccounts<'a> {

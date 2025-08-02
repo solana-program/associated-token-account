@@ -42,8 +42,7 @@ nostd_panic_handler!();
 ///
 /// ### Recover Nested ATA - Discriminator: 2
 /// ```ignore
-/// [2]                                      -> compute all bumps on-chain
-/// [2, owner_bump, nested_bump, dest_bump]  -> use provided bumps
+/// [2]                                      -> computes all bumps on-chain
 /// ```
 ///
 /// ## Account Layout (Create)
@@ -76,12 +75,7 @@ pub fn process_instruction(
                 1 => true,
                 2 => {
                     return match instruction_data {
-                        [] => process_recover_nested(program_id, accounts, None),
-                        [owner_bump, nested_bump, destination_bump] => process_recover_nested(
-                            program_id,
-                            accounts,
-                            Some((*owner_bump, *nested_bump, *destination_bump)),
-                        ),
+                        [] => process_recover_nested(program_id, accounts),
                         _ => Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
                     }
                 }

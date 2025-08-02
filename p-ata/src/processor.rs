@@ -276,7 +276,7 @@ pub(crate) fn check_idempotent_account(
                 // We must check that the actual derived address is off-curve,
                 // since it will not fail downstream as in Create paths.
                 // Potential problem if skipping this is demonstrated in
-                // tests/test_mollusk_oncurve_attack.rs
+                // tests/bump/test_idemp_oncurve_attack.rs
                 if !is_off_curve(&maybe_canonical_address)
                     || maybe_canonical_address != *associated_token_account.key()
                 {

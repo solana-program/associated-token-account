@@ -102,9 +102,9 @@ pub(crate) fn is_spl_token_program(program_id: &Pubkey) -> bool {
 /// Check if account data represents an initialized token account.
 /// Mimics p-token's is_initialized_account check.
 ///
-/// Safety: caller must ensure account_data.len() >= 109.
+/// Panics if account_data.len() < 109.
 #[inline(always)]
-pub(crate) unsafe fn is_initialized_account(account_data: &[u8]) -> bool {
+pub(crate) fn is_initialized_account(account_data: &[u8]) -> bool {
     // Token account state is at offset 108 (after mint, owner, amount, delegate fields)
     // State: 0 = Uninitialized, 1 = Initialized, 2 = Frozen
     account_data[108] != 0
@@ -117,7 +117,7 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
     // Regular Token account: exact length match and initialized
     if account_data.len() == TokenAccount::LEN {
         // SAFETY: TokenAccount::LEN is compile-ensured to be == 165
-        return unsafe { is_initialized_account(account_data) };
+        return is_initialized_account(account_data);
     }
 
     // Token-2022's GenericTokenAccount::valid_account_data assumes Multisig
@@ -130,7 +130,7 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
         }
         // SAFETY: TokenAccount::LEN is compile-ensured to be == 165, and in
         // this branch account_data.len > TokenAccount::LEN
-        if unsafe { is_initialized_account(account_data) } {
+        if is_initialized_account(account_data) {
             return account_data[TokenAccount::LEN] == ACCOUNTTYPE_ACCOUNT;
         }
     }
@@ -146,7 +146,8 @@ pub(crate) fn get_decimals_from_mint(account: &AccountInfo) -> Result<u8, Progra
         return Err(ProgramError::InvalidAccountData);
     }
     // SAFETY: We've validated the account length above
-    Ok(unsafe { (*(mint_data_slice.as_ptr() as *const Mint)).decimals })
+    let mint = unsafe { &*(mint_data_slice.as_ptr() as *const Mint) };
+    Ok(mint.decimals)
 }
 
 /// Get token account reference with validation

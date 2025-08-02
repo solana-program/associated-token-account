@@ -97,10 +97,11 @@ pub fn process_instruction(
                 ),
                 // Bump + account_len provided (for Token-2022 optimization)
                 [bump, account_len_bytes @ ..] => {
-                    // SAFETY: runtime-bounded, and account_len is last.
-                    let account_len = unsafe {
-                        u16::from_le_bytes(*(account_len_bytes.as_ptr() as *const [u8; 2]))
-                    };
+                    let account_len = u16::from_le_bytes(
+                        account_len_bytes
+                            .try_into()
+                            .map_err(|_| ProgramError::InvalidInstructionData)?,
+                    );
 
                     if account_len > MAX_SANE_ACCOUNT_LENGTH {
                         return Err(ProgramError::InvalidInstructionData);

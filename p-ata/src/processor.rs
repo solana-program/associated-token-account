@@ -140,13 +140,13 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
 
 /// Get mint reference from account info
 #[inline(always)]
-pub(crate) fn get_mint(account: &AccountInfo) -> Result<&Mint, ProgramError> {
+pub(crate) fn get_decimals_from_mint(account: &AccountInfo) -> Result<u8, ProgramError> {
     let mint_data_slice = account.try_borrow_data()?;
     if mint_data_slice.len() < MINT_BASE_SIZE {
         return Err(ProgramError::InvalidAccountData);
     }
     // SAFETY: We've validated the account length above
-    Ok(unsafe { &*(mint_data_slice.as_ptr() as *const Mint) })
+    Ok(unsafe { (*(mint_data_slice.as_ptr() as *const Mint)).decimals })
 }
 
 /// Get token account reference with validation

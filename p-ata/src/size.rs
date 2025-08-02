@@ -131,9 +131,13 @@ pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> O
     // Start cursor after the account-type discriminator byte
     let mut cursor = ACCOUNT_TYPE_OFFSET + 1;
 
-    // SAFETY: cursor is always verified to be within the slice before deref
     while cursor + 4 <= data_len {
         // Read 4-byte TLV header (little-endian: [type: u16 | length: u16])
+        // Avoiding u32::from_le_bytes() here saves about 6 compute units in the
+        // `create_extended` bench.
+        //
+        // SAFETY: cursor is always verified to be within the slice before deref
+        // in the `while` loop condition.
         let header =
             unsafe { core::ptr::read_unaligned(mint_data.as_ptr().add(cursor) as *const u32) };
         let extension_type_raw = (header & 0xFFFF) as u16;

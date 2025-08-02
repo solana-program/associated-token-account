@@ -7,7 +7,7 @@ use {
         build_create_ata_instruction, create_test_mint, setup_mollusk_with_programs,
         CreateAtaInstructionType,
     },
-    mollusk_svm::result::Check,
+    mollusk_svm::result::{Check, ProgramResult},
     solana_instruction::AccountMeta,
     solana_program::program_error::ProgramError,
     solana_pubkey::Pubkey,
@@ -271,13 +271,12 @@ fn create_with_wrong_mint_fails() {
     );
 
     // This should fail because the derived ATA address doesn't match the provided address
-    mollusk.process_and_validate_instruction(
-        &create_idempotent_ix,
-        &accounts,
-        &[Check::err(
-            solana_program::program_error::ProgramError::InvalidInstructionData,
-        )],
-    );
+    // P-ATA fails downstream with UnknownError(PrivilegeEscalation) for address mismatches
+    let result = mollusk.process_instruction(&create_idempotent_ix, &accounts);
+    assert!(matches!(
+        result.program_result,
+        ProgramResult::UnknownError(_)
+    ));
 }
 
 #[test]
@@ -331,13 +330,12 @@ fn create_with_mismatch_fails() {
     );
 
     // This should fail because the wallet doesn't match the ATA derivation
-    mollusk.process_and_validate_instruction(
-        &create_idempotent_ix,
-        &accounts,
-        &[Check::err(
-            solana_program::program_error::ProgramError::InvalidInstructionData,
-        )],
-    );
+    // P-ATA fails downstream with UnknownError(PrivilegeEscalation) for address mismatches
+    let result = mollusk.process_instruction(&create_idempotent_ix, &accounts);
+    assert!(matches!(
+        result.program_result,
+        ProgramResult::UnknownError(_)
+    ));
 }
 
 #[test]

@@ -267,11 +267,15 @@ pub(crate) fn check_idempotent_account(
                     token_program.key().as_ref(),
                     mint_account.key().as_ref(),
                 ];
-                let (verified_address, verified_bump) =
-                    ensure_no_better_canonical_address_and_bump(seeds, program_id, bump);
 
-                let maybe_canonical_address = verified_address
-                    .unwrap_or_else(|| derive_address::<3>(seeds, Some(verified_bump), program_id));
+                // Check if a better canonical bump exists
+                if try_find_better_program_derived_address_and_bump(seeds, program_id, bump)
+                    .is_some()
+                {
+                    return Err(ProgramError::InvalidSeeds);
+                }
+
+                let maybe_canonical_address = derive_address::<3>(seeds, Some(bump), program_id);
 
                 // We must check that the actual derived address is off-curve,
                 // since it will not fail downstream as in Create paths.
@@ -456,8 +460,8 @@ pub(crate) fn is_off_curve(address: &Pubkey) -> bool {
 ///
 /// ## Returns
 ///
-/// * `(Some(address), bump)` - If a better bump was found, returns the canonical address and bump
-/// * `(None, expected_bump)` - If no better bump exists, returns the original expected_bump
+/// * `None` - No better bump exists, the expected_bump is canonical
+/// * `Some((address, bump))` - A better bump was found, returns the canonical address and bump
 ///
 /// ## Security
 ///
@@ -465,11 +469,11 @@ pub(crate) fn is_off_curve(address: &Pubkey) -> bool {
 /// that only the highest valid bump can be used, maintaining deterministic
 /// address derivation across all clients.
 #[inline(always)]
-pub(crate) fn ensure_no_better_canonical_address_and_bump(
+pub(crate) fn try_find_better_program_derived_address_and_bump(
     seeds: &[&[u8]; 3],
     program_id: &Pubkey,
     expected_bump: u8,
-) -> (Option<Pubkey>, u8) {
+) -> Option<(Pubkey, u8)> {
     // Optimization: Only verify no better bump exists. Don't require expected_bump to
     // yield an off-curve address. This saves significant compute units while still
     // preventing non-canonical addresses.
@@ -480,11 +484,12 @@ pub(crate) fn ensure_no_better_canonical_address_and_bump(
     while better_bump > expected_bump {
         let maybe_better_address = derive_address::<3>(seeds, Some(better_bump), program_id);
         if is_off_curve(&maybe_better_address) {
-            return (Some(maybe_better_address), better_bump);
+            log!("Canonical address does not match provided address. Canonical bump is {}, with address {}.", better_bump, &maybe_better_address);
+            return Some((maybe_better_address, better_bump));
         }
         better_bump -= 1;
     }
-    (None, expected_bump)
+    None
 }
 
 /// Accounts:
@@ -520,34 +525,34 @@ pub(crate) fn process_create_associated_token_account(
         return Ok(());
     }
 
-    let (verified_associated_token_account_to_create, bump) = match expected_bump {
-        Some(provided_bump) => ensure_no_better_canonical_address_and_bump(
-            &[
-                create_accounts.wallet.key().as_ref(),
-                create_accounts.token_program.key().as_ref(),
-                create_accounts.mint.key().as_ref(),
-            ],
-            program_id,
-            provided_bump,
-        ),
+    let bump = match expected_bump {
+        Some(provided_bump) => {
+            // Check if a better canonical bump exists
+            if try_find_better_program_derived_address_and_bump(
+                &[
+                    create_accounts.wallet.key().as_ref(),
+                    create_accounts.token_program.key().as_ref(),
+                    create_accounts.mint.key().as_ref(),
+                ],
+                program_id,
+                provided_bump,
+            )
+            .is_some()
+            {
+                return Err(ProgramError::InvalidInstructionData);
+            }
+            provided_bump
+        }
         None => {
-            let (address, computed_bump) = derive_canonical_ata_pda(
+            let (_address, computed_bump) = derive_canonical_ata_pda(
                 create_accounts.wallet.key(),
                 create_accounts.token_program.key(),
                 create_accounts.mint.key(),
                 program_id,
             );
-            (Some(address), computed_bump)
+            computed_bump
         }
     };
-
-    // Error if there is a canonical address with a better bump than provided
-    if verified_associated_token_account_to_create
-        .is_some_and(|address| &address != create_accounts.associated_token_account_to_create.key())
-    {
-        log!("Error: Canonical address does not match provided address. Use correct owner and bump {}.", bump);
-        return Err(ProgramError::InvalidInstructionData);
-    }
 
     let space = resolve_token_account_space(
         create_accounts.token_program,

@@ -161,14 +161,16 @@ impl MolluskBanksClient {
                     ));
                 }
                 mollusk_svm::result::ProgramResult::UnknownError(_) => {
-                    let instruction_error = if mollusk_instruction.program_id
-                        == spl_associated_token_account::id()
-                        && mollusk_instruction.data.get(0) == Some(&2)
-                    {
-                        InstructionError::IllegalOwner
-                    } else {
-                        InstructionError::ProgramFailedToComplete
-                    };
+                    let instruction_error =
+                        if mollusk_instruction.program_id == spl_associated_token_account::id() {
+                            match mollusk_instruction.data.get(0) {
+                                Some(&2) => InstructionError::IllegalOwner, // Recover nested
+                                Some(&0) | Some(&1) => InstructionError::InvalidSeeds, // Create/CreateIdempotent with address mismatch
+                                _ => InstructionError::ProgramFailedToComplete,
+                            }
+                        } else {
+                            InstructionError::ProgramFailedToComplete
+                        };
                     return Err(BanksClientError::TransactionError(
                         TransactionError::InstructionError(0, instruction_error),
                     ));
@@ -355,7 +357,7 @@ fn map_mollusk_error_to_original(
     match error {
         ProgramError::Custom(0) if instruction_type == Some(&0) => InstructionError::IllegalOwner,
         ProgramError::IllegalOwner => InstructionError::Custom(0),
-        ProgramError::InvalidInstructionData => InstructionError::InvalidSeeds,
+        ProgramError::InvalidInstructionData => InstructionError::InvalidInstructionData,
         ProgramError::InvalidAccountData if is_recover_nested => InstructionError::IllegalOwner,
         ProgramError::InvalidAccountData if is_idempotent_create => InstructionError::InvalidSeeds,
         ProgramError::IncorrectProgramId if is_recover_nested => InstructionError::IllegalOwner,

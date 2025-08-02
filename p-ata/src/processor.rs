@@ -269,11 +269,7 @@ pub(crate) fn check_idempotent_account(
                 ];
 
                 // Check if a better canonical bump exists
-                if try_find_better_program_derived_address_and_bump(seeds, program_id, bump)
-                    .is_some()
-                {
-                    return Err(ProgramError::InvalidSeeds);
-                }
+                reject_if_better_valid_bump_exists(seeds, program_id, bump)?;
 
                 let maybe_canonical_address = derive_address::<3>(seeds, Some(bump), program_id);
 
@@ -469,11 +465,11 @@ pub(crate) fn is_off_curve(address: &Pubkey) -> bool {
 /// that only the highest valid bump can be used, maintaining deterministic
 /// address derivation across all clients.
 #[inline(always)]
-pub(crate) fn try_find_better_program_derived_address_and_bump(
+pub(crate) fn reject_if_better_valid_bump_exists(
     seeds: &[&[u8]; 3],
     program_id: &Pubkey,
     expected_bump: u8,
-) -> Option<(Pubkey, u8)> {
+) -> Result<(), ProgramError> {
     // Optimization: Only verify no better bump exists. Don't require expected_bump to
     // yield an off-curve address. This saves significant compute units while still
     // preventing non-canonical addresses.
@@ -485,11 +481,11 @@ pub(crate) fn try_find_better_program_derived_address_and_bump(
         let maybe_better_address = derive_address::<3>(seeds, Some(better_bump), program_id);
         if is_off_curve(&maybe_better_address) {
             log!("Canonical address does not match provided address. Canonical bump is {}, with address {}.", better_bump, &maybe_better_address);
-            return Some((maybe_better_address, better_bump));
+            return Err(ProgramError::InvalidInstructionData);
         }
         better_bump -= 1;
     }
-    None
+    Ok(())
 }
 
 /// Accounts:
@@ -528,7 +524,7 @@ pub(crate) fn process_create_associated_token_account(
     let bump = match expected_bump {
         Some(provided_bump) => {
             // Check if a better canonical bump exists
-            if try_find_better_program_derived_address_and_bump(
+            reject_if_better_valid_bump_exists(
                 &[
                     create_accounts.wallet.key().as_ref(),
                     create_accounts.token_program.key().as_ref(),
@@ -536,11 +532,7 @@ pub(crate) fn process_create_associated_token_account(
                 ],
                 program_id,
                 provided_bump,
-            )
-            .is_some()
-            {
-                return Err(ProgramError::InvalidInstructionData);
-            }
+            )?;
             provided_bump
         }
         None => {

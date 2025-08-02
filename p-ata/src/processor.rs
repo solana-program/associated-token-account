@@ -13,7 +13,10 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::{account::create_pda_account, size::get_token_account_size},
+    crate::{
+        account::create_pda_account,
+        size::{get_token_account_size, MINT_BASE_SIZE},
+    },
     core::mem::MaybeUninit,
     pinocchio::{
         account_info::AccountInfo,
@@ -135,11 +138,15 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
     false
 }
 
-/// Get zero-copy mint reference from account info
+/// Get mint reference from account info
 #[inline(always)]
-pub(crate) unsafe fn get_mint_unchecked(account: &AccountInfo) -> &Mint {
-    let mint_data_slice = account.borrow_data_unchecked();
-    &*(mint_data_slice.as_ptr() as *const Mint)
+pub(crate) fn get_mint(account: &AccountInfo) -> Result<&Mint, ProgramError> {
+    let mint_data_slice = account.try_borrow_data()?;
+    if mint_data_slice.len() < MINT_BASE_SIZE {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    // SAFETY: We've validated the account length above
+    Ok(unsafe { &*(mint_data_slice.as_ptr() as *const Mint) })
 }
 
 /// Get token account reference with validation

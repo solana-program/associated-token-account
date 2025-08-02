@@ -2,8 +2,7 @@
 
 use {
     crate::processor::{
-        build_transfer_checked_data, derive_canonical_ata_pda, get_mint_unchecked,
-        get_token_account,
+        build_transfer_checked_data, derive_canonical_ata_pda, get_mint, get_token_account,
     },
     pinocchio::{
         account_info::AccountInfo,
@@ -164,7 +163,7 @@ pub(crate) fn process_recover_nested(
     let amount_to_recover =
         get_token_account(recover_accounts.nested_associated_token_account)?.amount();
 
-    let nested_mint_decimals = unsafe { get_mint_unchecked(recover_accounts.nested_mint).decimals };
+    let nested_mint_decimals = get_mint(recover_accounts.nested_mint)?.decimals;
 
     let transfer_data = build_transfer_checked_data(amount_to_recover, nested_mint_decimals);
 

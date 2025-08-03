@@ -24,78 +24,14 @@ use crate::processor::is_spl_token_program;
 pub const GET_ACCOUNT_DATA_SIZE_DISCRIMINATOR: u8 = 21;
 pub const MINT_BASE_SIZE: usize = 82;
 
-/// ExtensionType, exactly as Token-2022, with additional planned extension.
-#[repr(u16)]
-#[allow(dead_code)]
-pub enum ExtensionType {
-    /// Used as padding if the account size would otherwise be 355, same as a
-    /// multisig
-    Uninitialized,
-    /// Includes transfer fee rate info and accompanying authorities to withdraw
-    /// and set the fee
-    TransferFeeConfig,
-    /// Includes withheld transfer fees
-    TransferFeeAmount,
-    /// Includes an optional mint close authority
-    MintCloseAuthority,
-    /// Auditor configuration for confidential transfers
-    ConfidentialTransferMint,
-    /// State for confidential transfers
-    ConfidentialTransferAccount,
-    /// Specifies the default Account::state for new Accounts
-    DefaultAccountState,
-    /// Indicates that the Account owner authority cannot be changed
-    ImmutableOwner,
-    /// Require inbound transfers to have memo
-    MemoTransfer,
-    /// Indicates that the tokens from this mint can't be transferred
-    NonTransferable,
-    /// Tokens accrue interest over time,
-    InterestBearingConfig,
-    /// Locks privileged token operations from happening via CPI
-    CpiGuard,
-    /// Includes an optional permanent delegate
-    PermanentDelegate,
-    /// Indicates that the tokens in this account belong to a non-transferable
-    /// mint
-    NonTransferableAccount,
-    /// Mint requires a CPI to a program implementing the "transfer hook"
-    /// interface
-    TransferHook,
-    /// Indicates that the tokens in this account belong to a mint with a
-    /// transfer hook
-    TransferHookAccount,
-    /// Includes encrypted withheld fees and the encryption public that they are
-    /// encrypted under
-    ConfidentialTransferFeeConfig,
-    /// Includes confidential withheld transfer fees
-    ConfidentialTransferFeeAmount,
-    /// Mint contains a pointer to another account (or the same account) that
-    /// holds metadata
-    MetadataPointer,
-    /// Mint contains token-metadata
-    TokenMetadata,
-    /// Mint contains a pointer to another account (or the same account) that
-    /// holds group configurations
-    GroupPointer,
-    /// Mint contains token group configurations
-    TokenGroup,
-    /// Mint contains a pointer to another account (or the same account) that
-    /// holds group member configurations
-    GroupMemberPointer,
-    /// Mint contains token group member configurations
-    TokenGroupMember,
-    /// Mint allowing the minting and burning of confidential tokens
-    ConfidentialMintBurn,
-    /// Tokens whose UI amount is scaled by a given amount
-    ScaledUiAmount,
-    /// Tokens where minting / burning / transferring can be paused
-    Pausable,
-    /// Indicates that the account belongs to a pausable mint
-    PausableAccount,
-    /// PLANNED next Token-2022 extension (0 account length)
-    PlannedZeroAccountDataLengthExtension,
-}
+// These constants are taken from the Token-2022 ExtensionType enum.
+// Tests verify the constants are in sync without pulling in spl-token-2022
+// as a non-dev dependency.
+pub const EXTENSION_TRANSFER_FEE_CONFIG: u16 = 1;
+pub const EXTENSION_NON_TRANSFERABLE: u16 = 9;
+pub const EXTENSION_TRANSFER_HOOK: u16 = 14;
+pub const EXTENSION_PAUSABLE: u16 = 26;
+pub const EXTENSION_PLANNED_ZERO_ACCOUNT_DATA_LENGTH_EXTENSION: u16 = 28;
 
 /// Check if the given program ID is Token-2022
 #[inline(always)]
@@ -148,36 +84,33 @@ pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> O
             break;
         }
 
-        let extension_type =
-            if extension_type_raw <= ExtensionType::PlannedZeroAccountDataLengthExtension as u16 {
-                // SAFETY: ExtensionType is repr(u16) and we've validated the value is in range
-                unsafe { core::mem::transmute::<u16, ExtensionType>(extension_type_raw) }
-            } else {
-                // Unknown extension type - fall back to CPI
-                return None;
-            };
-
         // Based on token-2022's get_required_init_account_extensions
-        match extension_type {
-            ExtensionType::TransferFeeConfig => {
+        match extension_type_raw {
+            EXTENSION_TRANSFER_FEE_CONFIG => {
                 // TransferFeeConfig → needs TransferFeeAmount (8 bytes data + 4 TLV)
                 account_extensions_size += 4 + 8;
             }
-            ExtensionType::NonTransferable => {
+            EXTENSION_NON_TRANSFERABLE => {
                 // NonTransferable → NonTransferableAccount (0 bytes data + 4 TLV)
                 account_extensions_size += 4;
             }
-            ExtensionType::TransferHook => {
+            EXTENSION_TRANSFER_HOOK => {
                 // TransferHook → TransferHookAccount (1 byte data + 4 TLV)
                 account_extensions_size += 4 + 1;
             }
-            ExtensionType::Pausable => {
+            EXTENSION_PAUSABLE => {
                 // Pausable → PausableAccount (0 bytes data + 4 TLV)
                 account_extensions_size += 4;
             }
             // All other known extensions
-            _ => {
+            discriminant
+                if discriminant <= EXTENSION_PLANNED_ZERO_ACCOUNT_DATA_LENGTH_EXTENSION =>
+            {
                 // No account-side data required
+            }
+            // Unknown extension
+            _ => {
+                return None;
             }
         }
 
@@ -247,4 +180,53 @@ pub(crate) fn get_token_account_size(
 pub(crate) fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
     // If mint data is larger than base, it has extensions
     mint_account.data_len() > MINT_BASE_SIZE
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spl_token_2022::extension::ExtensionType;
+
+    // Test that the constants in this crate match the constants in the Token-2022
+    // ExtensionType enum. Avoids pulling in spl-token-2022 or upcoming interface
+    // as a non-dev dependency.
+    #[test]
+    fn test_extension_constants_match_token_2022() {
+        // Prevent drift between these Token-2022 ExtensionType enum values
+        assert_eq!(
+            EXTENSION_TRANSFER_FEE_CONFIG,
+            ExtensionType::TransferFeeConfig as u16,
+            "TransferFeeConfig constant mismatch"
+        );
+
+        assert_eq!(
+            EXTENSION_NON_TRANSFERABLE,
+            ExtensionType::NonTransferable as u16,
+            "NonTransferable constant mismatch"
+        );
+
+        assert_eq!(
+            EXTENSION_TRANSFER_HOOK,
+            ExtensionType::TransferHook as u16,
+            "TransferHook constant mismatch"
+        );
+
+        assert_eq!(
+            EXTENSION_PAUSABLE,
+            ExtensionType::Pausable as u16,
+            "Pausable constant mismatch"
+        );
+    }
+
+    #[test]
+    fn test_planned_extension_is_next_after_last_deployed_extension() {
+        let last_real_extension = ExtensionType::PausableAccount as u16;
+
+        assert_eq!(
+            EXTENSION_PLANNED_ZERO_ACCOUNT_DATA_LENGTH_EXTENSION,
+            last_real_extension + 1,
+            "Planned extension should be exactly one more than PausableAccount ({})",
+            last_real_extension
+        );
+    }
 }

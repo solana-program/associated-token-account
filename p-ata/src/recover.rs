@@ -14,6 +14,7 @@ use {
         pubkey::Pubkey,
         ProgramResult,
     },
+    pinocchio_log::log,
     spl_token_interface::state::multisig::{Multisig, MAX_SIGNERS},
 };
 
@@ -127,6 +128,11 @@ pub(crate) fn process_recover_nested(
             .wallet
             .is_owned_by(recover_accounts.token_program.key())
         {
+            log!(
+                "Error: Multisig wallet {} is not owned by token program {}",
+                recover_accounts.wallet.key(),
+                recover_accounts.token_program.key()
+            );
             return Err(ProgramError::MissingRequiredSignature);
         }
 
@@ -148,6 +154,10 @@ pub(crate) fn process_recover_nested(
             {
                 if key == signer.key() && !matched[position] {
                     if !signer.is_signer() {
+                        log!(
+                            "Error: Multisig member account {} is not a signer",
+                            signer.key()
+                        );
                         return Err(ProgramError::MissingRequiredSignature);
                     }
                     matched[position] = true;
@@ -157,6 +167,11 @@ pub(crate) fn process_recover_nested(
         }
 
         if num_signers < multisig_state.m {
+            log!(
+                "Error: Insufficient multisig signatures. Required: {}, Found: {}",
+                multisig_state.m,
+                num_signers
+            );
             return Err(ProgramError::MissingRequiredSignature);
         }
     }

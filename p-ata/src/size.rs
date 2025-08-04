@@ -17,6 +17,7 @@ use pinocchio::{
     program_error::ProgramError,
     pubkey::Pubkey,
 };
+use pinocchio_log::log;
 use pinocchio_token::state::TokenAccount;
 
 use crate::processor::is_spl_token_program;
@@ -163,7 +164,14 @@ pub(crate) fn get_token_account_size(
     };
 
     cpi::invoke(&get_size_ix, &[mint_account])?;
-    let return_data = cpi::get_return_data().ok_or(ProgramError::InvalidAccountData)?;
+    let return_data = cpi::get_return_data().ok_or_else(|| {
+        log!(
+            "Error: Token program {} did not return account size data for mint {}",
+            token_program.key(),
+            mint_account.key()
+        );
+        ProgramError::InvalidAccountData
+    })?;
 
     // `try_into` as this could be an unknown token program;
     // it must error if it doesn't give us [u8; 8]
@@ -171,7 +179,14 @@ pub(crate) fn get_token_account_size(
         return_data
             .as_slice()
             .try_into()
-            .map_err(|_| ProgramError::InvalidAccountData)?,
+            .map_err(|_| {
+                log!(
+                    "Error: Token program {} returned invalid account size data. Expected 8 bytes, got {} bytes",
+                    token_program.key(),
+                    return_data.as_slice().len()
+                );
+                ProgramError::InvalidAccountData
+            })?,
     ) as usize)
 }
 

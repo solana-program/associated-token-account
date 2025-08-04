@@ -142,6 +142,11 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
 pub(crate) fn get_decimals_from_mint(account: &AccountInfo) -> Result<u8, ProgramError> {
     let mint_data_slice = account.try_borrow_data()?;
     if mint_data_slice.len() < MINT_BASE_SIZE {
+        log!(
+            "Error: Mint account data too small. Expected at least {} bytes, found {} bytes",
+            MINT_BASE_SIZE,
+            mint_data_slice.len()
+        );
         return Err(ProgramError::InvalidAccountData);
     }
     // SAFETY: We've validated the account length above
@@ -169,6 +174,11 @@ pub(crate) fn validate_token_account_owner(
     expected_owner: &Pubkey,
 ) -> Result<(), ProgramError> {
     if account.owner != *expected_owner {
+        log!(
+            "Error: Token account owner mismatch. Expected: {}, Found: {}",
+            expected_owner,
+            &account.owner
+        );
         return Err(ProgramError::IllegalOwner);
     }
     Ok(())
@@ -181,6 +191,11 @@ pub(crate) fn validate_token_account_mint(
     expected_mint: &Pubkey,
 ) -> Result<(), ProgramError> {
     if account.mint != *expected_mint {
+        log!(
+            "Error: Token account mint mismatch. Expected: {}, Found: {}",
+            expected_mint,
+            &account.mint
+        );
         return Err(ProgramError::InvalidAccountData);
     }
     Ok(())
@@ -303,6 +318,11 @@ pub(crate) fn check_idempotent_account(
                 );
 
                 if canonical_address != *associated_token_account.key() {
+                    log!(
+                        "Error: Provided associated token account address is not canonical. Expected: {}, Found: {}",
+                        &canonical_address,
+                        associated_token_account.key()
+                    );
                     return Err(ProgramError::InvalidSeeds);
                 }
             }

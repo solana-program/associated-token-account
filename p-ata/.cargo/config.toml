@@ -1,2 +1,0 @@
-[alias]
-bench = "bench --features build-programs" 

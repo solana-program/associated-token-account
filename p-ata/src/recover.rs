@@ -257,3 +257,101 @@ pub(crate) fn process_recover_nested(
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use {
+        pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey},
+        std::{ptr, vec::Vec},
+    };
+
+    // Test utility - AccountLayout structure for creating test accounts
+    #[repr(C)]
+    struct AccountLayout {
+        borrow_state: u8,
+        is_signer: u8,
+        is_writable: u8,
+        executable: u8,
+        resize_delta: u32,
+        key: Pubkey,
+        owner: Pubkey,
+        lamports: u64,
+        data_len: u64,
+    }
+
+    fn with_test_accounts<F, R>(count: usize, test_fn: F) -> R
+    where
+        F: FnOnce(&[AccountInfo]) -> R,
+    {
+        let mut account_data: Vec<AccountLayout> = (0..count)
+            .map(|i| AccountLayout {
+                borrow_state: 0b_1111_1111,
+                is_signer: 0,
+                is_writable: 0,
+                executable: 0,
+                resize_delta: 0,
+                key: Pubkey::from([i as u8; 32]),
+                owner: Pubkey::from([(i as u8).wrapping_add(1); 32]),
+                lamports: 0,
+                data_len: 0,
+            })
+            .collect();
+
+        let account_infos: Vec<AccountInfo> = account_data
+            .iter_mut()
+            .map(|layout| unsafe { std::mem::transmute::<*mut AccountLayout, AccountInfo>(layout) })
+            .collect();
+
+        test_fn(&account_infos)
+    }
+
+    #[test]
+    fn test_parse_recover_accounts_success() {
+        with_test_accounts(7, |accounts| {
+            assert_eq!(accounts.len(), 7);
+
+            let parsed = parse_recover_accounts(accounts).unwrap();
+
+            assert!(ptr::eq(
+                parsed.nested_associated_token_account,
+                &accounts[0]
+            ));
+            assert_eq!(
+                parsed.nested_associated_token_account.key(),
+                accounts[0].key()
+            );
+            assert!(ptr::eq(parsed.nested_mint, &accounts[1]));
+            assert_eq!(parsed.nested_mint.key(), accounts[1].key());
+            assert!(ptr::eq(
+                parsed.destination_associated_token_account,
+                &accounts[2]
+            ));
+            assert_eq!(
+                parsed.destination_associated_token_account.key(),
+                accounts[2].key()
+            );
+            assert!(ptr::eq(parsed.owner_associated_token_account, &accounts[3]));
+            assert_eq!(
+                parsed.owner_associated_token_account.key(),
+                accounts[3].key()
+            );
+            assert!(ptr::eq(parsed.owner_mint, &accounts[4]));
+            assert_eq!(parsed.owner_mint.key(), accounts[4].key());
+            assert!(ptr::eq(parsed.wallet, &accounts[5]));
+            assert_eq!(parsed.wallet.key(), accounts[5].key());
+            assert!(ptr::eq(parsed.token_program, &accounts[6]));
+            assert_eq!(parsed.token_program.key(), accounts[6].key());
+        });
+    }
+
+    #[test]
+    fn test_parse_recover_accounts_error_insufficient() {
+        with_test_accounts(6, |accounts| {
+            assert!(matches!(
+                parse_recover_accounts(accounts),
+                Err(ProgramError::NotEnoughAccountKeys)
+            ));
+        });
+    }
+}

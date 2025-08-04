@@ -59,7 +59,6 @@ pub struct CreateAccounts<'a> {
     pub associated_token_account_to_create: &'a AccountInfo,
     pub wallet: &'a AccountInfo,
     pub mint: &'a AccountInfo,
-    #[allow(dead_code)]
     pub system_program: &'a AccountInfo,
     pub token_program: &'a AccountInfo,
     pub rent_sysvar: Option<&'a AccountInfo>,
@@ -416,7 +415,7 @@ pub(crate) fn create_and_initialize_ata(
 /// - **Other builds**: Returns `false`
 #[inline(always)]
 #[allow(unused_variables)]
-pub(crate) fn is_off_curve(address: &Pubkey) -> bool {
+pub fn is_off_curve(address: &Pubkey) -> bool {
     #[cfg(target_os = "solana")]
     {
         const ED25519_CURVE_ID: u64 = 0;
@@ -587,5 +586,375 @@ pub(crate) fn process_create_associated_token_account(
                 space,
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::validate_token_account_structure;
+    use core::ptr;
+    use std::vec::Vec;
+    use {
+        pinocchio::{program_error::ProgramError, pubkey::Pubkey},
+        solana_keypair::Keypair,
+        solana_program::pubkey::Pubkey as SolanaPubkey,
+        solana_signer::Signer,
+        spl_token_interface::state::{
+            account::Account as TokenAccount, multisig::Multisig, Transmutable,
+        },
+        std::{collections::HashSet, vec},
+    };
+
+    // Test utility functions
+    fn create_token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
+        let mut data = vec![0u8; TokenAccount::LEN];
+
+        // Set mint (bytes 0-31)
+        data[0..32].copy_from_slice(mint.as_ref());
+
+        // Set owner (bytes 32-63)
+        data[32..64].copy_from_slice(owner.as_ref());
+
+        // Set amount (bytes 64-71)
+        data[64..72].copy_from_slice(&amount.to_le_bytes());
+
+        // Set initialized state (byte 108)
+        data[108] = 1;
+
+        data
+    }
+
+    #[test]
+    fn test_is_off_curve_true() {
+        let program_id = SolanaPubkey::new_unique();
+        let seeds = &[b"test_seed" as &[u8]];
+        let (off_curve_address, _) = SolanaPubkey::find_program_address(seeds, &program_id);
+        let pinocchio_format = Pubkey::from(off_curve_address.to_bytes());
+        let result = is_off_curve(&pinocchio_format);
+        assert!(result);
+    }
+
+    #[test]
+    fn test_is_off_curve_false() {
+        // Generate a random address
+        let wallet = Keypair::new();
+        let address = wallet.pubkey();
+        let pinocchio_format = Pubkey::from(address.to_bytes());
+        let result = is_off_curve(&pinocchio_format);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_valid_token_account_data() {
+        // Case 1: Regular, initialized account
+        let mut data1 = [0u8; TokenAccount::LEN];
+        data1[108] = 1; // initialized state
+        assert!(
+            valid_token_account_data(&data1),
+            "Regular initialized account should be valid"
+        );
+
+        // Case 2: Uninitialized account
+        let mut data2 = [0u8; TokenAccount::LEN];
+        data2[108] = 0; // uninitialized state
+        assert!(
+            !valid_token_account_data(&data2),
+            "Uninitialized account should be invalid"
+        );
+
+        // Case 3: Data too short
+        let data3 = [0u8; TokenAccount::LEN - 1];
+        assert!(
+            !valid_token_account_data(&data3),
+            "Data shorter than TokenAccount::LEN should be invalid"
+        );
+
+        // Case 4: Extended, correctly typed account
+        let mut data4 = vec![0u8; TokenAccount::LEN + 10];
+        data4[108] = 1; // initialized
+        data4[TokenAccount::LEN] = 2; // AccountType::Account
+        assert!(
+            valid_token_account_data(&data4),
+            "Extended, correctly typed account should be valid"
+        );
+
+        // Case 5: Extended, incorrectly typed account
+        let mut data5 = vec![0u8; TokenAccount::LEN + 10];
+        data5[108] = 1; // initialized
+        data5[TokenAccount::LEN] = 1; // Wrong account type
+        assert!(
+            !valid_token_account_data(&data5),
+            "Extended, incorrectly typed account should be invalid"
+        );
+
+        // Case 6: Multisig collision
+        let mut data6 = [0u8; Multisig::LEN];
+        data6[0] = 2; // valid multisig m
+        data6[1] = 3; // valid multisig n
+        data6[2] = 1; // initialized
+        data6[108] = 1;
+        assert!(
+            !valid_token_account_data(&data6),
+            "Multisig data should be invalid"
+        );
+    }
+
+    #[test]
+    fn test_validate_token_account_owner() {
+        let owner1 = Pubkey::from([1u8; 32]);
+        let owner2 = Pubkey::from([2u8; 32]);
+        let mint = Pubkey::from([3u8; 32]);
+        let data = create_token_account_data(&mint, &owner1, 1000);
+        let account: &TokenAccount = unsafe { &*(data.as_ptr() as *const TokenAccount) };
+
+        assert!(validate_token_account_owner(account, &owner1).is_ok());
+        assert_eq!(
+            validate_token_account_owner(account, &owner2).unwrap_err(),
+            ProgramError::IllegalOwner
+        );
+    }
+
+    #[test]
+    fn test_validate_token_account_mint() {
+        let mint1 = Pubkey::from([1u8; 32]);
+        let mint2 = Pubkey::from([2u8; 32]);
+        let owner = Pubkey::from([3u8; 32]);
+        let data = create_token_account_data(&mint1, &owner, 1000);
+        let account: &TokenAccount = unsafe { &*(data.as_ptr() as *const TokenAccount) };
+
+        assert!(validate_token_account_mint(account, &mint1).is_ok());
+        assert_eq!(
+            validate_token_account_mint(account, &mint2).unwrap_err(),
+            ProgramError::InvalidAccountData
+        );
+    }
+
+    #[test]
+    fn test_create_token_account_data_structure() {
+        let mint = Pubkey::from([1u8; 32]);
+        let owner = Pubkey::from([2u8; 32]);
+        let amount = 1000u64;
+
+        let data = create_token_account_data(&mint, &owner, amount);
+
+        assert!(validate_token_account_structure(&data, &mint, &owner));
+        assert!(valid_token_account_data(&data));
+    }
+
+    #[test]
+    fn test_build_initialize_account3_data_basic() {
+        let owner = Pubkey::from([1u8; 32]);
+        let data = build_initialize_account3_data(&owner);
+
+        assert_eq!(data.len(), 33);
+        assert_eq!(data[0], INITIALIZE_ACCOUNT_3_DISCRIMINATOR);
+        assert_eq!(&data[1..33], owner.as_ref());
+    }
+
+    #[test]
+    fn test_build_initialize_account3_data_different_owners() {
+        let owner1 = Pubkey::from([1u8; 32]);
+        let owner2 = Pubkey::from([2u8; 32]);
+
+        let data1 = build_initialize_account3_data(&owner1);
+        let data2 = build_initialize_account3_data(&owner2);
+
+        assert_eq!(data1[0], data2[0]); // Same discriminator
+        assert_ne!(&data1[1..], &data2[1..]); // Different owner bytes
+    }
+
+    #[test]
+    fn test_build_transfer_data_basic() {
+        let amount = 1000u64;
+        let decimals = 6u8;
+        let data = build_transfer_checked_data(amount, decimals);
+
+        assert_eq!(data.len(), 10);
+        assert_eq!(data[0], TRANSFER_CHECKED_DISCRIMINATOR);
+
+        let parsed_amount = u64::from_le_bytes([
+            data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
+        ]);
+        assert_eq!(parsed_amount, amount);
+        assert_eq!(data[9], decimals);
+    }
+
+    #[test]
+    fn test_build_transfer_data_edge_cases() {
+        // Test zero values
+        let data = build_transfer_checked_data(0, 0);
+        assert_eq!(data.len(), 10);
+        assert_eq!(data[0], TRANSFER_CHECKED_DISCRIMINATOR);
+        assert_eq!(
+            u64::from_le_bytes([
+                data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8]
+            ]),
+            0
+        );
+        assert_eq!(data[9], 0);
+
+        // Test max values
+        let data = build_transfer_checked_data(u64::MAX, u8::MAX);
+        assert_eq!(data.len(), 10);
+        assert_eq!(data[0], TRANSFER_CHECKED_DISCRIMINATOR);
+        assert_eq!(
+            u64::from_le_bytes([
+                data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8]
+            ]),
+            u64::MAX
+        );
+        assert_eq!(data[9], u8::MAX);
+    }
+
+    #[test]
+    fn test_build_transfer_data_endianness() {
+        let amount = 0x0123456789abcdef_u64;
+        let decimals = 6u8;
+        let data = build_transfer_checked_data(amount, decimals);
+
+        // Verify little-endian encoding
+        let expected_bytes = amount.to_le_bytes();
+        assert_eq!(&data[1..9], &expected_bytes);
+    }
+
+    #[test]
+    fn test_instruction_data_deterministic() {
+        let owner = Pubkey::from([42u8; 32]);
+        let amount = 1000u64;
+        let decimals = 6u8;
+
+        // Test that identical inputs produce identical outputs
+        let data1 = build_initialize_account3_data(&owner);
+        let data2 = build_initialize_account3_data(&owner);
+        assert_eq!(data1, data2);
+
+        let transfer1 = build_transfer_checked_data(amount, decimals);
+        let transfer2 = build_transfer_checked_data(amount, decimals);
+        assert_eq!(transfer1, transfer2);
+    }
+
+    #[test]
+    fn test_discriminator_uniqueness() {
+        use crate::recover::CLOSE_ACCOUNT_DISCRIMINATOR;
+
+        let discriminators = [
+            INITIALIZE_ACCOUNT_3_DISCRIMINATOR,
+            INITIALIZE_IMMUTABLE_OWNER_DISCRIMINATOR,
+            TRANSFER_CHECKED_DISCRIMINATOR,
+            CLOSE_ACCOUNT_DISCRIMINATOR,
+        ];
+
+        let mut unique_discriminators = HashSet::new();
+        for &d in &discriminators {
+            unique_discriminators.insert(d);
+        }
+
+        assert_eq!(
+            discriminators.len(),
+            unique_discriminators.len(),
+            "All discriminators must be unique"
+        );
+    }
+
+    // Test utility - AccountLayout structure for creating test accounts
+    #[repr(C)]
+    struct AccountLayout {
+        borrow_state: u8,
+        is_signer: u8,
+        is_writable: u8,
+        executable: u8,
+        resize_delta: u32,
+        key: Pubkey,
+        owner: Pubkey,
+        lamports: u64,
+        data_len: u64,
+    }
+
+    fn with_test_accounts_for_parsing<F, R>(count: usize, test_fn: F) -> R
+    where
+        F: FnOnce(&[AccountInfo]) -> R,
+    {
+        let mut account_data: Vec<AccountLayout> = (0..count)
+            .map(|i| AccountLayout {
+                borrow_state: 0b_1111_1111,
+                is_signer: 0,
+                is_writable: 0,
+                executable: 0,
+                resize_delta: 0,
+                key: Pubkey::from([i as u8; 32]),
+                owner: Pubkey::from([(i as u8).wrapping_add(1); 32]),
+                lamports: 0,
+                data_len: 0,
+            })
+            .collect();
+
+        let account_infos: Vec<AccountInfo> = account_data
+            .iter_mut()
+            .map(|layout| unsafe { std::mem::transmute::<*mut AccountLayout, AccountInfo>(layout) })
+            .collect();
+
+        test_fn(&account_infos)
+    }
+
+    #[test]
+    fn test_parse_create_accounts_success_without_rent() {
+        // Exactly 6 accounts – rent sysvar should be `None`.
+        with_test_accounts_for_parsing(6, |accounts| {
+            let parsed = parse_create_accounts(accounts).unwrap();
+
+            assert!(ptr::eq(parsed.payer, &accounts[0]));
+            assert_eq!(parsed.payer.key(), accounts[0].key());
+            assert!(ptr::eq(
+                parsed.associated_token_account_to_create,
+                &accounts[1]
+            ));
+            assert_eq!(
+                parsed.associated_token_account_to_create.key(),
+                accounts[1].key()
+            );
+            assert!(ptr::eq(parsed.wallet, &accounts[2]));
+            assert_eq!(parsed.wallet.key(), accounts[2].key());
+            assert!(ptr::eq(parsed.mint, &accounts[3]));
+            assert_eq!(parsed.mint.key(), accounts[3].key());
+            assert!(ptr::eq(parsed.system_program, &accounts[4]));
+            assert_eq!(parsed.system_program.key(), accounts[4].key());
+            assert!(ptr::eq(parsed.token_program, &accounts[5]));
+            assert_eq!(parsed.token_program.key(), accounts[5].key());
+            assert!(parsed.rent_sysvar.is_none());
+        });
+    }
+
+    #[test]
+    fn test_parse_create_accounts_success_with_rent() {
+        // 7 accounts – index 6 is rent sysvar.
+        with_test_accounts_for_parsing(7, |accounts| {
+            assert_eq!(accounts.len(), 7);
+
+            let parsed = parse_create_accounts(accounts).unwrap();
+
+            assert!(parsed.rent_sysvar.is_some());
+            assert!(ptr::eq(parsed.rent_sysvar.unwrap(), &accounts[6]));
+            assert_eq!(parsed.rent_sysvar.unwrap().key(), accounts[6].key());
+        });
+    }
+
+    #[test]
+    fn test_parse_create_accounts_error_insufficient() {
+        with_test_accounts_for_parsing(5, |accounts| {
+            assert!(matches!(
+                parse_create_accounts(accounts),
+                Err(ProgramError::NotEnoughAccountKeys)
+            ));
+        });
+    }
+
+    #[test]
+    fn test_fn_is_spl_token_program() {
+        assert!(is_spl_token_program(&spl_token_interface::program::id()));
+
+        let token_2022_id =
+            pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+        assert!(!is_spl_token_program(&token_2022_id));
     }
 }

@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::Command;
 
 #[cfg(feature = "build-programs")]
-use {serde_json, solana_pubkey::Pubkey};
+use solana_pubkey::Pubkey;
 
 fn main() {
     println!("cargo:rerun-if-changed=programs/token");
@@ -54,7 +54,7 @@ fn generate_test_files() {
 pub mod {} {{
     // Provide the program_test module that the original test expects
     pub mod program_test {{
-        pub use crate::tests::mollusk_adapter::{{
+        pub use crate::utils::mollusk_adapter::{{
             mollusk_program_test as program_test,
             mollusk_program_test_2022 as program_test_2022,
             BanksClient, ProgramTestContext,
@@ -66,7 +66,7 @@ pub mod {} {{
     use std::vec::Vec;
     
     // Re-export mollusk types at the module level to override solana_program_test imports
-    pub use crate::tests::mollusk_adapter::{{BanksClient, ProgramTestContext}};
+    pub use crate::utils::mollusk_adapter::{{BanksClient, ProgramTestContext}};
     
     // Modified original test content
 {}
@@ -122,9 +122,9 @@ mod builder {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
 
         update_submodules(&manifest_dir);
-        build_p_token(&manifest_dir, &Path::new(""));
-        build_token_2022(&manifest_dir, &Path::new(""));
-        build_spl_ata(&manifest_dir, &Path::new(""));
+        build_p_token(&manifest_dir, Path::new(""));
+        build_token_2022(&manifest_dir, Path::new(""));
+        build_spl_ata(&manifest_dir, Path::new(""));
         build_p_ata_variants(&manifest_dir);
 
         println!("cargo:warning=Token programs built successfully!");
@@ -233,7 +233,12 @@ mod builder {
         println!("cargo:warning=Building P-ATA prefunded variant...");
 
         let output = Command::new("cargo")
-            .args(["build-sbf", "--features", "create-prefunded-account"])
+            .args([
+                "build-sbf",
+                "--features",
+                "create-prefunded-account",
+                "--no-default-features",
+            ])
             .current_dir(manifest_dir)
             .output()
             .expect("Failed to execute cargo build-sbf for P-ATA prefunded");
@@ -251,7 +256,7 @@ mod builder {
 
         if let Ok(keypair_data) = std::fs::read_to_string(&keypair_path) {
             if let Ok(keypair_bytes) = serde_json::from_str::<Vec<u8>>(&keypair_data) {
-                if keypair_bytes.len() >= 32 {
+                if keypair_bytes.len() >= 64 {
                     let pubkey_bytes: [u8; 32] = keypair_bytes[32..64].try_into().unwrap();
                     let program_id = Pubkey::from(pubkey_bytes);
                     println!(
@@ -296,7 +301,7 @@ mod builder {
         println!("cargo:warning=Building P-ATA legacy variant...");
 
         let output = Command::new("cargo")
-            .args(["build-sbf"])
+            .args(["build-sbf", "--no-default-features"])
             .current_dir(manifest_dir)
             .output()
             .expect("Failed to execute cargo build-sbf for P-ATA legacy");

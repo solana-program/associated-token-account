@@ -12,11 +12,11 @@ borsh = ["dep:borsh"]
 
 [dependencies]
 borsh = { version = "1", optional = true, features = ["unstable__schema"] }
-solana-instruction = { version = "2.2.1", features = ["std"] }
-solana-pubkey = { version = "2.2.1", features = ["curve25519"] }
+solana-instruction = { version = "3.0.0", features = ["std"] }
+solana-pubkey = { version = "3.0.0", features = ["curve25519"] }
 
 [dev-dependencies]
-solana-sdk-ids = "2.2.1"
+solana-sdk-ids = "3.0.0"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]

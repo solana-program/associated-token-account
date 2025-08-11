@@ -46,7 +46,7 @@ Set `BENCH_ITERATIONS` to average a number of runs. If only 1 iteration is used,
 BENCH_ITERATIONS=1 cargo bench --features std
 ```
 
-### "Best run" numbers (ideal bumps) *as of 2025-08-02*
+### "Best run" numbers (ideal bumps) *as of 2025-08-11, ecde2ca*
 
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |  notes                       |
 |-----------------------|--------:|------:|---------:|------------------:|-----------------:|
@@ -56,22 +56,22 @@ BENCH_ITERATIONS=1 cargo bench --features std
 | create_topup          |  15817  |  4710 |    3191  |              3083 | `CreateAccountPrefunded` |
 | create_topup_nocap    |  15817  |  7476 |    5959  |              5851 | no `CreateAccountPrefunded` |
 | create_extended       |  17620  |  9771 |    8251  |              7997 |  |
-| recover_nested        |  12851  |  8057 |    N/A   |              8057 | rare instruction  |
-| recover_multisig      |    N/A  |  8378 |    N/A   |              8378 | rare instruction  |
-| worst_case_create     |  19864  | 15187 |    3358  |              3251 | hard-to-find bump |
+| recover_nested        |  12851  |  8100 |    N/A   |              8100 | rare instruction  |
+| recover_multisig      |    N/A  |  8412 |    N/A   |              8412 | rare instruction  |
+| worst_case_create     |  19864  | 15187 |    3323  |              3216 | hard-to-find bump |
 
-### Average of 10,000 random wallets *as of 2025-08-01*
+### Average of 10,000 random wallets *as of 2025-08-11, ecde2cad*
 
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |  notes                       |
 |-----------------------|--------:|------:|---------:|------------------:|-----------------:|
-| create_idempotent     |  4914   |  3264 |      999 |               999 |  |
-| create                | 14194   |  6448 |     3751 |              3645 |  |
-| create_token2022      | 16057   |  9267 |     6562 |              6414 |  |
-| create_topup          | 17317   |  6301 |     3614 |              3521 | `CreateAccountPrefunded` |
-| create_topup_no_cap   | 17287   |  9169 |     6409 |              6229 | no `CreateAccountPrefunded` |
-| create_extended       | 19420   | 11409 |     8694 |              8425 |  |
-| recover_nested        | 17066   | 12555 |      N/A |             12555 | rare instruction  |
-| recover_multisig      |   N/A   | 12872 |      N/A |             12872 | rare instruction  |
+| create_idempotent     |  4914   |  3234 |      948 |               948 |  |
+| create                | 14194   |  6343 |     3692 |              3589 |  |
+| create_token2022      | 16057   |  9140 |     6491 |              6362 |  |
+| create_topup          | 17317   |  6183 |     3561 |              3449 | `CreateAccountPrefunded` |
+| create_topup_no_cap   | 17287   |  8987 |     6324 |              6209 | no `CreateAccountPrefunded` |
+| create_extended       | 19420   | 11289 |     8618 |              8366 |  |
+| recover_nested        | 17066   | 12576 |      N/A |             12576 | rare instruction  |
+| recover_multisig      |   N/A   | 12875 |      N/A |             12875 | rare instruction  |
 
 All benchmarks also check for byte-for-byte equivalence with SPL ATA.
 

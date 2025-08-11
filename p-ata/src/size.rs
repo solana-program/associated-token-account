@@ -140,6 +140,10 @@ pub(crate) fn get_token_account_size(
     }
 
     if is_spl_token_2022_program(token_program.key()) {
+        // The mint_data is not verified to be mint data here; the authoritative check
+        // is the token program's mint validation during initialization, invoked in
+        // `create_and_initialize_ata()`.
+        //
         // SAFETY: This is the only place in this function that borrows mint_account data,
         // and the borrow is released when mint_data goes out of scope before any other
         // operations.

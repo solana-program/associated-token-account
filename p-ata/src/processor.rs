@@ -527,6 +527,7 @@ pub(crate) fn reject_if_better_valid_bump_exists(
 ///
 /// For Token-2022 accounts, create the account with the correct size
 /// and call InitializeImmutableOwner followed by InitializeAccount3.
+#[inline(always)]
 pub(crate) fn process_create_associated_token_account(
     program_id: &Pubkey,
     accounts: &[AccountInfo],

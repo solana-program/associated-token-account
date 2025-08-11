@@ -27,7 +27,7 @@ use pinocchio_system::instructions::{Allocate, Assign, Transfer};
 /// * `space` - Size of the account data field in bytes
 /// * `target_program_owner` - Program that will own the new account
 /// * `pda` - Pre-derived PDA address (account to create)
-/// * `pda_signer_seeds` - Complete seed array [wallet, token_program, mint, bump]
+/// * `pda_signer_seeds` - Exactly 4 seeds [wallet, token_program, mint, bump]
 ///
 /// ## Behavior
 ///
@@ -45,18 +45,11 @@ pub(crate) fn create_pda_account(
     space: usize,
     target_program_owner: &Pubkey,
     pda: &AccountInfo,
-    pda_signer_seeds: &[&[u8]],
+    pda_signer_seeds: &[Seed; 4],
 ) -> ProgramResult {
     let current_lamports = pda.lamports();
 
-    debug_assert!(pda_signer_seeds.len() == 4, "Expected 4 seeds for PDA");
-    let seed_array: [Seed; 4] = [
-        Seed::from(pda_signer_seeds[0]),
-        Seed::from(pda_signer_seeds[1]),
-        Seed::from(pda_signer_seeds[2]),
-        Seed::from(pda_signer_seeds[3]),
-    ];
-    let signer = Signer::from(&seed_array);
+    let signer = Signer::from(pda_signer_seeds);
 
     let required_lamports = rent.minimum_balance(space).max(1);
 

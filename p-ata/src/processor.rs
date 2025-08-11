@@ -21,7 +21,7 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         cpi,
-        instruction::{AccountMeta, Instruction},
+        instruction::{AccountMeta, Instruction, Seed},
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
@@ -371,11 +371,12 @@ pub(crate) fn create_and_initialize_ata(
     bump: u8,
     space: usize,
 ) -> ProgramResult {
-    let seeds: &[&[u8]] = &[
-        wallet.key().as_ref(),
-        token_program.key().as_ref(),
-        mint_account.key().as_ref(),
-        &[bump],
+    let bump_slice = [bump];
+    let seeds: [Seed; 4] = [
+        Seed::from(wallet.key().as_ref()),
+        Seed::from(token_program.key().as_ref()),
+        Seed::from(mint_account.key().as_ref()),
+        Seed::from(&bump_slice[..]),
     ];
 
     create_pda_account(
@@ -384,7 +385,7 @@ pub(crate) fn create_and_initialize_ata(
         space,
         token_program.key(),
         associated_token_account,
-        seeds,
+        &seeds,
     )?;
 
     // Initialize ImmutableOwner for non-SPL Token programs (future compatible)

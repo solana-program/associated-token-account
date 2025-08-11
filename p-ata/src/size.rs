@@ -140,7 +140,9 @@ pub(crate) fn get_token_account_size(
     }
 
     if is_spl_token_2022_program(token_program.key()) {
-        // Try inline parsing first for Token-2022
+        // SAFETY: This is the only place in this function that borrows mint_account data,
+        // and the borrow is released when mint_data goes out of scope before any other
+        // operations.
         let mint_data = unsafe { mint_account.borrow_data_unchecked() };
         if let Some(size) = calculate_account_size_from_mint_extensions(mint_data) {
             return Ok(size);

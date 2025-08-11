@@ -86,7 +86,7 @@ pub(crate) fn create_pda_account(
                 account: pda,
                 owner: target_program_owner,
             }
-            .invoke_signed(&[signer.clone()])?;
+            .invoke_signed(&[signer])?;
         }
     } else {
         CreateAccount {

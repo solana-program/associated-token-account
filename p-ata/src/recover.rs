@@ -212,17 +212,12 @@ pub(crate) fn process_recover_nested(
         data: &transfer_data,
     };
 
-    let pda_seeds_raw: &[&[u8]] = &[
-        recover_accounts.wallet.key().as_ref(),
-        recover_accounts.token_program.key().as_ref(),
-        recover_accounts.owner_mint.key().as_ref(),
-        &[owner_bump],
-    ];
+    let owner_bump_slice = [owner_bump];
     let pda_seed_array: [Seed<'_>; 4] = [
-        Seed::from(pda_seeds_raw[0]),
-        Seed::from(pda_seeds_raw[1]),
-        Seed::from(pda_seeds_raw[2]),
-        Seed::from(pda_seeds_raw[3]),
+        Seed::from(recover_accounts.wallet.key().as_ref()),
+        Seed::from(recover_accounts.token_program.key().as_ref()),
+        Seed::from(recover_accounts.owner_mint.key().as_ref()),
+        Seed::from(&owner_bump_slice[..]),
     ];
     let pda_signer = Signer::from(&pda_seed_array);
 

@@ -50,12 +50,12 @@ BENCH_ITERATIONS=1 cargo bench --features std
 
 | Test                  | SPL ATA | p-ata | bump arg | all optimizations |  notes                       |
 |-----------------------|--------:|------:|---------:|------------------:|-----------------:|
-| create_idempotent     |   3669  |  1780 |     637  |               637 |  |
-| create                |  12364  |  4871 |    3358  |              3251 |  |
-| create_token2022      |  14692  |  7672 |    6159  |              6024 |  |
-| create_topup          |  15817  |  4744 |    3231  |              3124 | `CreateAccountPrefunded` |
-| create_topup_nocap    |  15817  |  7578 |    6008  |              5906 | no `CreateAccountPrefunded` |
-| create_extended       |  17620  |  9813 |    8326  |              8034 |  |
+| create_idempotent     |   3669  |  1732 |     590  |               590 |  |
+| create                |  12364  |  4842 |    3323  |              3216 |  |
+| create_token2022      |  14692  |  7642 |    6123  |              5987 |  |
+| create_topup          |  15817  |  4710 |    3191  |              3083 | `CreateAccountPrefunded` |
+| create_topup_nocap    |  15817  |  7476 |    5959  |              5851 | no `CreateAccountPrefunded` |
+| create_extended       |  17620  |  9771 |    8251  |              7997 |  |
 | recover_nested        |  12851  |  8057 |    N/A   |              8057 | rare instruction  |
 | recover_multisig      |    N/A  |  8378 |    N/A   |              8378 | rare instruction  |
 | worst_case_create     |  19864  | 15187 |    3358  |              3251 | hard-to-find bump |

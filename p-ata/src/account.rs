@@ -63,7 +63,7 @@ pub(crate) fn create_pda_account(
                 space: space as u64,
                 owner: target_program_owner,
             }
-            .invoke_signed(&[signer])?;
+            .invoke_signed(&[signer])
         }
         #[cfg(not(feature = "create-prefunded-account"))]
         {
@@ -86,7 +86,7 @@ pub(crate) fn create_pda_account(
                 account: pda,
                 owner: target_program_owner,
             }
-            .invoke_signed(&[signer])?;
+            .invoke_signed(&[signer])
         }
     } else {
         CreateAccount {
@@ -96,7 +96,6 @@ pub(crate) fn create_pda_account(
             space: space as u64,
             owner: target_program_owner,
         }
-        .invoke_signed(&[signer])?;
+        .invoke_signed(&[signer])
     }
-    Ok(())
 }

@@ -406,16 +406,8 @@ pub(crate) fn create_and_initialize_ata(
     // Initialize account via InitializeAccount3.
     let initialize_account_instr_data = build_initialize_account3_data(wallet.key());
     let initialize_account_metas = &[
-        AccountMeta {
-            pubkey: associated_token_account.key(),
-            is_writable: true,
-            is_signer: false,
-        },
-        AccountMeta {
-            pubkey: mint_account.key(),
-            is_writable: false,
-            is_signer: false,
-        },
+        AccountMeta::writable(associated_token_account.key()),
+        AccountMeta::readonly(mint_account.key()),
     ];
     let init_ix = Instruction {
         program_id: token_program.key(),

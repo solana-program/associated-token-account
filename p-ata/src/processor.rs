@@ -423,8 +423,7 @@ pub(crate) fn create_and_initialize_ata(
         data: &initialize_account_instr_data,
     };
 
-    cpi::invoke(&init_ix, &[associated_token_account, mint_account])?;
-    Ok(())
+    cpi::invoke(&init_ix, &[associated_token_account, mint_account])
 }
 
 /// Check if a given address is off-curve (not a valid Ed25519 curve point).

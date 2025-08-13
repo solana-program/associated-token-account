@@ -371,13 +371,13 @@ pub(crate) fn create_and_initialize_ata(
     bump: u8,
     space: usize,
 ) -> ProgramResult {
-    let bump_slice = [bump];
-    let seeds: [Seed; 4] = [
-        Seed::from(wallet.key().as_ref()),
-        Seed::from(token_program.key().as_ref()),
-        Seed::from(mint_account.key().as_ref()),
-        Seed::from(&bump_slice[..]),
-    ];
+    let bump_slice = &[bump];
+    let seeds = pinocchio::seeds!(
+        wallet.key().as_ref(),
+        token_program.key().as_ref(),
+        mint_account.key().as_ref(),
+        bump_slice
+    );
 
     create_pda_account(
         payer,

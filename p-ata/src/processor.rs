@@ -390,11 +390,8 @@ pub(crate) fn create_and_initialize_ata(
 
     // Initialize ImmutableOwner for non-SPL Token programs (future compatible)
     if !is_spl_token_program(token_program.key()) {
-        let initialize_immutable_owner_metas = &[AccountMeta {
-            pubkey: associated_token_account.key(),
-            is_writable: true,
-            is_signer: false,
-        }];
+        let initialize_immutable_owner_metas =
+            &[AccountMeta::writable(associated_token_account.key())];
         let init_immutable_owner_ix = Instruction {
             program_id: token_program.key(),
             accounts: initialize_immutable_owner_metas,

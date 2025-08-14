@@ -1,0 +1,6 @@
+[submodule "p-ata/programs/token"]
+	path = p-ata/programs/token
+	url = https://github.com/solana-program/token
+[submodule "p-ata/programs/token-2022"]
+	path = p-ata/programs/token-2022
+	url = https://github.com/solana-program/token-2022

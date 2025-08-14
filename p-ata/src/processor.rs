@@ -246,7 +246,7 @@ pub(crate) fn build_transfer_checked_data(amount: u64, decimals: u8) -> [u8; 10]
 pub(crate) fn parse_create_accounts(
     accounts: &[AccountInfo],
 ) -> Result<CreateAccounts, ProgramError> {
-let [payer, associated_token_account_to_create, wallet, mint, system_program, token_program, maybe_rent_sysvar @ ..] =
+    let [payer, associated_token_account_to_create, wallet, mint, system_program, token_program, maybe_rent_sysvar @ ..] =
         accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);

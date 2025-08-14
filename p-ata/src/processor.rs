@@ -246,24 +246,21 @@ pub(crate) fn build_transfer_checked_data(amount: u64, decimals: u8) -> [u8; 10]
 pub(crate) fn parse_create_accounts(
     accounts: &[AccountInfo],
 ) -> Result<CreateAccounts, ProgramError> {
-    let rent_info = match accounts.len() {
-        len if len >= 7 => Some(unsafe { accounts.get_unchecked(6) }),
-        6 => None,
-        _ => return Err(ProgramError::NotEnoughAccountKeys),
+let [payer, associated_token_account_to_create, wallet, mint, system_program, token_program, maybe_rent_sysvar @ ..] =
+        accounts
+    else {
+        return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // SAFETY: account len already checked
-    unsafe {
-        Ok(CreateAccounts {
-            payer: accounts.get_unchecked(0),
-            associated_token_account_to_create: accounts.get_unchecked(1),
-            wallet: accounts.get_unchecked(2),
-            mint: accounts.get_unchecked(3),
-            system_program: accounts.get_unchecked(4),
-            token_program: accounts.get_unchecked(5),
-            rent_sysvar: rent_info,
-        })
-    }
+    Ok(CreateAccounts {
+        payer,
+        associated_token_account_to_create,
+        wallet,
+        mint,
+        system_program,
+        token_program,
+        rent_sysvar: maybe_rent_sysvar.first(),
+    })
 }
 
 /// Check if account already exists and is properly configured (idempotent check).

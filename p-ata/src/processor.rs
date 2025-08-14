@@ -13,10 +13,7 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::{
-        account::create_pda_account,
-        size::{get_token_account_size, MINT_BASE_SIZE},
-    },
+    crate::{account::create_pda_account, size::get_token_account_size},
     core::mem::MaybeUninit,
     pinocchio::{
         account_info::AccountInfo,
@@ -141,7 +138,7 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
 #[inline(always)]
 pub(crate) fn get_decimals_from_mint(account: &AccountInfo) -> Result<u8, ProgramError> {
     let mint_data_slice = account.try_borrow_data()?;
-    let mint = unsafe { spl_token_interface::state::load_unchecked::<Mint>(&mint_data_slice) };
+    let mint = unsafe { spl_token_interface::state::load_unchecked::<Mint>(&mint_data_slice)? };
     Ok(mint.decimals)
 }
 

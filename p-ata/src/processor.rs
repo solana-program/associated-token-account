@@ -21,7 +21,7 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         cpi,
-        instruction::{AccountMeta, Instruction, Seed},
+        instruction::{AccountMeta, Instruction},
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
@@ -154,9 +154,24 @@ pub(crate) fn get_decimals_from_mint(account: &AccountInfo) -> Result<u8, Progra
     Ok(mint.decimals)
 }
 
-/// Get token account reference with validation
+/// Get token account reference with validation. Fails if a mutable borrow
+/// of the account has occurred.
 #[inline(always)]
-pub(crate) fn get_token_account(account: &AccountInfo) -> Result<&TokenAccount, ProgramError> {
+pub(crate) fn load_token_account(account: &AccountInfo) -> Result<&TokenAccount, ProgramError> {
+    let account_data = account.try_borrow_data()?;
+    if !valid_token_account_data(&account_data) {
+        return Err(ProgramError::InvalidAccountData);
+    }
+    // SAFETY: We've validated the account data structure above
+    unsafe { Ok(&*(account_data.as_ptr() as *const TokenAccount)) }
+}
+
+/// Get token account reference with validation.
+/// SAFETY: Caller must ensure no mutable borrows of `account`.
+#[inline(always)]
+pub(crate) unsafe fn load_token_account_unchecked(
+    account: &AccountInfo,
+) -> Result<&TokenAccount, ProgramError> {
     let account_data = unsafe { account.borrow_data_unchecked() };
 
     if !valid_token_account_data(account_data) {
@@ -266,18 +281,21 @@ pub(crate) fn parse_create_accounts(
 /// * `Ok(true)` - Account exists and is properly configured (safe to skip creation)
 /// * `Ok(false)` - Account doesn't exist or is not token program owned (needs creation)  
 /// * `Err(_)` - Account exists but has invalid configuration (error condition)
+///
+/// SAFETY: Caller must ensure no mutable borrows of `associated_token_account` have occurred.
 #[inline(always)]
-pub(crate) fn check_idempotent_account(
+pub(crate) unsafe fn check_idempotent_account(
     associated_token_account: &AccountInfo,
     wallet: &AccountInfo,
     mint_account: &AccountInfo,
     token_program: &AccountInfo,
-    idempotent: bool,
     program_id: &Pubkey,
     expected_bump: Option<u8>,
 ) -> Result<bool, ProgramError> {
-    if idempotent && associated_token_account.is_owned_by(token_program.key()) {
-        let ata_state = get_token_account(associated_token_account)?;
+    if associated_token_account.is_owned_by(token_program.key()) {
+        // SAFETY: no mutable borrows of the associated_token_account have occurred in this
+        // function. Caller ensures that none have occurred in caller scope.
+        let ata_state = unsafe { load_token_account_unchecked(associated_token_account)? };
 
         validate_token_account_owner(ata_state, wallet.key())?;
         validate_token_account_mint(ata_state, mint_account.key())?;
@@ -518,26 +536,10 @@ pub(crate) fn reject_if_better_valid_bump_exists(
 #[inline(always)]
 pub(crate) fn process_create_associated_token_account(
     program_id: &Pubkey,
-    accounts: &[AccountInfo],
-    idempotent: bool,
+    create_accounts: &CreateAccounts,
     expected_bump: Option<u8>,
     known_token_account_len: Option<usize>,
 ) -> ProgramResult {
-    let create_accounts = parse_create_accounts(accounts)?;
-
-    // Check if account already exists (idempotent path)
-    if check_idempotent_account(
-        create_accounts.associated_token_account_to_create,
-        create_accounts.wallet,
-        create_accounts.mint,
-        create_accounts.token_program,
-        idempotent,
-        program_id,
-        expected_bump,
-    )? {
-        return Ok(());
-    }
-
     let bump = match expected_bump {
         Some(provided_bump) => {
             // Check if a better canonical bump exists

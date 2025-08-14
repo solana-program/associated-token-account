@@ -3,7 +3,7 @@
 use {
     crate::processor::{
         build_transfer_checked_data, derive_canonical_ata_pda, get_decimals_from_mint,
-        get_token_account,
+        load_token_account,
     },
     pinocchio::{
         account_info::AccountInfo,
@@ -119,7 +119,7 @@ pub(crate) fn process_recover_nested(
     }
 
     // Validate that the owner ATA exists and is a valid token account
-    let _owner_token_account = get_token_account(recover_accounts.owner_associated_token_account)?;
+    let _owner_token_account = load_token_account(recover_accounts.owner_associated_token_account)?;
 
     // Handle multisig case
     if !recover_accounts.wallet.is_signer() {
@@ -177,7 +177,7 @@ pub(crate) fn process_recover_nested(
     }
 
     let amount_to_recover =
-        get_token_account(recover_accounts.nested_associated_token_account)?.amount();
+        load_token_account(recover_accounts.nested_associated_token_account)?.amount();
 
     let nested_mint_decimals = get_decimals_from_mint(recover_accounts.nested_mint)?;
 

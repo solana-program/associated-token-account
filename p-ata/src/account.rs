@@ -51,7 +51,7 @@ pub(crate) fn create_pda_account(
 
     let signer = Signer::from(pda_signer_seeds);
 
-    let required_lamports = rent.minimum_balance(space).max(1);
+    let required_lamports = rent.minimum_balance(space);
 
     if current_lamports > 0 {
         #[cfg(feature = "create-prefunded-account")]

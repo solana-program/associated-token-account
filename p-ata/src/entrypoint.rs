@@ -1,8 +1,13 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::processor::process_create_associated_token_account,
-    crate::recover::process_recover_nested,
+    crate::{
+        processor::{
+            check_idempotent_account, parse_create_accounts,
+            process_create_associated_token_account,
+        },
+        recover::process_recover_nested,
+    },
     pinocchio::{
         account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
         program_error::ProgramError, pubkey::Pubkey, ProgramResult,
@@ -68,7 +73,10 @@ pub fn process_instruction(
 ) -> ProgramResult {
     match data {
         // Empty data defaults to Create (discriminator 0) - preserving backward compatibility
-        [] => process_create_associated_token_account(program_id, accounts, false, None, None),
+        [] => {
+            let create_accounts = parse_create_accounts(accounts)?;
+            process_create_associated_token_account(program_id, &create_accounts, None, None)
+        }
         [discriminator, instruction_data @ ..] => {
             let idempotent = match *discriminator {
                 0 => false,
@@ -82,40 +90,51 @@ pub fn process_instruction(
                 _ => return Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
             };
 
-            match instruction_data {
-                // No additional data - compute bump and account_len on-chain (original behavior)
-                [] => process_create_associated_token_account(
-                    program_id, accounts, idempotent, None, None,
-                ),
-                // Only bump provided
-                [bump] => process_create_associated_token_account(
-                    program_id,
-                    accounts,
-                    idempotent,
-                    Some(*bump),
-                    None,
-                ),
-                // Bump + account_len provided (for Token-2022 optimization)
-                [bump, account_len_bytes @ ..] => {
-                    let account_len = u16::from_le_bytes(
-                        account_len_bytes
-                            .try_into()
-                            .map_err(|_| ProgramError::InvalidInstructionData)?,
-                    );
+            let create_accounts = parse_create_accounts(accounts)?;
+            let (expected_bump, known_account_len): (Option<u8>, Option<usize>) =
+                match instruction_data {
+                    // No additional data - compute bump and account_len on-chain (old SPL ATA behavior)
+                    [] => (None, None),
+                    // Only bump provided
+                    [bump] => (Some(*bump), None),
+                    // Bump + account_len provided
+                    [expected_bump, account_len_bytes @ ..] => {
+                        let account_len = u16::from_le_bytes(
+                            account_len_bytes
+                                .try_into()
+                                .map_err(|_| ProgramError::InvalidInstructionData)?,
+                        );
 
-                    if account_len > MAX_SANE_ACCOUNT_LENGTH {
-                        return Err(ProgramError::InvalidInstructionData);
+                        if account_len > MAX_SANE_ACCOUNT_LENGTH {
+                            return Err(ProgramError::InvalidInstructionData);
+                        }
+
+                        (Some(*expected_bump), Some(account_len as usize))
                     }
+                };
 
-                    process_create_associated_token_account(
+            // SAFETY: no mutable borrows of any accounts have occurred.
+            if idempotent
+                && unsafe {
+                    check_idempotent_account(
+                        create_accounts.associated_token_account_to_create,
+                        create_accounts.wallet,
+                        create_accounts.mint,
+                        create_accounts.token_program,
                         program_id,
-                        accounts,
-                        idempotent,
-                        Some(*bump),
-                        Some(account_len as usize),
-                    )
+                        expected_bump,
+                    )?
                 }
+            {
+                return Ok(());
             }
+
+            process_create_associated_token_account(
+                program_id,
+                &create_accounts,
+                expected_bump,
+                known_account_len,
+            )
         }
     }
 }

@@ -138,8 +138,18 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
 #[inline(always)]
 pub(crate) fn get_decimals_from_mint(account: &AccountInfo) -> Result<u8, ProgramError> {
     let mint_data_slice = account.try_borrow_data()?;
-    let mint = unsafe { spl_token_interface::state::load_unchecked::<Mint>(&mint_data_slice)? };
-    Ok(mint.decimals)
+    match unsafe { spl_token_interface::state::load_unchecked::<Mint>(&mint_data_slice) } {
+        Ok(mint) => Ok(mint.decimals),
+        Err(err) => {
+            const MINT_BASE_SIZE: usize = core::mem::size_of::<Mint>();
+            log!(
+                "Error: Mint account data too small. Expected at least {} bytes, found {} bytes",
+                MINT_BASE_SIZE,
+                mint_data_slice.len()
+            );
+            Err(err)
+        }
+    }
 }
 
 /// Get token account reference with validation. Fails if a mutable borrow

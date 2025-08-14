@@ -312,12 +312,19 @@ pub(crate) unsafe fn check_idempotent_account(
                 // since it will not fail downstream as in Create paths.
                 // Potential problem if skipping this is demonstrated in
                 // tests/bump/test_idemp_oncurve_attack.rs
-                if !is_off_curve(&maybe_canonical_address)
-                    || maybe_canonical_address != *associated_token_account.key()
-                {
+                if !is_off_curve(&maybe_canonical_address) {
                     log!(
-                        "Error: Provided `expected_bump` {} is on curve and non-canonical.",
-                        bump
+                        "Error: Invalid bump: bump {} results in on curve address.",
+                        bump,
+                    );
+                    return Err(ProgramError::InvalidSeeds);
+                }
+                if maybe_canonical_address != *associated_token_account.key() {
+                    log!(
+                        "Error: Address mismatch: bump {} derives address which does not match provided associated token account address. Expected: {}, Found: {}",
+                        bump,
+                        &maybe_canonical_address,
+                        associated_token_account.key()
                     );
                     return Err(ProgramError::InvalidSeeds);
                 }
@@ -332,7 +339,7 @@ pub(crate) unsafe fn check_idempotent_account(
 
                 if canonical_address != *associated_token_account.key() {
                     log!(
-                        "Error: Provided associated token account address is not canonical. Expected: {}, Found: {}",
+                        "Error: Address mismatch: derived associated token address does not match provided address. Expected: {}, Found: {}",
                         &canonical_address,
                         associated_token_account.key()
                     );

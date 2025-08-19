@@ -20,8 +20,6 @@ full-debug-logs = []
 std = [
     "bincode",
     "bs58",
-    "colored",
-    "comfy-table",
     "curve25519-dalek",
     "itertools",
     "mollusk-svm",

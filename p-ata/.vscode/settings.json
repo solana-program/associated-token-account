@@ -1,0 +1,4 @@
+{
+    "rust-analyzer.cargo.features": ["std"],
+    "rust-analyzer.cargo.allFeatures": false
+}

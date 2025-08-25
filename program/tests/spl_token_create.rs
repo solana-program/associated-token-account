@@ -4,13 +4,13 @@ mod program_test;
 use spl_associated_token_account::create_associated_token_account as deprecated_create_associated_token_account;
 use {
     program_test::program_test,
-    solana_program::pubkey::Pubkey,
     solana_program_test::*,
+    solana_pubkey::Pubkey,
     solana_sdk::{program_pack::Pack, signature::Signer, transaction::Transaction},
     spl_associated_token_account_interface::{
         address::get_associated_token_address, instruction::create_associated_token_account,
     },
-    spl_token::state::Account,
+    spl_token_interface::state::Account,
 };
 
 #[tokio::test]
@@ -39,7 +39,7 @@ async fn success_create() {
             &payer.pubkey(),
             &wallet_address,
             &token_mint_address,
-            &spl_token::id(),
+            &spl_token_interface::id(),
         )],
         Some(&payer.pubkey()),
         &[&payer],
@@ -54,7 +54,7 @@ async fn success_create() {
         .expect("get_account")
         .expect("associated_account not none");
     assert_eq!(associated_account.data.len(), expected_token_account_len);
-    assert_eq!(associated_account.owner, spl_token::id());
+    assert_eq!(associated_account.owner, spl_token_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
 }
 
@@ -102,6 +102,6 @@ async fn success_using_deprecated_instruction_creator() {
         .expect("get_account")
         .expect("associated_account not none");
     assert_eq!(associated_account.data.len(), expected_token_account_len);
-    assert_eq!(associated_account.owner, spl_token::id());
+    assert_eq!(associated_account.owner, spl_token_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
 }

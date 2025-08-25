@@ -1,5 +1,5 @@
 use {
-    solana_program::pubkey::Pubkey, solana_program_test::ProgramTest,
+    solana_program_test::ProgramTest, solana_pubkey::Pubkey,
     spl_associated_token_account_interface::program::id,
 };
 
@@ -16,7 +16,7 @@ pub fn program_test(token_mint_address: Pubkey) -> ProgramTest {
     pc.add_account_with_file_data(
         token_mint_address,
         1461600,
-        spl_token::id(),
+        spl_token_interface::id(),
         "token-mint-data.bin",
     );
 
@@ -40,7 +40,7 @@ pub fn program_test_2022(token_mint_address: Pubkey) -> ProgramTest {
     pc.add_account_with_file_data(
         token_mint_address,
         1461600,
-        spl_token_2022::id(),
+        spl_token_2022_interface::id(),
         "token-mint-data.bin",
     );
 

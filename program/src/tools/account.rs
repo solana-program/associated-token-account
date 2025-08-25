@@ -6,10 +6,10 @@ use {
         entrypoint::ProgramResult,
         program::{get_return_data, invoke, invoke_signed},
         program_error::ProgramError,
-        pubkey::Pubkey,
         rent::Rent,
-        system_instruction,
     },
+    solana_pubkey::Pubkey,
+    solana_system_interface::system_instruction,
     spl_token_2022::extension::ExtensionType,
     std::convert::TryInto,
 };

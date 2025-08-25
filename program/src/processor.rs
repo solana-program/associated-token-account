@@ -13,11 +13,11 @@ use {
         msg,
         program::{invoke, invoke_signed},
         program_error::ProgramError,
-        pubkey::Pubkey,
         rent::Rent,
-        system_program,
         sysvar::Sysvar,
     },
+    solana_pubkey::Pubkey,
+    solana_system_program as system_program,
     spl_associated_token_account_client::address::get_associated_token_address_and_bump_seed_internal,
     spl_token_2022::{
         extension::{ExtensionType, StateWithExtensions},

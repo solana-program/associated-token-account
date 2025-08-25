@@ -2,7 +2,8 @@
 
 use {
     num_derive::FromPrimitive,
-    solana_program::{decode_error::DecodeError, program_error::ProgramError},
+    solana_decode_error::DecodeError,
+    solana_program::program_error::ProgramError,
     thiserror::Error,
 };
 

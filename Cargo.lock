@@ -669,9 +669,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "base64ct"
-version = "1.6.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
+checksum = "55248b47b0caf0546f7988906588779981c43bb1bc9d0c44087278f80cdb44ba"
 
 [[package]]
 name = "bincode"
@@ -2742,8 +2742,8 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm"
-version = "0.4.2"
-source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#a75cf9bb135d6ed0304fef0e8056a16ef7c8d8bc"
+version = "0.5.1"
+source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#8bd28deedc5a204c789ddbb74f2808784d41b4e4"
 dependencies = [
  "agave-feature-set 3.1.0",
  "agave-precompiles 3.1.0",
@@ -2784,8 +2784,8 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-bencher"
-version = "0.4.2"
-source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#a75cf9bb135d6ed0304fef0e8056a16ef7c8d8bc"
+version = "0.5.1"
+source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#8bd28deedc5a204c789ddbb74f2808784d41b4e4"
 dependencies = [
  "chrono",
  "mollusk-svm",
@@ -2798,8 +2798,8 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-error"
-version = "0.4.2"
-source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#a75cf9bb135d6ed0304fef0e8056a16ef7c8d8bc"
+version = "0.5.1"
+source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#8bd28deedc5a204c789ddbb74f2808784d41b4e4"
 dependencies = [
  "solana-pubkey",
  "thiserror 2.0.16",
@@ -2807,8 +2807,8 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-keys"
-version = "0.4.2"
-source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#a75cf9bb135d6ed0304fef0e8056a16ef7c8d8bc"
+version = "0.5.1"
+source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#8bd28deedc5a204c789ddbb74f2808784d41b4e4"
 dependencies = [
  "mollusk-svm-error",
  "solana-account",
@@ -2819,8 +2819,8 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-result"
-version = "0.4.2"
-source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#a75cf9bb135d6ed0304fef0e8056a16ef7c8d8bc"
+version = "0.5.1"
+source = "git+https://github.com/rustopian/mollusk.git?branch=3.0#8bd28deedc5a204c789ddbb74f2808784d41b4e4"
 dependencies = [
  "solana-account",
  "solana-instruction",
@@ -5759,7 +5759,7 @@ dependencies = [
  "solana-sha256-hasher 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "solana-short-vec 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "solana-slot-hashes",
- "solana-slot-history 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "solana-slot-history",
  "solana-stable-layout 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "solana-sysvar",
  "solana-sysvar-id",
@@ -5805,7 +5805,7 @@ dependencies = [
  "solana-sha256-hasher 3.0.0 (git+https://github.com/anza-xyz/solana-sdk.git)",
  "solana-short-vec 3.0.0 (git+https://github.com/anza-xyz/solana-sdk.git)",
  "solana-slot-hashes",
- "solana-slot-history 3.0.0 (git+https://github.com/anza-xyz/solana-sdk.git)",
+ "solana-slot-history",
  "solana-stable-layout 3.0.0 (git+https://github.com/anza-xyz/solana-sdk.git)",
  "solana-sysvar",
  "solana-sysvar-id",
@@ -6340,7 +6340,7 @@ dependencies = [
  "solana-signature",
  "solana-signer",
  "solana-slot-hashes",
- "solana-slot-history 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "solana-slot-history",
  "solana-stake-interface",
  "solana-stake-program",
  "solana-svm",
@@ -6740,19 +6740,6 @@ dependencies = [
  "serde_derive",
  "solana-hash",
  "solana-sdk-ids 3.0.0 (git+https://github.com/anza-xyz/solana-sdk.git)",
- "solana-sysvar-id",
-]
-
-[[package]]
-name = "solana-slot-history"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f914f6b108f5bba14a280b458d023e3621c9973f27f015a4d755b50e88d89e97"
-dependencies = [
- "bv",
- "serde",
- "serde_derive",
- "solana-sdk-ids 3.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "solana-sysvar-id",
 ]
 
@@ -7212,7 +7199,7 @@ dependencies = [
  "solana-sdk-ids 3.0.0 (git+https://github.com/anza-xyz/solana-sdk.git)",
  "solana-sdk-macro",
  "solana-slot-hashes",
- "solana-slot-history 3.0.0 (git+https://github.com/anza-xyz/solana-sdk.git)",
+ "solana-slot-history",
  "solana-sysvar-id",
 ]
 

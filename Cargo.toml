@@ -41,6 +41,7 @@ solana-nonce-account   = { version = "3.0", git = "https://github.com/anza-xyz/s
 solana-signature = { version = "3.0", git = "https://github.com/anza-xyz/solana-sdk.git" }
 solana-rent = { version = "3.0", git = "https://github.com/anza-xyz/solana-sdk.git" }
 solana-slot-hashes = { version = "3.0", git = "https://github.com/anza-xyz/solana-sdk.git" }
+solana-slot-history = { version = "3.0", git = "https://github.com/anza-xyz/solana-sdk.git" }
 solana-epoch-schedule = { version = "3.0", git = "https://github.com/anza-xyz/solana-sdk.git" }
 solana-epoch-rewards = { version = "3.0", git = "https://github.com/anza-xyz/solana-sdk.git" }
 solana-clock = { version = "3.0", git = "https://github.com/anza-xyz/solana-sdk.git" }

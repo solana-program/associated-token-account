@@ -13,9 +13,9 @@ pub mod tools;
 pub use solana_program;
 use solana_program::{
     instruction::{AccountMeta, Instruction},
-    pubkey::Pubkey,
     sysvar,
 };
+use solana_pubkey::Pubkey;
 #[deprecated(
     since = "4.1.0",
     note = "Use `spl-associated-token-account-interface` crate instead."

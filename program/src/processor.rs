@@ -12,11 +12,11 @@ use {
         msg,
         program::{invoke, invoke_signed},
         program_error::ProgramError,
-        pubkey::Pubkey,
         rent::Rent,
         sysvar::Sysvar,
     },
     solana_system_interface::program as system_program,
+    solana_pubkey::Pubkey,
     spl_associated_token_account_interface::{
         address::get_associated_token_address_and_bump_seed_internal,
         instruction::AssociatedTokenAccountInstruction,

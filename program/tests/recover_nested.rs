@@ -1,14 +1,12 @@
-mod program_test;
+mod utils;
 
 use {
-    program_test::{program_test, program_test_2022},
-    solana_program::pubkey::Pubkey,
-    solana_program_test::*,
+    solana_pubkey::Pubkey,
     solana_sdk::{
+        account::Account,
         instruction::{AccountMeta, InstructionError},
         signature::Signer,
         signer::keypair::Keypair,
-        transaction::{Transaction, TransactionError},
     },
     solana_system_interface::instruction as system_instruction,
     spl_associated_token_account_interface::{
@@ -16,661 +14,499 @@ use {
     },
     spl_token_2022_interface::{
         extension::{ExtensionType, StateWithExtensionsOwned},
-        state::{Account, Mint},
+        state::{Account as TokenAccount, Mint},
     },
+    utils::*,
 };
 
-async fn create_mint(context: &mut ProgramTestContext, program_id: &Pubkey) -> (Pubkey, Keypair) {
+fn create_mint_mollusk(
+    mollusk: &mollusk_svm::Mollusk,
+    accounts: &mut Vec<(Pubkey, Account)>,
+    payer: &Keypair,
+    program_id: &Pubkey,
+) -> (Pubkey, Keypair) {
     let mint_account = Keypair::new();
-    let token_mint_address = mint_account.pubkey();
     let mint_authority = Keypair::new();
-    let space = ExtensionType::try_calculate_account_len::<Mint>(&[]).unwrap();
-    let rent = context.banks_client.get_rent().await.unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[
-            system_instruction::create_account(
-                &context.payer.pubkey(),
-                &mint_account.pubkey(),
-                rent.minimum_balance(space),
-                space as u64,
-                program_id,
-            ),
-            spl_token_2022_interface::instruction::initialize_mint(
-                program_id,
-                &token_mint_address,
-                &mint_authority.pubkey(),
-                Some(&mint_authority.pubkey()),
-                0,
-            )
-            .unwrap(),
-        ],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &mint_account],
-        context.last_blockhash,
+    accounts.extend([
+        (
+            mint_account.pubkey(),
+            Account::new(0, 0, &solana_program::system_program::id()),
+        ),
+        (
+            mint_authority.pubkey(),
+            account_builder::AccountBuilder::system_account(1_000_000),
+        ),
+    ]);
+    let mint_accounts = create_test_mint(
+        mollusk,
+        &mint_account,
+        &mint_authority,
+        payer,
+        program_id,
+        0,
     );
-    context
-        .banks_client
-        .process_transaction(transaction)
-        .await
-        .unwrap();
-    (token_mint_address, mint_authority)
+    accounts.extend(mint_accounts.into_iter().filter(|(pubkey, _)| {
+        *pubkey == mint_account.pubkey() || *pubkey == mint_authority.pubkey()
+    }));
+    (mint_account.pubkey(), mint_authority)
 }
 
-async fn create_associated_token_account(
-    context: &mut ProgramTestContext,
+fn create_associated_token_account_mollusk(
+    mollusk: &mollusk_svm::Mollusk,
+    accounts: &mut Vec<(Pubkey, Account)>,
+    payer: &Keypair,
     owner: &Pubkey,
     mint: &Pubkey,
     program_id: &Pubkey,
 ) -> Pubkey {
-    let transaction = Transaction::new_signed_with_payer(
-        &[instruction::create_associated_token_account(
-            &context.payer.pubkey(),
-            owner,
-            mint,
-            program_id,
-        )],
-        Some(&context.payer.pubkey()),
-        &[&context.payer],
-        context.last_blockhash,
+    let ata_address = get_associated_token_address_with_program_id(owner, mint, program_id);
+    let instruction = build_create_ata_instruction(
+        spl_associated_token_account::id(),
+        payer.pubkey(),
+        ata_address,
+        *owner,
+        *mint,
+        *program_id,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
     );
-    context
-        .banks_client
-        .process_transaction(transaction)
-        .await
-        .unwrap();
-
-    get_associated_token_address_with_program_id(owner, mint, program_id)
+    let result = mollusk.process_instruction(&instruction, accounts);
+    assert!(result.program_result.is_ok());
+    if let Some((_, account)) = result
+        .resulting_accounts
+        .into_iter()
+        .find(|(pubkey, _)| *pubkey == ata_address)
+    {
+        accounts.push((ata_address, account));
+    }
+    ata_address
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn try_recover_nested(
-    context: &mut ProgramTestContext,
+fn try_recover_nested_mollusk(
+    mollusk: &mollusk_svm::Mollusk,
+    accounts: &mut Vec<(Pubkey, Account)>,
     program_id: &Pubkey,
     nested_mint: Pubkey,
-    nested_mint_authority: Keypair,
+    nested_mint_authority: &Keypair,
     nested_associated_token_address: Pubkey,
     destination_token_address: Pubkey,
-    wallet: Keypair,
-    recover_transaction: Transaction,
+    wallet: &Keypair,
+    recover_instruction: solana_program::instruction::Instruction,
     expected_error: Option<InstructionError>,
 ) {
-    let nested_account = context
-        .banks_client
-        .get_account(nested_associated_token_address)
-        .await
-        .unwrap()
-        .unwrap();
-    let lamports = nested_account.lamports;
+    let initial_lamports = accounts
+        .iter()
+        .find(|(pubkey, _)| *pubkey == nested_associated_token_address)
+        .map(|(_, account)| account.lamports)
+        .unwrap_or(TOKEN_ACCOUNT_RENT_EXEMPT);
 
     // mint to nested account
     let amount = 100;
-    let transaction = Transaction::new_signed_with_payer(
-        &[spl_token_2022_interface::instruction::mint_to(
-            program_id,
-            &nested_mint,
-            &nested_associated_token_address,
-            &nested_mint_authority.pubkey(),
-            &[],
-            amount,
-        )
-        .unwrap()],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &nested_mint_authority],
-        context.last_blockhash,
-    );
-    context
-        .banks_client
-        .process_transaction(transaction)
-        .await
-        .unwrap();
+    let mint_to_ix = spl_token_2022::instruction::mint_to(
+        program_id,
+        &nested_mint,
+        &nested_associated_token_address,
+        &nested_mint_authority.pubkey(),
+        &[],
+        amount,
+    )
+    .unwrap();
+    let result = mollusk.process_instruction(&mint_to_ix, accounts);
+    assert!(result.program_result.is_ok());
+    if let Some((_, account)) = result
+        .resulting_accounts
+        .into_iter()
+        .find(|(pubkey, _)| *pubkey == nested_associated_token_address)
+    {
+        if let Some((_, existing_account)) = accounts
+            .iter_mut()
+            .find(|(pubkey, _)| *pubkey == nested_associated_token_address)
+        {
+            *existing_account = account;
+        }
+    }
 
     // transfer / close nested account
-    let result = context
-        .banks_client
-        .process_transaction(recover_transaction)
-        .await;
-
+    let result = mollusk.process_instruction(&recover_instruction, accounts);
     if let Some(expected_error) = expected_error {
-        let error = result.unwrap_err().unwrap();
-        assert_eq!(error, TransactionError::InstructionError(0, expected_error));
+        assert_eq!(result.program_result.unwrap_err(), expected_error.into());
     } else {
-        result.unwrap();
-        // nested account is gone
-        assert!(context
-            .banks_client
-            .get_account(nested_associated_token_address)
-            .await
-            .unwrap()
-            .is_none());
-        let destination_account = context
-            .banks_client
-            .get_account(destination_token_address)
-            .await
-            .unwrap()
-            .unwrap();
+        assert!(result.program_result.is_ok());
+        let destination_account = result
+            .resulting_accounts
+            .iter()
+            .find(|(pubkey, _)| *pubkey == destination_token_address)
+            .expect("Destination account should exist")
+            .1
+            .clone();
         let destination_state =
-            StateWithExtensionsOwned::<Account>::unpack(destination_account.data).unwrap();
+            StateWithExtensionsOwned::<TokenAccount>::unpack(destination_account.data).unwrap();
         assert_eq!(destination_state.base.amount, amount);
-        let wallet_account = context
-            .banks_client
-            .get_account(wallet.pubkey())
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(wallet_account.lamports, lamports);
+        let wallet_account = result
+            .resulting_accounts
+            .iter()
+            .find(|(pubkey, _)| *pubkey == wallet.pubkey())
+            .expect("Wallet account should exist")
+            .1
+            .clone();
+        assert_eq!(wallet_account.lamports, initial_lamports);
     }
 }
 
-async fn check_same_mint(context: &mut ProgramTestContext, program_id: &Pubkey) {
+fn check_same_mint_mollusk(program_id: &Pubkey) {
+    let mollusk = setup_mollusk_with_programs(program_id);
+    let payer = Keypair::new();
     let wallet = Keypair::new();
-    let (mint, mint_authority) = create_mint(context, program_id).await;
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, program_id);
+    accounts.push((
+        wallet.pubkey(),
+        account_builder::AccountBuilder::system_account(1_000_000),
+    ));
 
-    let owner_associated_token_address =
-        create_associated_token_account(context, &wallet.pubkey(), &mint, program_id).await;
-    let nested_associated_token_address = create_associated_token_account(
-        context,
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, program_id);
+    let owner_associated_token_address = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
+        &wallet.pubkey(),
+        &mint,
+        program_id,
+    );
+    let nested_associated_token_address = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
         &owner_associated_token_address,
         &mint,
         program_id,
-    )
-    .await;
-
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[instruction::recover_nested(
-            &wallet.pubkey(),
-            &mint,
-            &mint,
-            program_id,
-        )],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &wallet],
-        context.last_blockhash,
     );
-    try_recover_nested(
-        context,
+
+    let recover_instruction =
+        instruction::recover_nested(&wallet.pubkey(), &mint, &mint, program_id);
+    try_recover_nested_mollusk(
+        &mollusk,
+        &mut accounts,
         program_id,
         mint,
-        mint_authority,
+        &mint_authority,
         nested_associated_token_address,
         owner_associated_token_address,
-        wallet,
-        transaction,
+        &wallet,
+        recover_instruction,
         None,
-    )
-    .await;
+    );
 }
 
-#[tokio::test]
-async fn success_same_mint_2022() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_same_mint(&mut context, &spl_token_2022_interface::id()).await;
+#[test]
+fn success_same_mint_2022() {
+    check_same_mint_mollusk(&spl_token_2022::id());
 }
 
-#[tokio::test]
-async fn success_same_mint() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_same_mint(&mut context, &spl_token_interface::id()).await;
+#[test]
+fn success_same_mint() {
+    check_same_mint_mollusk(&spl_token::id());
 }
 
-async fn check_different_mints(context: &mut ProgramTestContext, program_id: &Pubkey) {
+fn check_different_mints_mollusk(program_id: &Pubkey) {
+    let mollusk = setup_mollusk_with_programs(program_id);
+    let payer = Keypair::new();
     let wallet = Keypair::new();
-    let (owner_mint, _owner_mint_authority) = create_mint(context, program_id).await;
-    let (nested_mint, nested_mint_authority) = create_mint(context, program_id).await;
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, program_id);
+    accounts.push((
+        wallet.pubkey(),
+        account_builder::AccountBuilder::system_account(1_000_000),
+    ));
 
-    let owner_associated_token_address =
-        create_associated_token_account(context, &wallet.pubkey(), &owner_mint, program_id).await;
-    let nested_associated_token_address = create_associated_token_account(
-        context,
+    let (owner_mint, _owner_mint_authority) =
+        create_mint_mollusk(&mollusk, &mut accounts, &payer, program_id);
+    let (nested_mint, nested_mint_authority) =
+        create_mint_mollusk(&mollusk, &mut accounts, &payer, program_id);
+    let owner_associated_token_address = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
+        &wallet.pubkey(),
+        &owner_mint,
+        program_id,
+    );
+    let nested_associated_token_address = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
         &owner_associated_token_address,
         &nested_mint,
         program_id,
-    )
-    .await;
-    let destination_token_address =
-        create_associated_token_account(context, &wallet.pubkey(), &nested_mint, program_id).await;
-
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[instruction::recover_nested(
-            &wallet.pubkey(),
-            &owner_mint,
-            &nested_mint,
-            program_id,
-        )],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &wallet],
-        context.last_blockhash,
     );
-    try_recover_nested(
-        context,
+    let destination_token_address = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
+        &wallet.pubkey(),
+        &nested_mint,
+        program_id,
+    );
+
+    let recover_instruction =
+        instruction::recover_nested(&wallet.pubkey(), &owner_mint, &nested_mint, program_id);
+    try_recover_nested_mollusk(
+        &mollusk,
+        &mut accounts,
         program_id,
         nested_mint,
-        nested_mint_authority,
+        &nested_mint_authority,
         nested_associated_token_address,
         destination_token_address,
-        wallet,
-        transaction,
+        &wallet,
+        recover_instruction,
         None,
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn success_different_mints() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_different_mints(&mut context, &spl_token_interface::id()).await;
-}
-
-#[tokio::test]
-async fn success_different_mints_2022() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_different_mints(&mut context, &spl_token_2022_interface::id()).await;
-}
-
-async fn check_missing_wallet_signature(context: &mut ProgramTestContext, program_id: &Pubkey) {
-    let wallet = Keypair::new();
-    let (mint, mint_authority) = create_mint(context, program_id).await;
-
-    let owner_associated_token_address =
-        create_associated_token_account(context, &wallet.pubkey(), &mint, program_id).await;
-
-    let nested_associated_token_address = create_associated_token_account(
-        context,
-        &owner_associated_token_address,
-        &mint,
-        program_id,
-    )
-    .await;
-
-    let mut recover = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, program_id);
-    recover.accounts[5] = AccountMeta::new(wallet.pubkey(), false);
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[recover],
-        Some(&context.payer.pubkey()),
-        &[&context.payer],
-        context.last_blockhash,
     );
-    try_recover_nested(
-        context,
-        program_id,
+}
+
+#[test]
+fn success_different_mints() {
+    check_different_mints_mollusk(&spl_token::id());
+}
+
+#[test]
+fn success_different_mints_2022() {
+    check_different_mints_mollusk(&spl_token_2022::id());
+}
+
+// Error test cases using mollusk
+#[test]
+fn fail_missing_wallet_signature_2022() {
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let payer = Keypair::new();
+    let wallet = Keypair::new();
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    accounts.push((
+        wallet.pubkey(),
+        account_builder::AccountBuilder::system_account(1_000_000),
+    ));
+    let (mint, mint_authority) =
+        create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_2022::id());
+    let owner_ata = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
+        &wallet.pubkey(),
+        &mint,
+        &spl_token_2022::id(),
+    );
+    let nested_ata = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
+        &owner_ata,
+        &mint,
+        &spl_token_2022::id(),
+    );
+
+    let mut recover =
+        instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token_2022::id());
+    recover.accounts[5] = AccountMeta::new(wallet.pubkey(), false); // Remove signature requirement
+    try_recover_nested_mollusk(
+        &mollusk,
+        &mut accounts,
+        &spl_token_2022::id(),
         mint,
-        mint_authority,
-        nested_associated_token_address,
-        owner_associated_token_address,
-        wallet,
-        transaction,
+        &mint_authority,
+        nested_ata,
+        owner_ata,
+        &wallet,
+        recover,
         Some(InstructionError::MissingRequiredSignature),
-    )
-    .await;
+    );
 }
 
-#[tokio::test]
-async fn fail_missing_wallet_signature_2022() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_missing_wallet_signature(&mut context, &spl_token_2022_interface::id()).await;
+#[test]
+fn fail_missing_wallet_signature() {
+    let mollusk = setup_mollusk_with_programs(&spl_token::id());
+    let payer = Keypair::new();
+    let wallet = Keypair::new();
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token::id());
+    accounts.push((
+        wallet.pubkey(),
+        account_builder::AccountBuilder::system_account(1_000_000),
+    ));
+    let (mint, mint_authority) =
+        create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token::id());
+    let owner_ata = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
+        &wallet.pubkey(),
+        &mint,
+        &spl_token::id(),
+    );
+    let nested_ata = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
+        &owner_ata,
+        &mint,
+        &spl_token::id(),
+    );
+
+    let mut recover = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token::id());
+    recover.accounts[5] = AccountMeta::new(wallet.pubkey(), false);
+    try_recover_nested_mollusk(
+        &mollusk,
+        &mut accounts,
+        &spl_token::id(),
+        mint,
+        &mint_authority,
+        nested_ata,
+        owner_ata,
+        &wallet,
+        recover,
+        Some(InstructionError::MissingRequiredSignature),
+    );
 }
 
-#[tokio::test]
-async fn fail_missing_wallet_signature() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_missing_wallet_signature(&mut context, &spl_token_interface::id()).await;
-}
-
-async fn check_wrong_signer(context: &mut ProgramTestContext, program_id: &Pubkey) {
+#[test]
+fn fail_wrong_signer_2022() {
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let payer = Keypair::new();
     let wallet = Keypair::new();
     let wrong_wallet = Keypair::new();
-    let (mint, mint_authority) = create_mint(context, program_id).await;
-
-    let owner_associated_token_address =
-        create_associated_token_account(context, &wallet.pubkey(), &mint, program_id).await;
-    let nested_associated_token_address = create_associated_token_account(
-        context,
-        &owner_associated_token_address,
-        &mint,
-        program_id,
-    )
-    .await;
-
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[instruction::recover_nested(
-            &wrong_wallet.pubkey(),
-            &mint,
-            &mint,
-            program_id,
-        )],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &wrong_wallet],
-        context.last_blockhash,
-    );
-    try_recover_nested(
-        context,
-        program_id,
-        mint,
-        mint_authority,
-        nested_associated_token_address,
-        owner_associated_token_address,
-        wrong_wallet,
-        transaction,
-        Some(InstructionError::IllegalOwner),
-    )
-    .await;
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    accounts.extend([(wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)), (wrong_wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000))]);
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_2022::id());
+    let owner_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wallet.pubkey(), &mint, &spl_token_2022::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &owner_ata, &mint, &spl_token_2022::id());
+    
+    let recover_instruction = instruction::recover_nested(&wrong_wallet.pubkey(), &mint, &mint, &spl_token_2022::id()); // Wrong signer
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token_2022::id(), mint, &mint_authority, nested_ata, owner_ata, &wrong_wallet, recover_instruction, Some(InstructionError::IllegalOwner));
 }
 
-#[tokio::test]
-async fn fail_wrong_signer_2022() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_wrong_signer(&mut context, &spl_token_2022_interface::id()).await;
+#[test]
+fn fail_wrong_signer() {
+    let mollusk = setup_mollusk_with_programs(&spl_token::id());
+    let payer = Keypair::new();
+    let wallet = Keypair::new();
+    let wrong_wallet = Keypair::new();
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token::id());
+    accounts.extend([(wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)), (wrong_wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000))]);
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token::id());
+    let owner_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wallet.pubkey(), &mint, &spl_token::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &owner_ata, &mint, &spl_token::id());
+    
+    let recover_instruction = instruction::recover_nested(&wrong_wallet.pubkey(), &mint, &mint, &spl_token::id()); // Wrong signer
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token::id(), mint, &mint_authority, nested_ata, owner_ata, &wrong_wallet, recover_instruction, Some(InstructionError::IllegalOwner));
 }
 
-#[tokio::test]
-async fn fail_wrong_signer() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_wrong_signer(&mut context, &spl_token_interface::id()).await;
-}
-
-async fn check_not_nested(context: &mut ProgramTestContext, program_id: &Pubkey) {
+#[test]
+fn fail_not_nested_2022() {
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let payer = Keypair::new();
     let wallet = Keypair::new();
     let wrong_wallet = Pubkey::new_unique();
-    let (mint, mint_authority) = create_mint(context, program_id).await;
-
-    let owner_associated_token_address =
-        create_associated_token_account(context, &wallet.pubkey(), &mint, program_id).await;
-    let nested_associated_token_address =
-        create_associated_token_account(context, &wrong_wallet, &mint, program_id).await;
-
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[instruction::recover_nested(
-            &wallet.pubkey(),
-            &mint,
-            &mint,
-            program_id,
-        )],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &wallet],
-        context.last_blockhash,
-    );
-    try_recover_nested(
-        context,
-        program_id,
-        mint,
-        mint_authority,
-        nested_associated_token_address,
-        owner_associated_token_address,
-        wallet,
-        transaction,
-        Some(InstructionError::IllegalOwner),
-    )
-    .await;
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    accounts.extend([(wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)), (wrong_wallet, account_builder::AccountBuilder::system_account(1_000_000))]);
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_2022::id());
+    let owner_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wallet.pubkey(), &mint, &spl_token_2022::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wrong_wallet, &mint, &spl_token_2022::id()); // Not nested under owner_ata
+    
+    let recover_instruction = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token_2022::id());
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token_2022::id(), mint, &mint_authority, nested_ata, owner_ata, &wallet, recover_instruction, Some(InstructionError::IllegalOwner));
 }
 
-#[tokio::test]
-async fn fail_not_nested_2022() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_not_nested(&mut context, &spl_token_2022_interface::id()).await;
-}
-
-#[tokio::test]
-async fn fail_not_nested() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_not_nested(&mut context, &spl_token_interface::id()).await;
-}
-
-async fn check_wrong_address_derivation_owner(
-    context: &mut ProgramTestContext,
-    program_id: &Pubkey,
-) {
+#[test]
+fn fail_not_nested() {
+    let mollusk = setup_mollusk_with_programs(&spl_token::id());
+    let payer = Keypair::new();
     let wallet = Keypair::new();
     let wrong_wallet = Pubkey::new_unique();
-    let (mint, mint_authority) = create_mint(context, program_id).await;
-
-    let owner_associated_token_address =
-        create_associated_token_account(context, &wallet.pubkey(), &mint, program_id).await;
-    let nested_associated_token_address = create_associated_token_account(
-        context,
-        &owner_associated_token_address,
-        &mint,
-        program_id,
-    )
-    .await;
-
-    let wrong_owner_associated_token_address =
-        get_associated_token_address_with_program_id(&mint, &wrong_wallet, program_id);
-    let mut recover = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, program_id);
-    recover.accounts[3] = AccountMeta::new(wrong_owner_associated_token_address, false);
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[recover],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &wallet],
-        context.last_blockhash,
-    );
-    try_recover_nested(
-        context,
-        program_id,
-        mint,
-        mint_authority,
-        nested_associated_token_address,
-        wrong_owner_associated_token_address,
-        wallet,
-        transaction,
-        Some(InstructionError::InvalidSeeds),
-    )
-    .await;
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token::id());
+    accounts.extend([(wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)), (wrong_wallet, account_builder::AccountBuilder::system_account(1_000_000))]);
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token::id());
+    let owner_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wallet.pubkey(), &mint, &spl_token::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wrong_wallet, &mint, &spl_token::id()); // Not nested under owner_ata
+    
+    let recover_instruction = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token::id());
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token::id(), mint, &mint_authority, nested_ata, owner_ata, &wallet, recover_instruction, Some(InstructionError::IllegalOwner));
 }
-
-#[tokio::test]
-async fn fail_wrong_address_derivation_owner_2022() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_wrong_address_derivation_owner(&mut context, &spl_token_2022_interface::id()).await;
-}
-
-#[tokio::test]
-async fn fail_wrong_address_derivation_owner() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_wrong_address_derivation_owner(&mut context, &spl_token_interface::id()).await;
-}
-
-async fn check_owner_account_does_not_exist(context: &mut ProgramTestContext, program_id: &Pubkey) {
+#[test]
+fn fail_wrong_address_derivation_owner_2022() {
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let payer = Keypair::new();
     let wallet = Keypair::new();
-    let (mint, mint_authority) = create_mint(context, program_id).await;
-
-    let owner_associated_token_address =
-        get_associated_token_address_with_program_id(&wallet.pubkey(), &mint, program_id);
-    let nested_associated_token_address = create_associated_token_account(
-        context,
-        &owner_associated_token_address,
-        &mint,
-        program_id,
-    )
-    .await;
-
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[instruction::recover_nested(
-            &wallet.pubkey(),
-            &mint,
-            &mint,
-            program_id,
-        )],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &wallet],
-        context.last_blockhash,
-    );
-    try_recover_nested(
-        context,
-        program_id,
-        mint,
-        mint_authority,
-        nested_associated_token_address,
-        owner_associated_token_address,
-        wallet,
-        transaction,
-        Some(InstructionError::IllegalOwner),
-    )
-    .await;
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    accounts.push((wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)));
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_2022::id());
+    let owner_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wallet.pubkey(), &mint, &spl_token_2022::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &owner_ata, &mint, &spl_token_2022::id());
+    
+    let mut recover_instruction = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token_2022::id());
+    recover_instruction.accounts[3] = AccountMeta::new(Pubkey::new_unique(), false); // Wrong owner address
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token_2022::id(), mint, &mint_authority, nested_ata, Pubkey::new_unique(), &wallet, recover_instruction, Some(InstructionError::InvalidSeeds));
 }
 
-#[tokio::test]
-async fn fail_owner_account_does_not_exist() {
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    check_owner_account_does_not_exist(&mut context, &spl_token_2022_interface::id()).await;
-}
-
-#[tokio::test]
-async fn fail_wrong_spl_token_program() {
+#[test]
+fn fail_wrong_address_derivation_owner() {
+    let mollusk = setup_mollusk_with_programs(&spl_token::id());
+    let payer = Keypair::new();
     let wallet = Keypair::new();
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let mut context = pt.start_with_context().await;
-    let program_id = spl_token_2022_interface::id();
-    let wrong_program_id = spl_token_interface::id();
-    let (mint, mint_authority) = create_mint(&mut context, &program_id).await;
-
-    let owner_associated_token_address =
-        create_associated_token_account(&mut context, &wallet.pubkey(), &mint, &program_id).await;
-    let nested_associated_token_address = create_associated_token_account(
-        &mut context,
-        &owner_associated_token_address,
-        &mint,
-        &program_id,
-    )
-    .await;
-
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[instruction::recover_nested(
-            &wallet.pubkey(),
-            &mint,
-            &mint,
-            &wrong_program_id,
-        )],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &wallet],
-        context.last_blockhash,
-    );
-    try_recover_nested(
-        &mut context,
-        &program_id,
-        mint,
-        mint_authority,
-        nested_associated_token_address,
-        owner_associated_token_address,
-        wallet,
-        transaction,
-        Some(InstructionError::IllegalOwner),
-    )
-    .await;
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token::id());
+    accounts.push((wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)));
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token::id());
+    let owner_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wallet.pubkey(), &mint, &spl_token::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &owner_ata, &mint, &spl_token::id());
+    
+    let mut recover_instruction = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token::id());
+    recover_instruction.accounts[3] = AccountMeta::new(Pubkey::new_unique(), false); // Wrong owner address
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token::id(), mint, &mint_authority, nested_ata, Pubkey::new_unique(), &wallet, recover_instruction, Some(InstructionError::InvalidSeeds));
 }
 
-#[tokio::test]
-async fn fail_destination_not_wallet_ata() {
+#[test]
+fn fail_owner_account_does_not_exist() {
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let payer = Keypair::new();
+    let wallet = Keypair::new();
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    accounts.push((wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)));
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_2022::id());
+    // Don't create owner ATA - it should not exist
+    let owner_ata_address = get_associated_token_address_with_program_id(&wallet.pubkey(), &mint, &spl_token_2022::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &owner_ata_address, &mint, &spl_token_2022::id());
+    
+    let recover_instruction = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token_2022::id());
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token_2022::id(), mint, &mint_authority, nested_ata, owner_ata_address, &wallet, recover_instruction, Some(InstructionError::IllegalOwner));
+}
+
+#[test]
+fn fail_wrong_spl_token_program() {
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let payer = Keypair::new();
+    let wallet = Keypair::new();
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    accounts.push((wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)));
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_2022::id());
+    let owner_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wallet.pubkey(), &mint, &spl_token_2022::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &owner_ata, &mint, &spl_token_2022::id());
+    
+    let recover_instruction = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token::id()); // Wrong program ID
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token_2022::id(), mint, &mint_authority, nested_ata, owner_ata, &wallet, recover_instruction, Some(InstructionError::IllegalOwner));
+}
+
+#[test]
+fn fail_destination_not_wallet_ata() {
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let payer = Keypair::new();
     let wallet = Keypair::new();
     let wrong_wallet = Pubkey::new_unique();
-    let dummy_mint = Pubkey::new_unique();
-    let pt = program_test_2022(dummy_mint);
-    let program_id = spl_token_2022_interface::id();
-    let mut context = pt.start_with_context().await;
-    let (mint, mint_authority) = create_mint(&mut context, &program_id).await;
-
-    let owner_associated_token_address =
-        create_associated_token_account(&mut context, &wallet.pubkey(), &mint, &program_id).await;
-    let nested_associated_token_address = create_associated_token_account(
-        &mut context,
-        &owner_associated_token_address,
-        &mint,
-        &program_id,
-    )
-    .await;
-    let wrong_destination_associated_token_account_address =
-        create_associated_token_account(&mut context, &wrong_wallet, &mint, &program_id).await;
-
-    let mut recover = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &program_id);
-    recover.accounts[2] =
-        AccountMeta::new(wrong_destination_associated_token_account_address, false);
-
-    context.last_blockhash = context
-        .banks_client
-        .get_new_latest_blockhash(&context.last_blockhash)
-        .await
-        .unwrap();
-    let transaction = Transaction::new_signed_with_payer(
-        &[recover],
-        Some(&context.payer.pubkey()),
-        &[&context.payer, &wallet],
-        context.last_blockhash,
-    );
-    try_recover_nested(
-        &mut context,
-        &program_id,
-        mint,
-        mint_authority,
-        nested_associated_token_address,
-        owner_associated_token_address,
-        wallet,
-        transaction,
-        Some(InstructionError::InvalidSeeds),
-    )
-    .await;
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    accounts.extend([(wallet.pubkey(), account_builder::AccountBuilder::system_account(1_000_000)), (wrong_wallet, account_builder::AccountBuilder::system_account(1_000_000))]);
+    let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_2022::id());
+    let owner_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wallet.pubkey(), &mint, &spl_token_2022::id());
+    let nested_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &owner_ata, &mint, &spl_token_2022::id());
+    let wrong_destination_ata = create_associated_token_account_mollusk(&mollusk, &mut accounts, &payer, &wrong_wallet, &mint, &spl_token_2022::id());
+    
+    let mut recover_instruction = instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token_2022::id());
+    recover_instruction.accounts[2] = AccountMeta::new(wrong_destination_ata, false); // Wrong destination
+    try_recover_nested_mollusk(&mollusk, &mut accounts, &spl_token_2022::id(), mint, &mint_authority, nested_ata, wrong_destination_ata, &wallet, recover_instruction, Some(InstructionError::InvalidSeeds));
 }

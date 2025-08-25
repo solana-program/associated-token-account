@@ -17,6 +17,8 @@ solana-pubkey = { version = "3.0.0", features = ["curve25519"] }
 
 [dev-dependencies]
 solana-sdk-ids = "3.0.0"
+solana-program = "3.0"
+solana-system-program = "3.0"
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]

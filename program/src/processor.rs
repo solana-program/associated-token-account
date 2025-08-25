@@ -21,7 +21,7 @@ use {
         address::get_associated_token_address_and_bump_seed_internal,
         instruction::AssociatedTokenAccountInstruction,
     },
-    spl_token_2022::{
+    spl_token_2022_interface::{
         extension::{ExtensionType, StateWithExtensions},
         state::{Account, Mint},
     },
@@ -138,7 +138,7 @@ fn process_create_associated_token_account(
 
     msg!("Initialize the associated token account");
     invoke(
-        &spl_token_2022::instruction::initialize_immutable_owner(
+        &spl_token_2022_interface::instruction::initialize_immutable_owner(
             spl_token_program_id,
             associated_token_account_info.key,
         )?,
@@ -148,7 +148,7 @@ fn process_create_associated_token_account(
         ],
     )?;
     invoke(
-        &spl_token_2022::instruction::initialize_account3(
+        &spl_token_2022_interface::instruction::initialize_account3(
             spl_token_program_id,
             associated_token_account_info.key,
             spl_token_mint_info.key,
@@ -271,7 +271,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
         &[bump_seed],
     ];
     invoke_signed(
-        &spl_token_2022::instruction::transfer_checked(
+        &spl_token_2022_interface::instruction::transfer_checked(
             spl_token_program_id,
             nested_associated_token_account_info.key,
             nested_token_mint_info.key,
@@ -293,7 +293,7 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
 
     // Close the nested account so it's never used again
     invoke_signed(
-        &spl_token_2022::instruction::close_account(
+        &spl_token_2022_interface::instruction::close_account(
             spl_token_program_id,
             nested_associated_token_account_info.key,
             wallet_account_info.key,

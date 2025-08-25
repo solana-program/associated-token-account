@@ -1,10 +1,8 @@
 //! Error types
 
-use {
-    num_derive::FromPrimitive,
-    solana_program::{decode_error::DecodeError, program_error::ProgramError},
-    thiserror::Error,
-};
+#[allow(deprecated)]
+use solana_decode_error::DecodeError;
+use {num_derive::FromPrimitive, solana_program::program_error::ProgramError, thiserror::Error};
 
 /// Errors that may be returned by the program.
 #[derive(Clone, Debug, Eq, Error, FromPrimitive, PartialEq)]
@@ -19,6 +17,7 @@ impl From<AssociatedTokenAccountError> for ProgramError {
         ProgramError::Custom(e as u32)
     }
 }
+#[allow(deprecated)]
 impl<T> DecodeError<T> for AssociatedTokenAccountError {
     fn type_of() -> &'static str {
         "AssociatedTokenAccountError"

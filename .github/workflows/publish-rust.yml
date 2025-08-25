@@ -63,10 +63,9 @@ jobs:
       - name: Lint
         run: pnpm zx ./scripts/rust/lint.mjs "${{ inputs.package_path }}"
 
-      - name: Clean cargo artifacts (cache bust)
-        run: rm -rf target
-
       - name: Build programs
+        env:
+          CARGO_TARGET_DIR: target/sbf
         run: pnpm programs:build
 
       - name: Test

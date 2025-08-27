@@ -1,11 +1,13 @@
 mod utils;
 
 use {
-    program_test::program_test_2022,
+    mollusk_svm::result::ProgramResult,
     solana_program::instruction::*,
     solana_program_test::*,
     solana_pubkey::Pubkey,
     solana_sdk::{
+        program_error::ProgramError,
+        rent::Rent,
         signature::Signer,
         signer::keypair::Keypair,
         transaction::{Transaction, TransactionError},
@@ -30,9 +32,10 @@ async fn test_associated_token_account_with_transfer_fees() {
     let wallet_sender = Keypair::new();
     let wallet_address_sender = wallet_sender.pubkey();
     let wallet_address_receiver = Pubkey::new_unique();
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
     let payer = Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    let mut accounts =
+        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
 
     let mint_account = Keypair::new();
     let token_mint_address = mint_account.pubkey();
@@ -58,14 +61,15 @@ async fn test_associated_token_account_with_transfer_fees() {
     // Create mint account
     accounts.push((
         mint_account.pubkey(),
-        solana_sdk::account::Account::new(0, 0, &solana_program::system_program::id()),
+        solana_sdk::account::Account::new(0, 0, &solana_system_interface::program::id()),
     ));
+    let mint_rent = Rent::default().minimum_balance(space);
     let create_mint_ix = system_instruction::create_account(
         &payer.pubkey(),
         &mint_account.pubkey(),
-        MINT_ACCOUNT_RENT_EXEMPT,
+        mint_rent as u64,
         space as u64,
-        &spl_token_2022::id(),
+        &spl_token_2022_interface::id(),
     );
     let result = mollusk.process_instruction(&create_mint_ix, &accounts);
     assert!(result.program_result.is_ok());
@@ -86,7 +90,7 @@ async fn test_associated_token_account_with_transfer_fees() {
 
     // Initialize transfer fee config
     let init_fee_ix = transfer_fee::instruction::initialize_transfer_fee_config(
-        &spl_token_2022::id(),
+        &spl_token_2022_interface::id(),
         &token_mint_address,
         Some(&mint_authority.pubkey()),
         Some(&mint_authority.pubkey()),
@@ -112,8 +116,8 @@ async fn test_associated_token_account_with_transfer_fees() {
     }
 
     // Initialize mint
-    let init_mint_ix = spl_token_2022::instruction::initialize_mint(
-        &spl_token_2022::id(),
+    let init_mint_ix = spl_token_2022_interface::instruction::initialize_mint(
+        &spl_token_2022_interface::id(),
         &token_mint_address,
         &mint_authority.pubkey(),
         Some(&mint_authority.pubkey()),
@@ -143,13 +147,18 @@ async fn test_associated_token_account_with_transfer_fees() {
         &token_mint_address,
         &spl_token_2022_interface::id(),
     );
+    // Provide placeholder for sender ATA so Mollusk can write it
+    accounts.push((
+        associated_token_address_sender,
+        solana_sdk::account::Account::new(0, 0, &solana_system_interface::program::id()),
+    ));
     let create_ata_sender_ix = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address_sender,
         wallet_address_sender,
         token_mint_address,
-        spl_token_2022::id(),
+        spl_token_2022_interface::id(),
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
@@ -164,7 +173,14 @@ async fn test_associated_token_account_with_transfer_fees() {
         .into_iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address_sender)
     {
-        accounts.push((associated_token_address_sender, account));
+        if let Some((_, existing)) = accounts
+            .iter_mut()
+            .find(|(pubkey, _)| *pubkey == associated_token_address_sender)
+        {
+            *existing = account;
+        } else {
+            accounts.push((associated_token_address_sender, account));
+        }
     }
 
     let associated_token_address_receiver = get_associated_token_address_with_program_id(
@@ -172,13 +188,18 @@ async fn test_associated_token_account_with_transfer_fees() {
         &token_mint_address,
         &spl_token_2022_interface::id(),
     );
+    // Provide placeholder for receiver ATA so Mollusk can write it
+    accounts.push((
+        associated_token_address_receiver,
+        solana_sdk::account::Account::new(0, 0, &solana_system_interface::program::id()),
+    ));
     let create_ata_receiver_ix = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address_receiver,
         wallet_address_receiver,
         token_mint_address,
-        spl_token_2022::id(),
+        spl_token_2022_interface::id(),
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
@@ -193,13 +214,20 @@ async fn test_associated_token_account_with_transfer_fees() {
         .into_iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address_receiver)
     {
-        accounts.push((associated_token_address_receiver, account));
+        if let Some((_, existing)) = accounts
+            .iter_mut()
+            .find(|(pubkey, _)| *pubkey == associated_token_address_receiver)
+        {
+            *existing = account;
+        } else {
+            accounts.push((associated_token_address_receiver, account));
+        }
     }
 
     // mint tokens
     let sender_amount = 50 * maximum_fee;
-    let mint_to_ix = spl_token_2022::instruction::mint_to(
-        &spl_token_2022::id(),
+    let mint_to_ix = spl_token_2022_interface::instruction::mint_to(
+        &spl_token_2022_interface::id(),
         &token_mint_address,
         &associated_token_address_sender,
         &mint_authority.pubkey(),
@@ -226,7 +254,7 @@ async fn test_associated_token_account_with_transfer_fees() {
 
     // not enough tokens
     let insufficient_transfer_ix = transfer_fee::instruction::transfer_checked_with_fee(
-        &spl_token_2022::id(),
+        &spl_token_2022_interface::id(),
         &associated_token_address_sender,
         &token_mint_address,
         &associated_token_address_receiver,
@@ -240,15 +268,17 @@ async fn test_associated_token_account_with_transfer_fees() {
     let result = mollusk.process_instruction(&insufficient_transfer_ix, &accounts);
     assert!(result.program_result.is_err());
     assert_eq!(
-        result.program_result.unwrap_err(),
-        InstructionError::Custom(TokenError::InsufficientFunds as u32).into()
+        result.program_result,
+        ProgramResult::Failure(ProgramError::Custom(
+            spl_token_2022_interface::error::TokenError::InsufficientFunds as u32,
+        ))
     );
 
     // success
     let transfer_amount = 500;
     let fee = 50;
     let transfer_ix = transfer_fee::instruction::transfer_checked_with_fee(
-        &spl_token_2022::id(),
+        &spl_token_2022_interface::id(),
         &associated_token_address_sender,
         &token_mint_address,
         &associated_token_address_receiver,

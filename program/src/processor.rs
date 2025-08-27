@@ -15,8 +15,8 @@ use {
         rent::Rent,
         sysvar::Sysvar,
     },
-    solana_system_interface::program as system_program,
     solana_pubkey::Pubkey,
+    solana_system_interface::program as system_program,
     spl_associated_token_account_interface::{
         address::get_associated_token_address_and_bump_seed_internal,
         instruction::AssociatedTokenAccountInstruction,

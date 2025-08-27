@@ -6,9 +6,12 @@ use {
     solana_program::{
         instruction::{AccountMeta, Instruction},
         pubkey::Pubkey,
-        system_instruction, system_program, sysvar,
+        sysvar,
     },
     solana_sdk::{account::Account, signature::Keypair, signer::Signer},
+    solana_system_interface::instruction as system_instruction,
+    solana_system_interface::program as system_program,
+    std::path::Path,
     std::vec::Vec,
 };
 
@@ -18,7 +21,7 @@ pub const TOKEN_ACCOUNT_SIZE: usize = 165;
 pub const MINT_ACCOUNT_SIZE: usize = 82;
 
 /// Standard lamport amounts for testing
-pub const TOKEN_ACCOUNT_RENT_EXEMPT: u64 = 2_000_000;
+pub const TOKEN_ACCOUNT_RENT_EXEMPT: u64 = 2_074_080;
 pub const MINT_ACCOUNT_RENT_EXEMPT: u64 = 2_000_000;
 
 /// Native loader program ID (used across both test suites)
@@ -31,21 +34,42 @@ pub const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
 pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     let mut mollusk = Mollusk::default();
 
-    // Load ATA program as drop-in replacement for SPL ATA
     let ata_program_id = spl_associated_token_account::id();
-    mollusk.add_program(
-        &ata_program_id,
-        "target/deploy/pinocchio_ata_program",
-        &LOADER_V3,
-    );
+    // TODO: to run p-ata, replace here with pinocchio_ata_program
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("workspace root");
+    let ata_candidates = [
+        workspace_root.join("target/deploy/spl_associated_token_account"),
+        workspace_root.join("target/sbf/deploy/spl_associated_token_account"),
+    ];
+    let ata_program_path = ata_candidates
+        .iter()
+        .find(|p| p.with_extension("so").exists())
+        .unwrap_or(&ata_candidates[0])
+        .to_string_lossy()
+        .into_owned();
+    mollusk.add_program(&ata_program_id, &ata_program_path, &LOADER_V3);
 
     // Load appropriate token program
-    let program_path = if *token_program_id == spl_token_2022::id() {
-        "p-ata/programs/token-2022/target/deploy/spl_token_2022"
+    let program_candidates = if *token_program_id == spl_token_2022_interface::id() {
+        [
+            workspace_root.join("p-ata/programs/token-2022/target/deploy/spl_token_2022"),
+            workspace_root.join("p-ata/programs/token-2022/target/sbf/deploy/spl_token_2022"),
+        ]
     } else {
-        "p-ata/programs/token/target/deploy/pinocchio_token_program"
+        [
+            workspace_root.join("p-ata/programs/token/target/deploy/pinocchio_token_program"),
+            workspace_root.join("p-ata/programs/token/target/sbf/deploy/pinocchio_token_program"),
+        ]
     };
-    mollusk.add_program(token_program_id, program_path, &LOADER_V3);
+    let program_path = program_candidates
+        .iter()
+        .find(|p| p.with_extension("so").exists())
+        .unwrap_or(&program_candidates[0])
+        .to_string_lossy()
+        .into_owned();
+    mollusk.add_program(token_program_id, &program_path, &LOADER_V3);
 
     mollusk
 }
@@ -163,7 +187,7 @@ pub fn build_create_ata_instruction(
             AccountMeta::new(ata_address, false),
             AccountMeta::new_readonly(wallet, false),
             AccountMeta::new_readonly(mint, false),
-            AccountMeta::new_readonly(solana_program::system_program::id(), false),
+            AccountMeta::new_readonly(system_program::id(), false),
             AccountMeta::new_readonly(token_program, false),
             AccountMeta::new_readonly(sysvar::rent::id(), false),
         ],
@@ -237,6 +261,48 @@ fn update_account_from_result(
     }
 }
 
+/// Ensures the derived ATA address exists as a system account in the accounts list
+/// This is required by Mollusk since the ATA program expects to write to this address
+/// The program will convert this system account into a token account during execution
+pub fn ensure_ata_system_account_exists(
+    accounts: &mut Vec<(Pubkey, Account)>,
+    ata_address: Pubkey,
+) {
+    // Check if ATA account already exists in the accounts list
+    if !accounts.iter().any(|(pubkey, _)| *pubkey == ata_address) {
+        // Add system account at the derived ATA address (program expects system ownership initially)
+        accounts.push((ata_address, Account::new(0, 0, &system_program::id())));
+    }
+}
+
+/// Build a create ATA instruction and ensure the derived ATA address exists as a system account
+/// This only adds a system account if NO account exists at the ATA address
+/// If an account already exists (regardless of owner), it is preserved unchanged
+pub fn build_create_ata_instruction_with_system_account(
+    accounts: &mut Vec<(Pubkey, Account)>,
+    ata_program_id: Pubkey,
+    payer: Pubkey,
+    ata_address: Pubkey,
+    wallet: Pubkey,
+    mint: Pubkey,
+    token_program: Pubkey,
+    instruction_type: CreateAtaInstructionType,
+) -> Instruction {
+    // Ensure the derived ATA address exists as a system account (as the program expects)
+    ensure_ata_system_account_exists(accounts, ata_address);
+
+    // Build the instruction
+    build_create_ata_instruction(
+        ata_program_id,
+        payer,
+        ata_address,
+        wallet,
+        mint,
+        token_program,
+        instruction_type,
+    )
+}
+
 /// Creates and initializes a mint account with the given parameters.
 /// Returns a vector of accounts including the initialized mint and all necessary
 /// base accounts for testing.
@@ -263,11 +329,11 @@ pub fn create_test_mint(
 
     accounts.push((
         mint_account.pubkey(),
-        Account::new(0, 0, &solana_program::system_program::id()),
+        Account::new(0, 0, &system_program::id()),
     ));
     accounts.push((
         mint_authority.pubkey(),
-        Account::new(1_000_000, 0, &solana_program::system_program::id()),
+        Account::new(1_000_000, 0, &system_program::id()),
     ));
 
     // Create the mint account on-chain.
@@ -276,14 +342,25 @@ pub fn create_test_mint(
         &accounts,
         &[mollusk_svm::result::Check::success()],
     );
-    let init_mint_ix = spl_token::instruction::initialize_mint(
-        token_program,
-        &mint_account.pubkey(),
-        &mint_authority.pubkey(),
-        Some(&mint_authority.pubkey()),
-        decimals,
-    )
-    .unwrap();
+    let init_mint_ix = if *token_program == spl_token_2022_interface::id() {
+        spl_token_2022_interface::instruction::initialize_mint(
+            token_program,
+            &mint_account.pubkey(),
+            &mint_authority.pubkey(),
+            Some(&mint_authority.pubkey()),
+            decimals,
+        )
+        .unwrap()
+    } else {
+        spl_token_interface::instruction::initialize_mint(
+            token_program,
+            &mint_account.pubkey(),
+            &mint_authority.pubkey(),
+            Some(&mint_authority.pubkey()),
+            decimals,
+        )
+        .unwrap()
+    };
 
     // Refresh the mint account data after creation.
     update_account_from_result(
@@ -336,7 +413,7 @@ pub mod account_builder {
             Account {
                 lamports,
                 data: Vec::new(),
-                owner: solana_program::system_program::id(),
+                owner: solana_system_interface::program::id(),
                 executable: false,
                 rent_epoch: 0,
             }
@@ -356,7 +433,7 @@ pub mod account_builder {
             Account {
                 lamports: MINT_ACCOUNT_RENT_EXEMPT,
                 data: create_mollusk_mint_data(decimals),
-                owner: spl_token_interface::program::id().into(),
+                owner: spl_token_interface::id().into(),
                 executable: false,
                 rent_epoch: 0,
             }
@@ -364,15 +441,16 @@ pub mod account_builder {
 
         pub fn extended_mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
             use solana_program_option::COption;
-            use spl_token_2022::{
+            use spl_token_2022_interface::{
                 extension::{ExtensionType, PodStateWithExtensionsMut},
                 pod::PodMint,
             };
 
             // Calculate the minimum size for a Token-2022 mint without extensions
-            let required_size =
-                ExtensionType::try_calculate_account_len::<spl_token_2022::state::Mint>(&[])
-                    .expect("Failed to calculate Token-2022 mint size");
+            let required_size = ExtensionType::try_calculate_account_len::<
+                spl_token_2022_interface::state::Mint,
+            >(&[])
+            .expect("Failed to calculate Token-2022 mint size");
 
             let mut data = vec![0u8; required_size];
 
@@ -390,7 +468,7 @@ pub mod account_builder {
             Account {
                 lamports: MINT_ACCOUNT_RENT_EXEMPT,
                 data,
-                owner: spl_token_2022::id(),
+                owner: spl_token_2022_interface::id(),
                 executable: false,
                 rent_epoch: 0,
             }

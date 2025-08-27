@@ -25,9 +25,11 @@ spl-token-2022-interface = "2.0.0"
 thiserror = "2.0"
 
 [dev-dependencies]
+solana-program-option = "3.0"
+solana-program-pack = "3.0"
 solana-program-test = "3.0"
-mollusk-svm = { version = "0.5.1", git = "https://github.com/rustopian/mollusk.git", branch = "3.0", features = ["all-builtins"] }
-mollusk-svm-bencher = { version = "0.5.1", git = "https://github.com/rustopian/mollusk.git", branch = "3.0" }
+mollusk-svm = { version = "0.5.1", git = "https://github.com/rustopian/mollusk.git", branch = "use-3.0-crates", features = ["all-builtins"] }
+mollusk-svm-bencher = { version = "0.5.1", git = "https://github.com/rustopian/mollusk.git", branch = "use-3.0-crates" }
 solana-sdk = "3.0"
 
 [lib]

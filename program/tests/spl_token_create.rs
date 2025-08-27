@@ -1,10 +1,13 @@
 mod utils;
 
+use solana_program_test::tokio;
 #[allow(deprecated)]
 use spl_associated_token_account::create_associated_token_account as deprecated_create_associated_token_account;
 use {
+    mollusk_svm::result::ProgramResult,
+    solana_program_pack::Pack,
     solana_pubkey::Pubkey,
-    solana_sdk::{program_pack::Pack, signature::Signer, transaction::Transaction},
+    solana_sdk::{signature::Signer, transaction::Transaction},
     spl_associated_token_account_interface::{
         address::get_associated_token_address, instruction::create_associated_token_account,
     },
@@ -19,9 +22,9 @@ async fn success_create() {
     let associated_token_address =
         get_associated_token_address(&wallet_address, &token_mint_address);
 
-    let mollusk = setup_mollusk_with_programs(&spl_token::id());
+    let mollusk = setup_mollusk_with_programs(&spl_token_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token::id());
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
     accounts.extend([
         (
             token_mint_address,
@@ -32,8 +35,11 @@ async fn success_create() {
             account_builder::AccountBuilder::system_account(1_000_000),
         ),
     ]);
-    let (expected_token_account_len, expected_token_account_balance) =
-        (Account::LEN, TOKEN_ACCOUNT_RENT_EXEMPT);
+    // Ensure the derived ATA exists as a placeholder system account for Mollusk
+    ensure_ata_system_account_exists(&mut accounts, associated_token_address);
+    let expected_token_account_len = Account::LEN;
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
@@ -41,7 +47,7 @@ async fn success_create() {
         associated_token_address,
         wallet_address,
         token_mint_address,
-        spl_token::id(),
+        spl_token_interface::id(),
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
@@ -67,9 +73,9 @@ async fn success_using_deprecated_instruction_creator() {
     let associated_token_address =
         get_associated_token_address(&wallet_address, &token_mint_address);
 
-    let mollusk = setup_mollusk_with_programs(&spl_token::id());
+    let mollusk = setup_mollusk_with_programs(&spl_token_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token::id());
+    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
 
     // Add mint and wallet to accounts
     accounts.push((
@@ -80,9 +86,12 @@ async fn success_using_deprecated_instruction_creator() {
         wallet_address,
         account_builder::AccountBuilder::system_account(1_000_000),
     ));
+    // Ensure the derived ATA exists as a placeholder system account for Mollusk
+    ensure_ata_system_account_exists(&mut accounts, associated_token_address);
 
     let expected_token_account_len = Account::LEN;
-    let expected_token_account_balance = TOKEN_ACCOUNT_RENT_EXEMPT;
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
 
     // Use legacy-style instruction (empty data to simulate deprecated function)
     let mut instruction = build_create_ata_instruction(
@@ -91,7 +100,7 @@ async fn success_using_deprecated_instruction_creator() {
         associated_token_address,
         wallet_address,
         token_mint_address,
-        spl_token::id(),
+        spl_token_interface::id(),
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,

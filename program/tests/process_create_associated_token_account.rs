@@ -1,11 +1,17 @@
 mod utils;
 
 use {
-    program_test::program_test_2022,
+    crate::utils::{
+        account_builder, build_create_ata_instruction,
+        build_create_ata_instruction_with_system_account, create_mollusk_base_accounts_with_token,
+        setup_mollusk_with_programs, CreateAtaInstructionType, TOKEN_ACCOUNT_RENT_EXEMPT,
+    },
+    mollusk_svm::result::ProgramResult,
     solana_program::{instruction::*, sysvar},
     solana_program_test::*,
     solana_pubkey::Pubkey,
     solana_sdk::{
+        program_error::ProgramError,
         signature::Signer,
         transaction::{Transaction, TransactionError},
     },
@@ -27,9 +33,10 @@ async fn test_associated_token_address() {
         &spl_token_2022_interface::id(),
     );
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    let mut accounts =
+        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
 
     // Add mint and wallet to accounts
     accounts.push((
@@ -46,13 +53,14 @@ async fn test_associated_token_address() {
             .unwrap();
     let expected_token_account_balance = TOKEN_ACCOUNT_RENT_EXEMPT;
 
-    let instruction = build_create_ata_instruction(
+    let instruction = build_create_ata_instruction_with_system_account(
+        &mut accounts,
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address,
         wallet_address,
         token_mint_address,
-        spl_token_2022::id(),
+        spl_token_2022_interface::id(),
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
@@ -84,9 +92,10 @@ async fn test_create_with_fewer_lamports() {
         &spl_token_2022_interface::id(),
     );
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    let mut accounts =
+        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
 
     // Add mint and wallet to accounts
     accounts.push((
@@ -110,18 +119,19 @@ async fn test_create_with_fewer_lamports() {
         solana_sdk::account::Account::new(
             insufficient_lamports,
             0,
-            &solana_program::system_program::id(),
+            &solana_system_interface::program::id(),
         ),
     ));
 
     // Check that the program adds the extra lamports
-    let instruction = build_create_ata_instruction(
+    let instruction = build_create_ata_instruction_with_system_account(
+        &mut accounts,
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address,
         wallet_address,
         token_mint_address,
-        spl_token_2022::id(),
+        spl_token_2022_interface::id(),
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
@@ -140,7 +150,7 @@ async fn test_create_with_fewer_lamports() {
         .1;
 
     assert_eq!(created_account.lamports, expected_token_account_balance);
-    assert_eq!(created_account.owner, spl_token_2022::id());
+    assert_eq!(created_account.owner, spl_token_2022_interface::id());
 }
 
 #[tokio::test]
@@ -153,9 +163,10 @@ async fn test_create_with_excess_lamports() {
         &spl_token_2022_interface::id(),
     );
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    let mut accounts =
+        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
     accounts.extend([
         (
             token_mint_address,
@@ -177,17 +188,18 @@ async fn test_create_with_excess_lamports() {
         solana_sdk::account::Account::new(
             excess_lamports,
             0,
-            &solana_program::system_program::id(),
+            &solana_system_interface::program::id(),
         ),
     ));
 
+    // This test provides its own ATA account with fewer lamports, so use raw instruction
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address,
         wallet_address,
         token_mint_address,
-        spl_token_2022::id(),
+        spl_token_2022_interface::id(),
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
@@ -203,7 +215,7 @@ async fn test_create_with_excess_lamports() {
         .1;
     assert_eq!(
         (created_account.lamports, created_account.owner),
-        (excess_lamports, spl_token_2022::id())
+        (excess_lamports, spl_token_2022_interface::id())
     );
 }
 
@@ -217,9 +229,10 @@ async fn test_create_account_mismatch() {
         &spl_token_2022_interface::id(),
     );
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    let mut accounts =
+        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
     accounts.extend([
         (
             token_mint_address,
@@ -230,6 +243,17 @@ async fn test_create_account_mismatch() {
             account_builder::AccountBuilder::system_account(1_000_000),
         ),
     ]);
+
+    // Add ATA system account for Mollusk (needed for all test cases)
+    let associated_token_address = get_associated_token_address_with_program_id(
+        &wallet_address,
+        &token_mint_address,
+        &spl_token_2022_interface::id(),
+    );
+    accounts.push((
+        associated_token_address,
+        account_builder::AccountBuilder::system_account(0),
+    ));
 
     for (account_idx, comment) in [
         (1, "Invalid associated_account_address"),
@@ -242,11 +266,11 @@ async fn test_create_account_mismatch() {
             get_associated_token_address_with_program_id(
                 &wallet_address,
                 &token_mint_address,
-                &spl_token_2022::id(),
+                &spl_token_2022_interface::id(),
             ),
             wallet_address,
             token_mint_address,
-            spl_token_2022::id(),
+            spl_token_2022_interface::id(),
             CreateAtaInstructionType::Create {
                 bump: None,
                 account_len: None,
@@ -256,9 +280,8 @@ async fn test_create_account_mismatch() {
         assert_eq!(
             mollusk
                 .process_instruction(&instruction, &accounts)
-                .program_result
-                .unwrap_err(),
-            InstructionError::InvalidSeeds.into()
+                .program_result,
+            ProgramResult::Failure(ProgramError::InvalidSeeds)
         );
     }
 }
@@ -273,9 +296,10 @@ async fn test_create_associated_token_account_using_legacy_implicit_instruction(
         &spl_token_2022_interface::id(),
     );
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_2022::id());
+    let mut accounts =
+        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
     accounts.extend([
         (
             token_mint_address,
@@ -292,13 +316,19 @@ async fn test_create_associated_token_account_using_legacy_implicit_instruction(
         TOKEN_ACCOUNT_RENT_EXEMPT,
     );
 
+    // Add ATA system account for Mollusk
+    accounts.push((
+        associated_token_address,
+        account_builder::AccountBuilder::system_account(0),
+    ));
+
     let mut instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address,
         wallet_address,
         token_mint_address,
-        spl_token_2022::id(),
+        spl_token_2022_interface::id(),
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,

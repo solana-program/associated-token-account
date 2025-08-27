@@ -1,22 +1,18 @@
 mod utils;
 
 use {
-    mollusk_svm::result::ProgramResult,
+    mollusk_svm::result::Check,
     solana_program::program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_sdk::{
-        account::Account,
-        instruction::{AccountMeta, InstructionError},
-        signature::Signer,
+        account::Account, instruction::AccountMeta, program_error::ProgramError, signature::Signer,
         signer::keypair::Keypair,
     },
-    solana_system_interface::instruction as system_instruction,
     spl_associated_token_account_interface::{
         address::get_associated_token_address_with_program_id, instruction,
     },
     spl_token_2022_interface::{
-        extension::{ExtensionType, StateWithExtensionsOwned},
-        state::{Account as TokenAccount, Mint},
+        extension::StateWithExtensionsOwned, state::Account as TokenAccount,
     },
     utils::*,
 };
@@ -148,7 +144,7 @@ fn try_recover_nested_mollusk(
     destination_token_address: Pubkey,
     wallet: &Keypair,
     recover_instruction: solana_program::instruction::Instruction,
-    expected_error: Option<InstructionError>,
+    expected_error: Option<ProgramError>,
 ) {
     let initial_lamports = accounts
         .iter()
@@ -183,10 +179,14 @@ fn try_recover_nested_mollusk(
     }
 
     // transfer / close nested account
-    let result = mollusk.process_instruction(&recover_instruction, accounts);
-    if let Some(_expected_error) = expected_error {
-        assert!(matches!(result.program_result, ProgramResult::Failure(_)));
+    if let Some(expected_error) = expected_error {
+        mollusk.process_and_validate_instruction(
+            &recover_instruction,
+            accounts,
+            &[Check::err(expected_error)],
+        );
     } else {
+        let result = mollusk.process_instruction(&recover_instruction, accounts);
         assert!(result.program_result.is_ok());
         let destination_account = result
             .resulting_accounts
@@ -195,6 +195,20 @@ fn try_recover_nested_mollusk(
             .expect("Destination account should exist")
             .1
             .clone();
+
+        // Calculate rent for assertions
+        let rent = solana_sdk::rent::Rent::default();
+
+        // Assert destination ATA is properly set up as a token account
+        assert_eq!(destination_account.owner, *program_id);
+        let destination_ata_rent = rent.minimum_balance(destination_account.data.len());
+        assert!(
+            destination_account.lamports >= destination_ata_rent,
+            "Destination ATA should be rent-exempt: {} >= {}",
+            destination_account.lamports,
+            destination_ata_rent
+        );
+
         let destination_state =
             StateWithExtensionsOwned::<TokenAccount>::unpack(destination_account.data).unwrap();
         assert_eq!(destination_state.base.amount, amount);
@@ -207,7 +221,6 @@ fn try_recover_nested_mollusk(
             .clone();
 
         // Calculate the rent for the nested ATA that gets closed
-        let rent = solana_sdk::rent::Rent::default();
         let ata_space = if *program_id == spl_token_2022_interface::id() {
             // spl-token-2022 accounts get the ImmutableOwner extension, which adds 5 bytes
             // (2 bytes extension type + 2 bytes length + 1 byte data)
@@ -219,7 +232,7 @@ fn try_recover_nested_mollusk(
         // CORRECT calculation based on actual behavior:
         // The recover operation:
         // 1. Closes nested ATA (wallet receives nested_ata_rent)
-        // 2. The destination ATA already exists as a system account (no cost to wallet)
+        // 2. The destination ATA already exists as a token account (no cost to wallet)
         // Net effect: wallet_final = wallet_initial + nested_ata_rent
 
         let expected_final_lamports = initial_lamports + nested_ata_rent;
@@ -255,6 +268,8 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
         &mint,
         program_id,
     );
+    // Create destination ATA (wallet's ATA for the mint) - this is the same as owner_associated_token_address for same mint case
+    let destination_token_address = owner_associated_token_address;
 
     let recover_instruction =
         instruction::recover_nested(&wallet.pubkey(), &mint, &mint, program_id);
@@ -265,7 +280,7 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
         mint,
         &mint_authority,
         nested_associated_token_address,
-        owner_associated_token_address,
+        destination_token_address,
         &wallet,
         recover_instruction,
         None,
@@ -399,7 +414,7 @@ fn fail_missing_wallet_signature_2022() {
         owner_ata,
         &wallet,
         recover,
-        Some(InstructionError::MissingRequiredSignature),
+        Some(ProgramError::MissingRequiredSignature),
     );
 }
 
@@ -445,7 +460,7 @@ fn fail_missing_wallet_signature() {
         owner_ata,
         &wallet,
         recover,
-        Some(InstructionError::MissingRequiredSignature),
+        Some(ProgramError::MissingRequiredSignature),
     );
 }
 
@@ -515,7 +530,7 @@ fn fail_wrong_signer_2022() {
         owner_ata,
         &wrong_wallet,
         recover_instruction,
-        Some(InstructionError::IllegalOwner),
+        Some(ProgramError::IllegalOwner),
     );
 }
 
@@ -580,7 +595,7 @@ fn fail_wrong_signer() {
         owner_ata,
         &wrong_wallet,
         recover_instruction,
-        Some(InstructionError::IllegalOwner),
+        Some(ProgramError::IllegalOwner),
     );
 }
 
@@ -650,7 +665,7 @@ fn fail_not_nested_2022() {
         owner_ata,
         &wallet,
         recover_instruction,
-        Some(InstructionError::IllegalOwner),
+        Some(ProgramError::IllegalOwner),
     );
 }
 
@@ -711,7 +726,7 @@ fn fail_not_nested() {
         owner_ata,
         &wallet,
         recover_instruction,
-        Some(InstructionError::IllegalOwner),
+        Some(ProgramError::IllegalOwner),
     );
 }
 #[test]
@@ -782,7 +797,7 @@ fn fail_wrong_address_derivation_owner_2022() {
         wrong_owner_address,
         &wallet,
         recover_instruction,
-        Some(InstructionError::InvalidSeeds),
+        Some(ProgramError::InvalidSeeds),
     );
 }
 
@@ -845,7 +860,7 @@ fn fail_wrong_address_derivation_owner() {
         wrong_owner_address,
         &wallet,
         recover_instruction,
-        Some(InstructionError::InvalidSeeds),
+        Some(ProgramError::InvalidSeeds),
     );
 }
 
@@ -888,23 +903,14 @@ fn fail_owner_account_does_not_exist() {
         &spl_token_2022_interface::id(),
     );
 
-    // Ensure accounts required by recover_nested are provided to Mollusk (except owner ATA which should not exist)
-    let destination_ata = get_associated_token_address_with_program_id(
+    // Ensure all accounts required by recover_nested are provided to Mollusk
+    ensure_recover_nested_accounts(
+        &mut accounts,
         &wallet.pubkey(),
+        &mint,
         &mint,
         &spl_token_2022_interface::id(),
     );
-    // Use the actual nested_ata returned by create_associated_token_account_mollusk instead of recalculating
-
-    // Provide all derived ATA addresses as system accounts (Mollusk requires all accounts to be present)
-    for ata_address in [owner_ata_address, destination_ata, nested_ata] {
-        if !accounts.iter().any(|(pubkey, _)| *pubkey == ata_address) {
-            accounts.push((
-                ata_address,
-                account_builder::AccountBuilder::system_account(0),
-            ));
-        }
-    }
 
     // Ensure the mint authority is provided as an account
     if !accounts
@@ -976,7 +982,7 @@ fn fail_owner_account_does_not_exist() {
         owner_ata_address,
         &wallet,
         recover_instruction,
-        Some(InstructionError::IllegalOwner),
+        Some(ProgramError::IllegalOwner),
     );
 }
 
@@ -1050,7 +1056,7 @@ fn fail_wrong_spl_token_program() {
         owner_ata,
         &wallet,
         recover_instruction,
-        Some(InstructionError::IllegalOwner),
+        Some(ProgramError::IllegalOwner),
     );
 }
 
@@ -1120,6 +1126,6 @@ fn fail_destination_not_wallet_ata() {
         wrong_destination_ata,
         &wallet,
         recover_instruction,
-        Some(InstructionError::InvalidSeeds),
+        Some(ProgramError::InvalidSeeds),
     );
 }

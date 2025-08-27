@@ -4,22 +4,14 @@ use {
     crate::utils::{
         account_builder, build_create_ata_instruction,
         build_create_ata_instruction_with_system_account, create_mollusk_base_accounts_with_token,
-        setup_mollusk_with_programs, CreateAtaInstructionType, TOKEN_ACCOUNT_RENT_EXEMPT,
+        setup_mollusk_with_programs, CreateAtaInstructionType,
     },
     mollusk_svm::result::ProgramResult,
     solana_program::{instruction::*, sysvar},
     solana_program_test::*,
     solana_pubkey::Pubkey,
-    solana_sdk::{
-        program_error::ProgramError,
-        signature::Signer,
-        transaction::{Transaction, TransactionError},
-    },
-    solana_system_interface::instruction as system_instruction,
-    spl_associated_token_account_interface::{
-        address::get_associated_token_address_with_program_id,
-        instruction::create_associated_token_account,
-    },
+    solana_sdk::{program_error::ProgramError, signature::Signer},
+    spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account},
 };
 
@@ -51,7 +43,8 @@ async fn test_associated_token_address() {
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
             .unwrap();
-    let expected_token_account_balance = TOKEN_ACCOUNT_RENT_EXEMPT;
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
 
     let instruction = build_create_ata_instruction_with_system_account(
         &mut accounts,
@@ -110,7 +103,8 @@ async fn test_create_with_fewer_lamports() {
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
             .unwrap();
-    let expected_token_account_balance = TOKEN_ACCOUNT_RENT_EXEMPT;
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
 
     // Pre-fund the ATA address with insufficient lamports (only enough for 0 data)
     let insufficient_lamports = 890880; // rent-exempt for 0 data but not for token account
@@ -177,11 +171,11 @@ async fn test_create_with_excess_lamports() {
             account_builder::AccountBuilder::system_account(1_000_000),
         ),
     ]);
-    let (expected_token_account_len, expected_token_account_balance) = (
+    let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap(),
-        TOKEN_ACCOUNT_RENT_EXEMPT,
-    );
+            .unwrap();
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
     let excess_lamports = expected_token_account_balance + 1;
     accounts.push((
         associated_token_address,
@@ -192,7 +186,7 @@ async fn test_create_with_excess_lamports() {
         ),
     ));
 
-    // This test provides its own ATA account with fewer lamports, so use raw instruction
+    // This test provides its own ATA account with excess lamports, so use raw instruction
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
@@ -255,7 +249,7 @@ async fn test_create_account_mismatch() {
         account_builder::AccountBuilder::system_account(0),
     ));
 
-    for (account_idx, comment) in [
+    for (account_idx, _comment) in [
         (1, "Invalid associated_account_address"),
         (2, "Invalid wallet_address"),
         (3, "Invalid token_mint_address"),
@@ -310,11 +304,11 @@ async fn test_create_associated_token_account_using_legacy_implicit_instruction(
             account_builder::AccountBuilder::system_account(1_000_000),
         ),
     ]);
-    let (expected_token_account_len, expected_token_account_balance) = (
+    let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap(),
-        TOKEN_ACCOUNT_RENT_EXEMPT,
-    );
+            .unwrap();
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
 
     // Add ATA system account for Mollusk
     accounts.push((

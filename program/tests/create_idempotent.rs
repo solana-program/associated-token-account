@@ -57,7 +57,8 @@ async fn success_account_exists() {
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
             .unwrap();
-    let expected_token_account_balance = TOKEN_ACCOUNT_RENT_EXEMPT;
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
 
     let instruction = build_create_ata_instruction_with_system_account(
         &mut accounts,

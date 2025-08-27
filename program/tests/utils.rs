@@ -46,7 +46,12 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     let ata_program_path = ata_candidates
         .iter()
         .find(|p| p.with_extension("so").exists())
-        .unwrap_or(&ata_candidates[0])
+        .unwrap_or_else(|| {
+            panic!(
+                "ATA program .so file not found. Tried paths: {:?}. Run 'cargo build-sbf' to build the program.",
+                ata_candidates.iter().map(|p| p.with_extension("so")).collect::<Vec<_>>()
+            )
+        })
         .to_string_lossy()
         .into_owned();
     mollusk.add_program(&ata_program_id, &ata_program_path, &LOADER_V3);
@@ -66,7 +71,13 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     let program_path = program_candidates
         .iter()
         .find(|p| p.with_extension("so").exists())
-        .unwrap_or(&program_candidates[0])
+        .unwrap_or_else(|| {
+            panic!(
+                "Token program .so file not found for {:?}. Tried paths: {:?}. Run 'cargo build-sbf' to build the program.",
+                token_program_id,
+                program_candidates.iter().map(|p| p.with_extension("so")).collect::<Vec<_>>()
+            )
+        })
         .to_string_lossy()
         .into_owned();
     mollusk.add_program(token_program_id, &program_path, &LOADER_V3);
@@ -391,8 +402,6 @@ pub mod account_builder {
         std::vec::Vec,
     };
 
-    use super::{MINT_ACCOUNT_RENT_EXEMPT, TOKEN_ACCOUNT_RENT_EXEMPT};
-
     pub struct AccountBuilder;
 
     impl AccountBuilder {
@@ -430,9 +439,11 @@ pub mod account_builder {
         }
 
         pub fn mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
+            let data = create_mollusk_mint_data(decimals);
+            let rent = solana_sdk::rent::Rent::default();
             Account {
-                lamports: MINT_ACCOUNT_RENT_EXEMPT,
-                data: create_mollusk_mint_data(decimals),
+                lamports: rent.minimum_balance(data.len()),
+                data,
                 owner: spl_token_interface::id().into(),
                 executable: false,
                 rent_epoch: 0,
@@ -465,8 +476,9 @@ pub mod account_builder {
             mint.base.is_initialized = true.into();
             mint.base.freeze_authority = COption::None.into();
 
+            let rent = solana_sdk::rent::Rent::default();
             Account {
-                lamports: MINT_ACCOUNT_RENT_EXEMPT,
+                lamports: rent.minimum_balance(data.len()),
                 data,
                 owner: spl_token_2022_interface::id(),
                 executable: false,
@@ -480,9 +492,11 @@ pub mod account_builder {
             amount: u64,
             token_program: &Pubkey,
         ) -> Account {
+            let data = create_token_account_data(&mint.to_bytes(), &owner.to_bytes(), amount);
+            let rent = solana_sdk::rent::Rent::default();
             Account {
-                lamports: TOKEN_ACCOUNT_RENT_EXEMPT,
-                data: create_token_account_data(&mint.to_bytes(), &owner.to_bytes(), amount),
+                lamports: rent.minimum_balance(data.len()),
+                data,
                 owner: *token_program,
                 executable: false,
                 rent_epoch: 0,

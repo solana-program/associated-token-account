@@ -1,8 +1,5 @@
 name: Publish Rust Crate
 
-env:
-  CACHE_BUST_SUFFIX: '-v3'
-
 on:
   workflow_dispatch:
     inputs:
@@ -42,10 +39,6 @@ on:
         required: true
         type: boolean
         default: true
-      cache_bust:
-        description: Optional cache-bust suffix
-        required: false
-        type: string
 
 jobs:
   test:
@@ -61,7 +54,7 @@ jobs:
           clippy: true
           rustfmt: true
           solana: true
-          cargo-cache-key: cargo-test-publish-${{ inputs.package_path }}${{ env.CACHE_BUST_SUFFIX }}
+          cargo-cache-key: cargo-test-publish-${{ inputs.package_path }}
           cargo-cache-fallback-key: cargo-test-publish
 
       - name: Format
@@ -71,8 +64,6 @@ jobs:
         run: pnpm zx ./scripts/rust/lint.mjs "${{ inputs.package_path }}"
 
       - name: Build programs
-        env:
-          CARGO_TARGET_DIR: target/sbf
         run: pnpm programs:build
 
       - name: Test
@@ -150,9 +141,6 @@ jobs:
         run: |
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-
-      - name: Build SBF program first
-        run: pnpm programs:build
 
       - name: Publish Crate
         id: publish

@@ -2,8 +2,7 @@ mod utils;
 
 use {
     mollusk_svm::result::ProgramResult,
-    solana_program::instruction::*,
-    solana_program_test::*,
+    solana_program_test::tokio,
     solana_pubkey::Pubkey,
     solana_sdk::{
         program_error::ProgramError,

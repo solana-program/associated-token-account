@@ -8,7 +8,7 @@ use {
     },
     mollusk_svm::result::ProgramResult,
     solana_program::{instruction::*, sysvar},
-    solana_program_test::*,
+    solana_program_test::tokio,
     solana_pubkey::Pubkey,
     solana_sdk::{program_error::ProgramError, signature::Signer},
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,

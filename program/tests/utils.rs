@@ -20,10 +20,6 @@ pub const TOKEN_ACCOUNT_SIZE: usize = 165;
 /// Standard mint account size (base size without extensions)
 pub const MINT_ACCOUNT_SIZE: usize = 82;
 
-/// Standard lamport amounts for testing
-pub const TOKEN_ACCOUNT_RENT_EXEMPT: u64 = 2_074_080;
-pub const MINT_ACCOUNT_RENT_EXEMPT: u64 = 2_000_000;
-
 /// Native loader program ID (used across both test suites)
 pub const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
     5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
@@ -148,6 +144,7 @@ pub enum CreateAtaInstructionType {
         bump: Option<u8>,
         account_len: Option<u16>,
     },
+    #[allow(dead_code, reason = "Some tests construct only a subset of variants")]
     /// The `CreateIdempotent` instruction, which can optionally include a bump seed.
     CreateIdempotent { bump: Option<u8> },
 }
@@ -201,6 +198,7 @@ pub fn build_create_ata_instruction(
 }
 
 /// Create token account data for mollusk testing
+#[allow(dead_code, reason = "exported")]
 pub fn create_token_account_data(mint: &[u8; 32], owner: &[u8; 32], amount: u64) -> Vec<u8> {
     let mut data = vec![0u8; TOKEN_ACCOUNT_SIZE];
 
@@ -225,6 +223,7 @@ pub fn create_token_account_data(mint: &[u8; 32], owner: &[u8; 32], amount: u64)
 }
 
 /// Create mint account data for mollusk testing
+#[allow(dead_code, reason = "exported for external consumers")]
 pub fn create_mollusk_mint_data(decimals: u8) -> Vec<u8> {
     let mut data = vec![0u8; MINT_ACCOUNT_SIZE];
     data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
@@ -283,6 +282,7 @@ pub fn ensure_ata_system_account_exists(
 /// Build a create ATA instruction and ensure the derived ATA address exists as a system account
 /// This only adds a system account if NO account exists at the ATA address
 /// If an account already exists (regardless of owner), it is preserved unchanged
+#[allow(dead_code, reason = "exported for benching consumers")]
 pub fn build_create_ata_instruction_with_system_account(
     accounts: &mut Vec<(Pubkey, Account)>,
     ata_program_id: Pubkey,
@@ -311,6 +311,7 @@ pub fn build_create_ata_instruction_with_system_account(
 /// Creates and initializes a mint account with the given parameters.
 /// Returns a vector of accounts including the initialized mint and all necessary
 /// base accounts for testing.
+#[allow(dead_code, reason = "exported for benchmarking consumers")]
 pub fn create_test_mint(
     mollusk: &Mollusk,
     mint_account: &Keypair,
@@ -399,6 +400,7 @@ pub mod account_builder {
     pub struct AccountBuilder;
 
     impl AccountBuilder {
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
         pub fn rent_sysvar() -> Account {
             let mollusk = Mollusk::default();
             let (_, mollusk_rent_account) = mollusk.sysvars.keyed_account_for_rent_sysvar();
@@ -422,6 +424,7 @@ pub mod account_builder {
             }
         }
 
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
         pub fn executable_program(loader: Pubkey) -> Account {
             Account {
                 lamports: 0,
@@ -432,6 +435,7 @@ pub mod account_builder {
             }
         }
 
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
         pub fn mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
             let data = create_mollusk_mint_data(decimals);
             let rent = solana_sdk::rent::Rent::default();
@@ -444,6 +448,7 @@ pub mod account_builder {
             }
         }
 
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
         pub fn extended_mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
             use solana_program_option::COption;
             use spl_token_2022_interface::{
@@ -480,6 +485,7 @@ pub mod account_builder {
             }
         }
 
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
         pub fn token_account(
             mint: &Pubkey,
             owner: &Pubkey,

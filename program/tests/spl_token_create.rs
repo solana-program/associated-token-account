@@ -1,9 +1,6 @@
 mod utils;
 
 use solana_program_test::tokio;
-// TODO: Ensure we test this if we still must
-#[allow(deprecated)]
-use spl_associated_token_account::create_associated_token_account as deprecated_create_associated_token_account;
 use {
     solana_program_pack::Pack, solana_pubkey::Pubkey, solana_sdk::signature::Signer,
     spl_associated_token_account_interface::address::get_associated_token_address,

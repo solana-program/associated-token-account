@@ -64,8 +64,6 @@ jobs:
         run: pnpm zx ./scripts/rust/lint.mjs "${{ inputs.package_path }}"
 
       - name: Build programs
-        env:
-          CARGO_TARGET_DIR: target/sbf
         run: pnpm programs:build
 
       - name: Test

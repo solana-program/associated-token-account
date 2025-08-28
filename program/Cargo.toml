@@ -15,16 +15,18 @@ test-sbf = []
 borsh = "1.5.7"
 num-derive = "0.4"
 num-traits = "0.2"
-solana-program = "2.3.0"
-solana-system-interface = "1"
-spl-associated-token-account-interface = { version = "1.0.0", features = ["borsh"] }
-spl-token = { version = "8.0", features = ["no-entrypoint"] }
-spl-token-2022 = { version = "9.0.0", features = ["no-entrypoint"] }
+solana-decode-error = "2.3.0"
+solana-program = "3.0"
+solana-pubkey = "3.0"
+solana-system-interface = { version = "2.0", features = ["bincode"] }
+spl-associated-token-account-interface = { version = "2.0.0", features = ["borsh"] }
+spl-token-interface = "2.0.0"
+spl-token-2022-interface = "2.0.0"
 thiserror = "2.0"
 
 [dev-dependencies]
-solana-program-test = "2.3.7"
-solana-sdk = "2.2.1"
+solana-program-test = "3.0"
+solana-sdk = "3.0"
 
 [lib]
 crate-type = ["cdylib", "lib"]

@@ -5,19 +5,11 @@ use {
     solana_program_test::tokio,
     solana_pubkey::Pubkey,
     solana_sdk::{
-        program_error::ProgramError,
-        rent::Rent,
-        signature::Signer,
-        signer::keypair::Keypair,
-        transaction::{Transaction, TransactionError},
+        program_error::ProgramError, rent::Rent, signature::Signer, signer::keypair::Keypair,
     },
     solana_system_interface::instruction as system_instruction,
-    spl_associated_token_account_interface::{
-        address::get_associated_token_address_with_program_id,
-        instruction::create_associated_token_account,
-    },
+    spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{
-        error::TokenError,
         extension::{
             transfer_fee, BaseStateWithExtensions, ExtensionType, StateWithExtensionsOwned,
         },

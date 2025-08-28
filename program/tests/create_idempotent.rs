@@ -5,28 +5,9 @@ use {
     solana_program::instruction::*,
     solana_program_test::*,
     solana_pubkey::Pubkey,
-    solana_sdk::{
-        account::Account as SolanaAccount,
-        program_error::ProgramError,
-        program_option::COption,
-        program_pack::Pack,
-        signature::Signer,
-        signer::keypair::Keypair,
-        transaction::{Transaction, TransactionError},
-    },
-    solana_system_interface::instruction::create_account,
-    spl_associated_token_account::error::AssociatedTokenAccountError,
-    spl_associated_token_account_interface::{
-        address::get_associated_token_address_with_program_id,
-        instruction::{
-            create_associated_token_account, create_associated_token_account_idempotent,
-        },
-    },
-    spl_token_2022_interface::{
-        extension::ExtensionType,
-        instruction::initialize_account,
-        state::{Account, AccountState},
-    },
+    solana_sdk::{program_error::ProgramError, signature::Signer, signer::keypair::Keypair},
+    spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
+    spl_token_2022_interface::{extension::ExtensionType, state::Account},
     utils::*,
 };
 

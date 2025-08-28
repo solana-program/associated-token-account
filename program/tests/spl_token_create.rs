@@ -1,18 +1,13 @@
 mod utils;
 
 use solana_program_test::tokio;
+// TODO: Ensure we test this if we still must
 #[allow(deprecated)]
 use spl_associated_token_account::create_associated_token_account as deprecated_create_associated_token_account;
 use {
-    mollusk_svm::result::ProgramResult,
-    solana_program_pack::Pack,
-    solana_pubkey::Pubkey,
-    solana_sdk::{signature::Signer, transaction::Transaction},
-    spl_associated_token_account_interface::{
-        address::get_associated_token_address, instruction::create_associated_token_account,
-    },
-    spl_token_interface::state::Account,
-    utils::*,
+    solana_program_pack::Pack, solana_pubkey::Pubkey, solana_sdk::signature::Signer,
+    spl_associated_token_account_interface::address::get_associated_token_address,
+    spl_token_interface::state::Account, utils::*,
 };
 
 #[tokio::test]

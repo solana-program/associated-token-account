@@ -59,13 +59,11 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     // Load appropriate token program
     let program_candidates = if *token_program_id == spl_token_2022_interface::id() {
         [
-            workspace_root.join("p-ata/programs/token-2022/target/deploy/spl_token_2022"),
-            workspace_root.join("p-ata/programs/token-2022/target/sbf/deploy/spl_token_2022"),
+            workspace_root.join("programs/spl_token_2022"),
         ]
     } else {
         [
-            workspace_root.join("p-ata/programs/token/target/deploy/pinocchio_token_program"),
-            workspace_root.join("p-ata/programs/token/target/sbf/deploy/pinocchio_token_program"),
+            workspace_root.join("programs/pinocchio_token_program"),
         ]
     };
     let program_path = program_candidates

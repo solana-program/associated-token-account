@@ -1,0 +1,3 @@
+[submodule "programs/token-2022"]
+	path = programs/token-2022
+	url = https://github.com/solana-program/token-2022.git

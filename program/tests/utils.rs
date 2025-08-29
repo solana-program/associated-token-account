@@ -324,6 +324,7 @@ pub fn get_account(accounts: &[(Pubkey, Account)], pubkey: Pubkey) -> Account {
 
 /// Creates an associated token account via the ATA program and merges account updates.
 /// Returns `(associated_token_address, program_result)`.
+#[allow(dead_code)]
 pub fn create_associated_token_account_mollusk(
     mollusk: &Mollusk,
     accounts: &mut Vec<(Pubkey, Account)>,
@@ -340,7 +341,7 @@ pub fn create_associated_token_account_mollusk(
     // Ensure placeholder system account for ATA address
     ensure_system_account_exists(accounts, ata_address, 0);
 
-    let mut instruction = build_create_ata_instruction(
+    let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
         ata_address,
@@ -358,6 +359,7 @@ pub fn create_associated_token_account_mollusk(
 }
 
 /// Legacy variant: creates ATA using empty instruction data (deprecated path).
+#[allow(dead_code)]
 pub fn create_associated_token_account_legacy_mollusk(
     mollusk: &Mollusk,
     accounts: &mut Vec<(Pubkey, Account)>,
@@ -390,6 +392,7 @@ pub fn create_associated_token_account_legacy_mollusk(
 }
 
 /// Ensures all recover-nested derived ATAs exist as system accounts: owner ATA, destination ATA, nested ATA.
+#[allow(dead_code)]
 pub fn ensure_recover_nested_accounts(
     accounts: &mut Vec<(Pubkey, Account)>,
     wallet_address: &Pubkey,
@@ -420,6 +423,7 @@ pub fn ensure_recover_nested_accounts(
 /// Ensures executable program and sysvar accounts are present.
 /// Provide any mix of program IDs (e.g., token-2022, token classic, ATA, system) and it will add executable accounts.
 /// Always ensures rent sysvar is present.
+#[allow(dead_code)]
 pub fn ensure_program_accounts_present(
     accounts: &mut Vec<(Pubkey, Account)>,
     program_ids: &[Pubkey],
@@ -447,6 +451,7 @@ pub fn ensure_program_accounts_present(
 }
 
 /// Convenience: build and process a mint_to, merging updates, and assert success.
+#[allow(dead_code)]
 pub fn mint_to_and_merge(
     mollusk: &Mollusk,
     accounts: &mut Vec<(Pubkey, Account)>,
@@ -472,6 +477,7 @@ pub fn mint_to_and_merge(
 /// This only adds a system account if NO account exists at the ATA address
 /// If an account already exists (regardless of owner), it is preserved unchanged
 #[allow(dead_code, reason = "exported for benching consumers")]
+#[allow(clippy::too_many_arguments)]
 pub fn build_create_ata_instruction_with_system_account(
     accounts: &mut Vec<(Pubkey, Account)>,
     ata_program_id: Pubkey,
@@ -602,7 +608,7 @@ pub mod account_builder {
                 rent_epoch: 0,
             }
         }
-
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
         pub fn system_account(lamports: u64) -> Account {
             Account {
                 lamports,
@@ -631,7 +637,7 @@ pub mod account_builder {
             Account {
                 lamports: rent.minimum_balance(data.len()),
                 data,
-                owner: spl_token_interface::id().into(),
+                owner: spl_token_interface::id(),
                 executable: false,
                 rent_epoch: 0,
             }

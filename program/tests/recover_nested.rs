@@ -18,7 +18,6 @@ use {
 };
 
 /// Ensure all accounts required by a recover_nested instruction are provided to Mollusk
-
 fn create_mint_mollusk(
     mollusk: &mollusk_svm::Mollusk,
     accounts: &mut Vec<(Pubkey, Account)>,
@@ -88,7 +87,7 @@ fn try_recover_nested_mollusk(
     } else {
         let pr = process_and_merge_instruction(mollusk, &recover_instruction, accounts);
         assert!(matches!(pr, mollusk_svm::result::ProgramResult::Success));
-        let destination_account = get_account(&accounts, destination_token_address);
+        let destination_account = get_account(accounts, destination_token_address);
 
         // Calculate rent for assertions
         let rent = solana_sdk::rent::Rent::default();
@@ -106,7 +105,7 @@ fn try_recover_nested_mollusk(
         let destination_state =
             StateWithExtensionsOwned::<TokenAccount>::unpack(destination_account.data).unwrap();
         assert_eq!(destination_state.base.amount, amount);
-        let wallet_account = get_account(&accounts, wallet.pubkey());
+        let wallet_account = get_account(accounts, wallet.pubkey());
 
         // Calculate the rent for the nested ATA that gets closed
         let ata_space = if *program_id == spl_token_2022_interface::id() {
@@ -123,7 +122,7 @@ fn try_recover_nested_mollusk(
         // 2. The destination ATA already exists as a token account (no cost to wallet)
         // Net effect: wallet_final = wallet_initial + nested_ata_rent
 
-        let expected_final_lamports = initial_lamports + nested_ata_rent;
+        let expected_final_lamports = initial_lamports.saturating_add(nested_ata_rent);
 
         assert_eq!(wallet_account.lamports, expected_final_lamports);
     }

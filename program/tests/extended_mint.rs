@@ -51,7 +51,7 @@ async fn test_associated_token_account_with_transfer_fees() {
     let create_mint_ix = system_instruction::create_account(
         &payer.pubkey(),
         &mint_account.pubkey(),
-        mint_rent as u64,
+        mint_rent,
         space as u64,
         &spl_token_2022_interface::id(),
     );

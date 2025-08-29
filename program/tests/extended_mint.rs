@@ -30,20 +30,14 @@ async fn test_associated_token_account_with_transfer_fees() {
     let mint_account = Keypair::new();
     let token_mint_address = mint_account.pubkey();
     let mint_authority = Keypair::new();
-    accounts.extend([
-        (
-            wallet_address_sender,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
-            wallet_address_receiver,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
-            mint_authority.pubkey(),
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-    ]);
+    ensure_system_accounts_with_lamports(
+        &mut accounts,
+        &[
+            (wallet_address_sender, 1_000_000),
+            (wallet_address_receiver, 1_000_000),
+            (mint_authority.pubkey(), 1_000_000),
+        ],
+    );
     let space =
         ExtensionType::try_calculate_account_len::<Mint>(&[ExtensionType::TransferFeeConfig])
             .unwrap();
@@ -97,7 +91,6 @@ async fn test_associated_token_account_with_transfer_fees() {
         &wallet_address_sender,
         &token_mint_address,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     assert!(matches!(pr, ProgramResult::Success));
 
@@ -108,7 +101,6 @@ async fn test_associated_token_account_with_transfer_fees() {
         &wallet_address_receiver,
         &token_mint_address,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     assert!(matches!(pr, ProgramResult::Success));
 
@@ -166,12 +158,7 @@ async fn test_associated_token_account_with_transfer_fees() {
     assert!(matches!(pr, ProgramResult::Success));
 
     // Verify final account states by reading from updated accounts
-    let sender_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address_sender)
-        .unwrap()
-        .1
-        .clone();
+    let sender_account = get_account(&accounts, associated_token_address_sender);
     let sender_state = StateWithExtensionsOwned::<Account>::unpack(sender_account.data).unwrap();
     assert_eq!(sender_state.base.amount, sender_amount - transfer_amount);
     let extension = sender_state
@@ -179,12 +166,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         .unwrap();
     assert_eq!(extension.withheld_amount, 0.into());
 
-    let receiver_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address_receiver)
-        .unwrap()
-        .1
-        .clone();
+    let receiver_account = get_account(&accounts, associated_token_address_receiver);
     let receiver_state =
         StateWithExtensionsOwned::<Account>::unpack(receiver_account.data).unwrap();
     assert_eq!(receiver_state.base.amount, transfer_amount - fee);

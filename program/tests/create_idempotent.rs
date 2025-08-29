@@ -25,16 +25,11 @@ async fn success_account_exists() {
     let payer = Keypair::new();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.extend([
-        (
-            token_mint_address,
-            account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
-        ),
-        (
-            wallet_address,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-    ]);
+    accounts.push((
+        token_mint_address,
+        account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
+    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
             .unwrap();
@@ -53,12 +48,7 @@ async fn success_account_exists() {
     );
     let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
     assert!(matches!(pr, ProgramResult::Success));
-    let associated_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address)
-        .expect("associated_account not none")
-        .1
-        .clone();
+    let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_2022_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
@@ -109,12 +99,7 @@ async fn success_account_exists() {
     );
     let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
     assert!(matches!(pr, ProgramResult::Success));
-    let associated_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address)
-        .expect("associated_account not none")
-        .1
-        .clone();
+    let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_2022_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
@@ -141,14 +126,6 @@ async fn fail_account_exists_with_wrong_owner() {
             account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
         ),
         (
-            wallet_address,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
-            wrong_owner,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
             associated_token_address,
             account_builder::AccountBuilder::token_account(
                 &token_mint_address,
@@ -158,6 +135,10 @@ async fn fail_account_exists_with_wrong_owner() {
             ),
         ),
     ]);
+    ensure_system_accounts_with_lamports(
+        &mut accounts,
+        &[(wallet_address, 1_000_000), (wrong_owner, 1_000_000)],
+    );
 
     let instruction = build_create_ata_instruction_with_system_account(
         &mut accounts,
@@ -194,10 +175,6 @@ async fn fail_non_ata() {
             account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
         ),
         (
-            wallet_address,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
             account.pubkey(),
             account_builder::AccountBuilder::token_account(
                 &token_mint_address,
@@ -207,6 +184,7 @@ async fn fail_non_ata() {
             ),
         ),
     ]);
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
 
     let mut instruction = build_create_ata_instruction_with_system_account(
         &mut accounts,

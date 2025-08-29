@@ -18,7 +18,6 @@ use {
 };
 
 /// Ensure all accounts required by a recover_nested instruction are provided to Mollusk
-// moved to utils::ensure_recover_nested_accounts
 
 fn create_mint_mollusk(
     mollusk: &mollusk_svm::Mollusk,
@@ -45,8 +44,6 @@ fn create_mint_mollusk(
     }));
     (mint_account.pubkey(), mint_authority)
 }
-
-// replaced by utils::create_associated_token_account_mollusk
 
 #[allow(clippy::too_many_arguments)]
 fn try_recover_nested_mollusk(
@@ -91,12 +88,7 @@ fn try_recover_nested_mollusk(
     } else {
         let pr = process_and_merge_instruction(mollusk, &recover_instruction, accounts);
         assert!(matches!(pr, mollusk_svm::result::ProgramResult::Success));
-        let destination_account = accounts
-            .iter()
-            .find(|(pubkey, _)| *pubkey == destination_token_address)
-            .expect("Destination account should exist")
-            .1
-            .clone();
+        let destination_account = get_account(&accounts, destination_token_address);
 
         // Calculate rent for assertions
         let rent = solana_sdk::rent::Rent::default();
@@ -114,12 +106,7 @@ fn try_recover_nested_mollusk(
         let destination_state =
             StateWithExtensionsOwned::<TokenAccount>::unpack(destination_account.data).unwrap();
         assert_eq!(destination_state.base.amount, amount);
-        let wallet_account = accounts
-            .iter()
-            .find(|(pubkey, _)| *pubkey == wallet.pubkey())
-            .expect("Wallet account should exist")
-            .1
-            .clone();
+        let wallet_account = get_account(&accounts, wallet.pubkey());
 
         // Calculate the rent for the nested ATA that gets closed
         let ata_space = if *program_id == spl_token_2022_interface::id() {
@@ -147,10 +134,7 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
     let payer = Keypair::new();
     let wallet = Keypair::new();
     let mut accounts = create_mollusk_base_accounts_with_token(&payer, program_id);
-    accounts.push((
-        wallet.pubkey(),
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet.pubkey(), 1_000_000)]);
 
     let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, program_id);
     let (owner_associated_token_address, _) = create_associated_token_account_mollusk(
@@ -160,7 +144,6 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
         &wallet.pubkey(),
         &mint,
         program_id,
-        CreateAtaOptions::default(),
     );
     let (nested_associated_token_address, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -169,9 +152,8 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
         &owner_associated_token_address,
         &mint,
         program_id,
-        CreateAtaOptions::default(),
     );
-    // Create destination ATA (wallet's ATA for the mint) - this is the same as owner_associated_token_address for same mint case
+    // Create destination ATA (wallet's ATA for the mint) - this is the same cargo cargo fmas owner_associated_token_address for same mint case
     let destination_token_address = owner_associated_token_address;
 
     let recover_instruction =
@@ -205,10 +187,7 @@ fn check_different_mints_mollusk(program_id: &Pubkey) {
     let payer = Keypair::new();
     let wallet = Keypair::new();
     let mut accounts = create_mollusk_base_accounts_with_token(&payer, program_id);
-    accounts.push((
-        wallet.pubkey(),
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet.pubkey(), 1_000_000)]);
 
     let (owner_mint, _owner_mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, program_id);
@@ -221,7 +200,6 @@ fn check_different_mints_mollusk(program_id: &Pubkey) {
         &wallet.pubkey(),
         &owner_mint,
         program_id,
-        CreateAtaOptions::default(),
     );
     let (nested_associated_token_address, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -230,7 +208,6 @@ fn check_different_mints_mollusk(program_id: &Pubkey) {
         &owner_associated_token_address,
         &nested_mint,
         program_id,
-        CreateAtaOptions::default(),
     );
     let (destination_token_address, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -239,7 +216,6 @@ fn check_different_mints_mollusk(program_id: &Pubkey) {
         &wallet.pubkey(),
         &nested_mint,
         program_id,
-        CreateAtaOptions::default(),
     );
 
     let recover_instruction =
@@ -276,10 +252,7 @@ fn fail_missing_wallet_signature_2022() {
     let wallet = Keypair::new();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.push((
-        wallet.pubkey(),
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet.pubkey(), 1_000_000)]);
     let (mint, mint_authority) = create_mint_mollusk(
         &mollusk,
         &mut accounts,
@@ -293,7 +266,6 @@ fn fail_missing_wallet_signature_2022() {
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -302,7 +274,6 @@ fn fail_missing_wallet_signature_2022() {
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     let mut recover = instruction::recover_nested(
@@ -332,10 +303,7 @@ fn fail_missing_wallet_signature() {
     let payer = Keypair::new();
     let wallet = Keypair::new();
     let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
-    accounts.push((
-        wallet.pubkey(),
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet.pubkey(), 1_000_000)]);
     let (mint, mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_interface::id());
     let (owner_ata, _) = create_associated_token_account_mollusk(
@@ -345,7 +313,6 @@ fn fail_missing_wallet_signature() {
         &wallet.pubkey(),
         &mint,
         &spl_token_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -354,7 +321,6 @@ fn fail_missing_wallet_signature() {
         &owner_ata,
         &mint,
         &spl_token_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     let mut recover =
@@ -382,16 +348,13 @@ fn fail_wrong_signer_2022() {
     let wrong_wallet = Keypair::new();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.extend([
-        (
-            wallet.pubkey(),
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
-            wrong_wallet.pubkey(),
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-    ]);
+    ensure_system_accounts_with_lamports(
+        &mut accounts,
+        &[
+            (wallet.pubkey(), 1_000_000),
+            (wrong_wallet.pubkey(), 1_000_000),
+        ],
+    );
     let (mint, mint_authority) = create_mint_mollusk(
         &mollusk,
         &mut accounts,
@@ -405,7 +368,6 @@ fn fail_wrong_signer_2022() {
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -414,7 +376,6 @@ fn fail_wrong_signer_2022() {
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -453,16 +414,13 @@ fn fail_wrong_signer() {
     let wallet = Keypair::new();
     let wrong_wallet = Keypair::new();
     let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
-    accounts.extend([
-        (
-            wallet.pubkey(),
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
-            wrong_wallet.pubkey(),
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-    ]);
+    ensure_system_accounts_with_lamports(
+        &mut accounts,
+        &[
+            (wallet.pubkey(), 1_000_000),
+            (wrong_wallet.pubkey(), 1_000_000),
+        ],
+    );
     let (mint, mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_interface::id());
     let (owner_ata, _) = create_associated_token_account_mollusk(
@@ -472,7 +430,6 @@ fn fail_wrong_signer() {
         &wallet.pubkey(),
         &mint,
         &spl_token_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -481,7 +438,6 @@ fn fail_wrong_signer() {
         &owner_ata,
         &mint,
         &spl_token_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -521,16 +477,10 @@ fn fail_not_nested_2022() {
     let wrong_wallet = Pubkey::new_unique();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.extend([
-        (
-            wallet.pubkey(),
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
-            wrong_wallet,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-    ]);
+    ensure_system_accounts_with_lamports(
+        &mut accounts,
+        &[(wallet.pubkey(), 1_000_000), (wrong_wallet, 1_000_000)],
+    );
     let (mint, mint_authority) = create_mint_mollusk(
         &mollusk,
         &mut accounts,
@@ -544,7 +494,6 @@ fn fail_not_nested_2022() {
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -553,7 +502,6 @@ fn fail_not_nested_2022() {
         &wrong_wallet,
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     ); // Not nested under owner_ata
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -592,16 +540,10 @@ fn fail_not_nested() {
     let wallet = Keypair::new();
     let wrong_wallet = Pubkey::new_unique();
     let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
-    accounts.extend([
-        (
-            wallet.pubkey(),
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
-            wrong_wallet,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-    ]);
+    ensure_system_accounts_with_lamports(
+        &mut accounts,
+        &[(wallet.pubkey(), 1_000_000), (wrong_wallet, 1_000_000)],
+    );
     let (mint, mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_interface::id());
     let (owner_ata, _) = create_associated_token_account_mollusk(
@@ -611,7 +553,6 @@ fn fail_not_nested() {
         &wallet.pubkey(),
         &mint,
         &spl_token_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -620,7 +561,6 @@ fn fail_not_nested() {
         &wrong_wallet,
         &mint,
         &spl_token_interface::id(),
-        CreateAtaOptions::default(),
     ); // Not nested under owner_ata
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -654,10 +594,7 @@ fn fail_wrong_address_derivation_owner_2022() {
     let wallet = Keypair::new();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.push((
-        wallet.pubkey(),
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet.pubkey(), 1_000_000)]);
     let (mint, mint_authority) = create_mint_mollusk(
         &mollusk,
         &mut accounts,
@@ -671,7 +608,6 @@ fn fail_wrong_address_derivation_owner_2022() {
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -680,7 +616,6 @@ fn fail_wrong_address_derivation_owner_2022() {
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -727,10 +662,7 @@ fn fail_wrong_address_derivation_owner() {
     let payer = Keypair::new();
     let wallet = Keypair::new();
     let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
-    accounts.push((
-        wallet.pubkey(),
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet.pubkey(), 1_000_000)]);
     let (mint, mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_interface::id());
     let (owner_ata, _) = create_associated_token_account_mollusk(
@@ -740,7 +672,6 @@ fn fail_wrong_address_derivation_owner() {
         &wallet.pubkey(),
         &mint,
         &spl_token_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -749,7 +680,6 @@ fn fail_wrong_address_derivation_owner() {
         &owner_ata,
         &mint,
         &spl_token_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -793,10 +723,7 @@ fn fail_owner_account_does_not_exist() {
     let wallet = Keypair::new();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.push((
-        wallet.pubkey(),
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet.pubkey(), 1_000_000)]);
 
     // Add the ATA program as an account (required for create_associated_token_account_mollusk)
     accounts.push((
@@ -823,7 +750,6 @@ fn fail_owner_account_does_not_exist() {
         &owner_ata_address,
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -883,10 +809,7 @@ fn fail_wrong_spl_token_program() {
     let wallet = Keypair::new();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.push((
-        wallet.pubkey(),
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet.pubkey(), 1_000_000)]);
     let (mint, mint_authority) = create_mint_mollusk(
         &mollusk,
         &mut accounts,
@@ -900,7 +823,6 @@ fn fail_wrong_spl_token_program() {
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -909,7 +831,6 @@ fn fail_wrong_spl_token_program() {
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     // Ensure all derived ATA accounts are provided to Mollusk
@@ -957,16 +878,10 @@ fn fail_destination_not_wallet_ata() {
     let wrong_wallet = Pubkey::new_unique();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.extend([
-        (
-            wallet.pubkey(),
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-        (
-            wrong_wallet,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-    ]);
+    ensure_system_accounts_with_lamports(
+        &mut accounts,
+        &[(wallet.pubkey(), 1_000_000), (wrong_wallet, 1_000_000)],
+    );
     let (mint, mint_authority) = create_mint_mollusk(
         &mollusk,
         &mut accounts,
@@ -980,7 +895,6 @@ fn fail_destination_not_wallet_ata() {
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -989,7 +903,6 @@ fn fail_destination_not_wallet_ata() {
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
     let (wrong_destination_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
@@ -998,7 +911,6 @@ fn fail_destination_not_wallet_ata() {
         &wrong_wallet,
         &mint,
         &spl_token_2022_interface::id(),
-        CreateAtaOptions::default(),
     );
 
     let mut recover_instruction = instruction::recover_nested(

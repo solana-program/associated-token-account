@@ -278,6 +278,17 @@ pub fn ensure_system_account_exists(
     }
 }
 
+/// Ensures multiple system accounts exist with the provided lamport values.
+/// Each tuple is `(pubkey, lamports)`.
+pub fn ensure_system_accounts_with_lamports(
+    accounts: &mut Vec<(Pubkey, Account)>,
+    entries: &[(Pubkey, u64)],
+) {
+    for (address, lamports) in entries.iter().copied() {
+        ensure_system_account_exists(accounts, address, lamports);
+    }
+}
+
 /// Processes an instruction with Mollusk and merges resulting account updates back into `accounts`.
 /// Returns the `ProgramResult` from the execution for assertions.
 pub fn process_and_merge_instruction(
@@ -300,16 +311,15 @@ pub fn process_and_merge_instruction(
     result.program_result
 }
 
-/// Options to control ATA creation helper behavior.
-#[derive(Default, Clone, Copy)]
-pub struct CreateAtaOptions {
-    /// If set, creates the placeholder system account with this lamports amount.
-    /// If `skip_placeholder` is true, this is ignored.
-    pub placeholder_lamports: Option<u64>,
-    /// If true, do not create a placeholder system account before calling the program.
-    pub skip_placeholder: bool,
-    /// If true, send legacy-style empty instruction data.
-    pub legacy_empty_data: bool,
+/// Returns a cloned `Account` for the given `pubkey` from the in-memory `accounts` list.
+/// Panics with a clear message if the account is not present.
+pub fn get_account(accounts: &[(Pubkey, Account)], pubkey: Pubkey) -> Account {
+    accounts
+        .iter()
+        .find(|(pk, _)| *pk == pubkey)
+        .expect("account not found")
+        .1
+        .clone()
 }
 
 /// Creates an associated token account via the ATA program and merges account updates.
@@ -321,17 +331,14 @@ pub fn create_associated_token_account_mollusk(
     owner: &Pubkey,
     mint: &Pubkey,
     token_program: &Pubkey,
-    options: CreateAtaOptions,
 ) -> (Pubkey, ProgramResult) {
     let ata_address = get_associated_token_address_with_program_id(owner, mint, token_program);
 
     // Ensure the provided owner (wallet) account exists in the accounts list for Mollusk metas
     ensure_system_account_exists(accounts, *owner, 0);
 
-    if !options.skip_placeholder {
-        let lamports = options.placeholder_lamports.unwrap_or(0);
-        ensure_system_account_exists(accounts, ata_address, lamports);
-    }
+    // Ensure placeholder system account for ATA address
+    ensure_system_account_exists(accounts, ata_address, 0);
 
     let mut instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
@@ -345,9 +352,38 @@ pub fn create_associated_token_account_mollusk(
             account_len: None,
         },
     );
-    if options.legacy_empty_data {
-        instruction.data = Vec::new();
-    }
+
+    let pr = process_and_merge_instruction(mollusk, &instruction, accounts);
+    (ata_address, pr)
+}
+
+/// Legacy variant: creates ATA using empty instruction data (deprecated path).
+pub fn create_associated_token_account_legacy_mollusk(
+    mollusk: &Mollusk,
+    accounts: &mut Vec<(Pubkey, Account)>,
+    payer: &Keypair,
+    owner: &Pubkey,
+    mint: &Pubkey,
+    token_program: &Pubkey,
+) -> (Pubkey, ProgramResult) {
+    let ata_address = get_associated_token_address_with_program_id(owner, mint, token_program);
+
+    ensure_system_account_exists(accounts, *owner, 0);
+    ensure_system_account_exists(accounts, ata_address, 0);
+
+    let mut instruction = build_create_ata_instruction(
+        spl_associated_token_account::id(),
+        payer.pubkey(),
+        ata_address,
+        *owner,
+        *mint,
+        *token_program,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
+    );
+    instruction.data = Vec::new();
 
     let pr = process_and_merge_instruction(mollusk, &instruction, accounts);
     (ata_address, pr)

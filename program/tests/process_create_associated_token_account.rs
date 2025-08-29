@@ -4,8 +4,8 @@ use {
     crate::utils::{
         account_builder, build_create_ata_instruction,
         build_create_ata_instruction_with_system_account, create_mollusk_base_accounts_with_token,
-        ensure_system_account_exists, process_and_merge_instruction, setup_mollusk_with_programs,
-        CreateAtaInstructionType,
+        ensure_system_account_exists, ensure_system_accounts_with_lamports, get_account,
+        process_and_merge_instruction, setup_mollusk_with_programs, CreateAtaInstructionType,
     },
     mollusk_svm::result::ProgramResult,
     solana_program::{instruction::*, sysvar},
@@ -36,10 +36,7 @@ async fn test_associated_token_address() {
         token_mint_address,
         account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
     ));
-    accounts.push((
-        wallet_address,
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
 
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
@@ -65,12 +62,7 @@ async fn test_associated_token_address() {
     assert!(matches!(pr, ProgramResult::Success));
 
     // Associated account now exists
-    let associated_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address)
-        .expect("associated_account not none")
-        .1
-        .clone();
+    let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len,);
     assert_eq!(associated_account.owner, spl_token_2022_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
@@ -134,12 +126,7 @@ async fn test_create_with_fewer_lamports() {
     assert!(matches!(pr, ProgramResult::Success));
 
     // Verify the created account has the correct balance (program should add extra lamports)
-    let created_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address)
-        .expect("ATA should be created")
-        .1
-        .clone();
+    let created_account = get_account(&accounts, associated_token_address);
 
     assert_eq!(created_account.lamports, expected_token_account_balance);
     assert_eq!(created_account.owner, spl_token_2022_interface::id());
@@ -192,12 +179,7 @@ async fn test_create_with_excess_lamports() {
     );
     let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
     assert!(matches!(pr, ProgramResult::Success));
-    let created_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address)
-        .expect("ATA should be created")
-        .1
-        .clone();
+    let created_account = get_account(&accounts, associated_token_address);
     assert_eq!(
         (created_account.lamports, created_account.owner),
         (excess_lamports, spl_token_2022_interface::id())

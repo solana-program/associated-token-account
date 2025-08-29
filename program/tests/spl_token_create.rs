@@ -17,16 +17,11 @@ async fn success_create() {
     let mollusk = setup_mollusk_with_programs(&spl_token_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
     let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
-    accounts.extend([
-        (
-            token_mint_address,
-            account_builder::AccountBuilder::mint(6, &payer.pubkey()),
-        ),
-        (
-            wallet_address,
-            account_builder::AccountBuilder::system_account(1_000_000),
-        ),
-    ]);
+    accounts.push((
+        token_mint_address,
+        account_builder::AccountBuilder::mint(6, &payer.pubkey()),
+    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
     // Ensure the derived ATA exists as a placeholder system account for Mollusk
     ensure_system_account_exists(&mut accounts, associated_token_address, 0);
     let expected_token_account_len = Account::LEN;
@@ -47,12 +42,7 @@ async fn success_create() {
     );
     let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
     assert!(pr.is_ok());
-    let associated_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address)
-        .expect("associated_account not none")
-        .1
-        .clone();
+    let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
@@ -74,10 +64,7 @@ async fn success_using_deprecated_instruction_creator() {
         token_mint_address,
         account_builder::AccountBuilder::mint(6, &payer.pubkey()),
     ));
-    accounts.push((
-        wallet_address,
-        account_builder::AccountBuilder::system_account(1_000_000),
-    ));
+    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
     // Ensure the derived ATA exists as a placeholder system account for Mollusk
     ensure_system_account_exists(&mut accounts, associated_token_address, 0);
 
@@ -102,12 +89,7 @@ async fn success_using_deprecated_instruction_creator() {
 
     let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
     assert!(pr.is_ok());
-    let associated_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address)
-        .expect("associated_account not none")
-        .1
-        .clone();
+    let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);

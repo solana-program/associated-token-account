@@ -311,8 +311,40 @@ pub fn process_and_merge_instruction(
     result.program_result
 }
 
+/// Process and validate an instruction, then merge resulting account updates into `accounts`.
+/// Returns the full `InstructionResult` for optional further inspection.
+#[allow(dead_code, reason = "exported for benchmarking consumers")]
+pub fn process_and_validate_then_merge(
+    mollusk: &Mollusk,
+    instruction: &Instruction,
+    accounts: &mut Vec<(Pubkey, Account)>,
+    checks: &[mollusk_svm::result::Check],
+) -> mollusk_svm::result::InstructionResult {
+    let result = mollusk.process_and_validate_instruction(instruction, accounts, checks);
+    merge_resulting_accounts(accounts, &result);
+    result
+}
+
+/// Merge resulting accounts from a Mollusk `InstructionResult` back into the in-memory `accounts` list.
+#[allow(dead_code, reason = "exported for benchmarking consumers")]
+pub fn merge_resulting_accounts(
+    accounts: &mut Vec<(Pubkey, Account)>,
+    result: &mollusk_svm::result::InstructionResult,
+) {
+    for (updated_pubkey, updated_account) in result.resulting_accounts.clone().into_iter() {
+        if let Some((_, existing_account)) =
+            accounts.iter_mut().find(|(pk, _)| *pk == updated_pubkey)
+        {
+            *existing_account = updated_account;
+        } else {
+            accounts.push((updated_pubkey, updated_account));
+        }
+    }
+}
+
 /// Returns a cloned `Account` for the given `pubkey` from the in-memory `accounts` list.
 /// Panics with a clear message if the account is not present.
+#[allow(dead_code, reason = "exported for benchmarking consumers")]
 pub fn get_account(accounts: &[(Pubkey, Account)], pubkey: Pubkey) -> Account {
     accounts
         .iter()

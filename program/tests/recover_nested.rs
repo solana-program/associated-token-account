@@ -65,20 +65,30 @@ fn try_recover_nested_mollusk(
 
     // mint to nested account
     let amount = 100;
-    // Mint tokens into nested account and merge updates
-    let mollusk_result = mint_to_and_merge(
-        mollusk,
-        accounts,
-        program_id,
-        &nested_mint,
-        &nested_associated_token_address,
-        &nested_mint_authority.pubkey(),
-        amount,
-    );
-    assert!(matches!(
-        mollusk_result,
-        mollusk_svm::result::ProgramResult::Success
-    ));
+    let mint_to_ix = if *program_id == spl_token_interface::id() {
+        spl_token_interface::instruction::mint_to(
+            program_id,
+            &nested_mint,
+            &nested_associated_token_address,
+            &nested_mint_authority.pubkey(),
+            &[],
+            amount,
+        )
+        .unwrap()
+    } else if *program_id == spl_token_2022_interface::id() {
+        spl_token_2022_interface::instruction::mint_to(
+            program_id,
+            &nested_mint,
+            &nested_associated_token_address,
+            &nested_mint_authority.pubkey(),
+            &[],
+            amount,
+        )
+        .unwrap()
+    } else {
+        panic!("Unsupported token program id: {}", program_id);
+    };
+    process_and_validate_then_merge(mollusk, &mint_to_ix, accounts, &[Check::success()]);
 
     // transfer / close nested account
     if let Some(expected_error) = expected_error {
@@ -88,24 +98,32 @@ fn try_recover_nested_mollusk(
             &[Check::err(expected_error)],
         );
     } else {
-        let mollusk_result = process_and_merge_instruction(mollusk, &recover_instruction, accounts);
-        assert!(matches!(
-            mollusk_result,
-            mollusk_svm::result::ProgramResult::Success
-        ));
+        process_and_validate_then_merge(
+            mollusk,
+            &recover_instruction,
+            accounts,
+            &[Check::success()],
+        );
         let destination_account = get_account(accounts, destination_token_address);
 
         // Calculate rent for assertions
         let rent = solana_sdk::rent::Rent::default();
 
         // Assert destination ATA is properly set up as a token account
-        assert_eq!(destination_account.owner, *program_id);
-        let destination_ata_rent = rent.minimum_balance(destination_account.data.len());
-        assert!(
-            destination_account.lamports >= destination_ata_rent,
-            "Destination ATA should be rent-exempt: {} >= {}",
-            destination_account.lamports,
-            destination_ata_rent
+        mollusk_svm::result::InstructionResult {
+            resulting_accounts: vec![(destination_token_address, destination_account.clone())],
+            ..Default::default()
+        }
+        .run_checks::<mollusk_svm::Mollusk>(
+            &[Check::account(&destination_token_address)
+                .owner(program_id)
+                .rent_exempt()
+                .build()],
+            &mollusk_svm::result::config::Config {
+                panic: true,
+                verbose: true,
+            },
+            mollusk,
         );
 
         let destination_state =

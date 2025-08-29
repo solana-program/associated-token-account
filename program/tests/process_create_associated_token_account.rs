@@ -4,10 +4,10 @@ use {
     crate::utils::{
         account_builder, build_create_ata_instruction,
         build_create_ata_instruction_with_system_account, create_mollusk_base_accounts_with_token,
-        ensure_system_account_exists, ensure_system_accounts_with_lamports, get_account,
-        process_and_merge_instruction, setup_mollusk_with_programs, CreateAtaInstructionType,
+        ensure_system_account_exists, ensure_system_accounts_with_lamports,
+        setup_mollusk_with_programs, CreateAtaInstructionType,
     },
-    mollusk_svm::result::ProgramResult,
+    mollusk_svm::result::Check,
     solana_program::{instruction::*, sysvar},
     solana_program_test::tokio,
     solana_pubkey::Pubkey,
@@ -58,14 +58,18 @@ async fn test_associated_token_address() {
         },
     );
 
-    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Success));
-
-    // Associated account now exists
-    let associated_account = get_account(&accounts, associated_token_address);
-    assert_eq!(associated_account.data.len(), expected_token_account_len,);
-    assert_eq!(associated_account.owner, spl_token_2022_interface::id());
-    assert_eq!(associated_account.lamports, expected_token_account_balance);
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &accounts,
+        &[
+            Check::success(),
+            Check::account(&associated_token_address)
+                .space(expected_token_account_len)
+                .owner(&spl_token_2022_interface::id())
+                .lamports(expected_token_account_balance)
+                .build(),
+        ],
+    );
 }
 
 #[tokio::test]
@@ -122,14 +126,17 @@ async fn test_create_with_fewer_lamports() {
         },
     );
 
-    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Success));
-
-    // Verify the created account has the correct balance (program should add extra lamports)
-    let created_account = get_account(&accounts, associated_token_address);
-
-    assert_eq!(created_account.lamports, expected_token_account_balance);
-    assert_eq!(created_account.owner, spl_token_2022_interface::id());
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &accounts,
+        &[
+            Check::success(),
+            Check::account(&associated_token_address)
+                .lamports(expected_token_account_balance)
+                .owner(&spl_token_2022_interface::id())
+                .build(),
+        ],
+    );
 }
 
 #[tokio::test]
@@ -177,12 +184,16 @@ async fn test_create_with_excess_lamports() {
             account_len: None,
         },
     );
-    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Success));
-    let created_account = get_account(&accounts, associated_token_address);
-    assert_eq!(
-        (created_account.lamports, created_account.owner),
-        (excess_lamports, spl_token_2022_interface::id())
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &accounts,
+        &[
+            Check::success(),
+            Check::account(&associated_token_address)
+                .lamports(excess_lamports)
+                .owner(&spl_token_2022_interface::id())
+                .build(),
+        ],
     );
 }
 
@@ -245,10 +256,10 @@ async fn test_create_account_mismatch() {
         } else {
             AccountMeta::new_readonly(Pubkey::default(), false)
         }; // <-- {comment}
-        let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-        assert_eq!(
-            mollusk_result,
-            ProgramResult::Failure(ProgramError::InvalidSeeds)
+        mollusk.process_and_validate_instruction(
+            &instruction,
+            &accounts,
+            &[Check::err(ProgramError::InvalidSeeds)],
         );
     }
 }
@@ -305,15 +316,16 @@ async fn test_create_associated_token_account_using_legacy_implicit_instruction(
     instruction
         .accounts
         .push(AccountMeta::new_readonly(sysvar::rent::id(), false));
-    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Success));
-    let associated_account = accounts
-        .iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address)
-        .expect("associated_account not none")
-        .1
-        .clone();
-    assert_eq!(associated_account.data.len(), expected_token_account_len);
-    assert_eq!(associated_account.owner, spl_token_2022_interface::id());
-    assert_eq!(associated_account.lamports, expected_token_account_balance);
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &accounts,
+        &[
+            Check::success(),
+            Check::account(&associated_token_address)
+                .space(expected_token_account_len)
+                .owner(&spl_token_2022_interface::id())
+                .lamports(expected_token_account_balance)
+                .build(),
+        ],
+    );
 }

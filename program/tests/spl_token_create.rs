@@ -2,7 +2,8 @@ mod utils;
 
 use solana_program_test::tokio;
 use {
-    solana_program_pack::Pack, solana_pubkey::Pubkey, solana_sdk::signature::Signer,
+    mollusk_svm::result::Check, solana_program_pack::Pack, solana_pubkey::Pubkey,
+    solana_sdk::signature::Signer,
     spl_associated_token_account_interface::address::get_associated_token_address,
     spl_token_interface::state::Account, utils::*,
 };
@@ -40,12 +41,18 @@ async fn success_create() {
             account_len: None,
         },
     );
-    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(mollusk_result.is_ok());
-    let associated_account = get_account(&accounts, associated_token_address);
-    assert_eq!(associated_account.data.len(), expected_token_account_len);
-    assert_eq!(associated_account.owner, spl_token_interface::id());
-    assert_eq!(associated_account.lamports, expected_token_account_balance);
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &accounts,
+        &[
+            Check::success(),
+            Check::account(&associated_token_address)
+                .space(expected_token_account_len)
+                .owner(&spl_token_interface::id())
+                .lamports(expected_token_account_balance)
+                .build(),
+        ],
+    );
 }
 
 #[tokio::test]
@@ -87,10 +94,16 @@ async fn success_using_deprecated_instruction_creator() {
     );
     instruction.data = vec![]; // Legacy deprecated instruction had empty data
 
-    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(mollusk_result.is_ok());
-    let associated_account = get_account(&accounts, associated_token_address);
-    assert_eq!(associated_account.data.len(), expected_token_account_len);
-    assert_eq!(associated_account.owner, spl_token_interface::id());
-    assert_eq!(associated_account.lamports, expected_token_account_balance);
+    mollusk.process_and_validate_instruction(
+        &instruction,
+        &accounts,
+        &[
+            Check::success(),
+            Check::account(&associated_token_address)
+                .space(expected_token_account_len)
+                .owner(&spl_token_interface::id())
+                .lamports(expected_token_account_balance)
+                .build(),
+        ],
+    );
 }

@@ -1,7 +1,7 @@
 mod utils;
 
 use {
-    mollusk_svm::result::ProgramResult,
+    mollusk_svm::result::Check,
     solana_program_test::tokio,
     solana_pubkey::Pubkey,
     solana_sdk::{
@@ -54,8 +54,12 @@ async fn test_associated_token_account_with_transfer_fees() {
         space as u64,
         &spl_token_2022_interface::id(),
     );
-    let mollusk_result = process_and_merge_instruction(&mollusk, &create_mint_ix, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Success));
+    process_and_validate_then_merge(
+        &mollusk,
+        &create_mint_ix,
+        &mut accounts,
+        &[Check::success()],
+    );
 
     // Initialize transfer fee config
     let init_fee_ix = transfer_fee::instruction::initialize_transfer_fee_config(
@@ -67,8 +71,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         maximum_fee,
     )
     .unwrap();
-    let mollusk_result = process_and_merge_instruction(&mollusk, &init_fee_ix, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Success));
+    process_and_validate_then_merge(&mollusk, &init_fee_ix, &mut accounts, &[Check::success()]);
 
     // Initialize mint
     let init_mint_ix = spl_token_2022_interface::instruction::initialize_mint(
@@ -79,42 +82,73 @@ async fn test_associated_token_account_with_transfer_fees() {
         0,
     )
     .unwrap();
-    let mollusk_result = process_and_merge_instruction(&mollusk, &init_mint_ix, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Success));
+    process_and_validate_then_merge(&mollusk, &init_mint_ix, &mut accounts, &[Check::success()]);
 
     // create extended ATAs (sender)
-    let (associated_token_address_sender, pr) = create_associated_token_account_mollusk(
-        &mollusk,
-        &mut accounts,
-        &payer,
+    let associated_token_address_sender = spl_associated_token_account_interface::address::get_associated_token_address_with_program_id(
         &wallet_address_sender,
         &token_mint_address,
         &spl_token_2022_interface::id(),
     );
-    assert!(matches!(pr, ProgramResult::Success));
-
-    let (associated_token_address_receiver, pr) = create_associated_token_account_mollusk(
-        &mollusk,
+    ensure_system_account_exists(&mut accounts, associated_token_address_sender, 0);
+    let create_sender_ata_ix = build_create_ata_instruction_with_system_account(
         &mut accounts,
-        &payer,
+        spl_associated_token_account::id(),
+        payer.pubkey(),
+        associated_token_address_sender,
+        wallet_address_sender,
+        token_mint_address,
+        spl_token_2022_interface::id(),
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
+    );
+    process_and_validate_then_merge(
+        &mollusk,
+        &create_sender_ata_ix,
+        &mut accounts,
+        &[Check::success()],
+    );
+
+    let associated_token_address_receiver = spl_associated_token_account_interface::address::get_associated_token_address_with_program_id(
         &wallet_address_receiver,
         &token_mint_address,
         &spl_token_2022_interface::id(),
     );
-    assert!(matches!(pr, ProgramResult::Success));
+    ensure_system_account_exists(&mut accounts, associated_token_address_receiver, 0);
+    let create_receiver_ata_ix = build_create_ata_instruction_with_system_account(
+        &mut accounts,
+        spl_associated_token_account::id(),
+        payer.pubkey(),
+        associated_token_address_receiver,
+        wallet_address_receiver,
+        token_mint_address,
+        spl_token_2022_interface::id(),
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
+    );
+    process_and_validate_then_merge(
+        &mollusk,
+        &create_receiver_ata_ix,
+        &mut accounts,
+        &[Check::success()],
+    );
 
     // mint tokens
     let sender_amount = 50 * maximum_fee;
-    let mollusk_result = mint_to_and_merge(
-        &mollusk,
-        &mut accounts,
+    let mint_to_ix = spl_token_2022_interface::instruction::mint_to(
         &spl_token_2022_interface::id(),
         &token_mint_address,
         &associated_token_address_sender,
         &mint_authority.pubkey(),
+        &[],
         sender_amount,
-    );
-    assert!(matches!(mollusk_result, ProgramResult::Success));
+    )
+    .unwrap();
+    process_and_validate_then_merge(&mollusk, &mint_to_ix, &mut accounts, &[Check::success()]);
 
     // not enough tokens
     let insufficient_transfer_ix = transfer_fee::instruction::transfer_checked_with_fee(
@@ -129,14 +163,12 @@ async fn test_associated_token_account_with_transfer_fees() {
         maximum_fee,
     )
     .unwrap();
-    let mollusk_result =
-        process_and_merge_instruction(&mollusk, &insufficient_transfer_ix, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Failure(_)));
-    assert_eq!(
-        mollusk_result,
-        ProgramResult::Failure(ProgramError::Custom(
+    mollusk.process_and_validate_instruction(
+        &insufficient_transfer_ix,
+        &accounts,
+        &[Check::err(ProgramError::Custom(
             spl_token_2022_interface::error::TokenError::InsufficientFunds as u32,
-        ))
+        ))],
     );
 
     // success
@@ -154,8 +186,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         fee,
     )
     .unwrap();
-    let mollusk_result = process_and_merge_instruction(&mollusk, &transfer_ix, &mut accounts);
-    assert!(matches!(mollusk_result, ProgramResult::Success));
+    process_and_validate_then_merge(&mollusk, &transfer_ix, &mut accounts, &[Check::success()]);
 
     // Verify final account states by reading from updated accounts
     let sender_account = get_account(&accounts, associated_token_address_sender);

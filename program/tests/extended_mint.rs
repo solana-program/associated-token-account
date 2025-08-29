@@ -97,10 +97,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         &spl_token_2022_interface::id(),
     );
     // Provide placeholder for sender ATA so Mollusk can write it
-    accounts.push((
-        associated_token_address_sender,
-        solana_sdk::account::Account::new(0, 0, &solana_system_interface::program::id()),
-    ));
+    ensure_system_account_exists(&mut accounts, associated_token_address_sender, 0);
     let create_ata_sender_ix = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
@@ -122,10 +119,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         &spl_token_2022_interface::id(),
     );
     // Provide placeholder for receiver ATA so Mollusk can write it
-    accounts.push((
-        associated_token_address_receiver,
-        solana_sdk::account::Account::new(0, 0, &solana_system_interface::program::id()),
-    ));
+    ensure_system_account_exists(&mut accounts, associated_token_address_receiver, 0);
     let create_ata_receiver_ix = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),

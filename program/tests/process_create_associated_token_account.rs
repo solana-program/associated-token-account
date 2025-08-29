@@ -4,7 +4,8 @@ use {
     crate::utils::{
         account_builder, build_create_ata_instruction,
         build_create_ata_instruction_with_system_account, create_mollusk_base_accounts_with_token,
-        process_and_merge_instruction, setup_mollusk_with_programs, CreateAtaInstructionType,
+        ensure_system_account_exists, process_and_merge_instruction, setup_mollusk_with_programs,
+        CreateAtaInstructionType,
     },
     mollusk_svm::result::ProgramResult,
     solana_program::{instruction::*, sysvar},
@@ -108,14 +109,11 @@ async fn test_create_with_fewer_lamports() {
 
     // Pre-fund the ATA address with insufficient lamports (only enough for 0 data)
     let insufficient_lamports = 890880; // rent-exempt for 0 data but not for token account
-    accounts.push((
+    ensure_system_account_exists(
+        &mut accounts,
         associated_token_address,
-        solana_sdk::account::Account::new(
-            insufficient_lamports,
-            0,
-            &solana_system_interface::program::id(),
-        ),
-    ));
+        insufficient_lamports,
+    );
 
     // Check that the program adds the extra lamports
     let instruction = build_create_ata_instruction_with_system_account(
@@ -177,14 +175,7 @@ async fn test_create_with_excess_lamports() {
     let expected_token_account_balance =
         solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
     let excess_lamports = expected_token_account_balance + 1;
-    accounts.push((
-        associated_token_address,
-        solana_sdk::account::Account::new(
-            excess_lamports,
-            0,
-            &solana_system_interface::program::id(),
-        ),
-    ));
+    ensure_system_account_exists(&mut accounts, associated_token_address, excess_lamports);
 
     // This test provides its own ATA account with excess lamports, so use raw instruction
     let instruction = build_create_ata_instruction(
@@ -244,10 +235,7 @@ async fn test_create_account_mismatch() {
         &token_mint_address,
         &spl_token_2022_interface::id(),
     );
-    accounts.push((
-        associated_token_address,
-        account_builder::AccountBuilder::system_account(0),
-    ));
+    ensure_system_account_exists(&mut accounts, associated_token_address, 0);
 
     for (account_idx, _comment) in [
         (1, "Invalid associated_account_address"),

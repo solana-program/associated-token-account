@@ -28,7 +28,7 @@ async fn success_create() {
         ),
     ]);
     // Ensure the derived ATA exists as a placeholder system account for Mollusk
-    ensure_ata_system_account_exists(&mut accounts, associated_token_address);
+    ensure_system_account_exists(&mut accounts, associated_token_address, 0);
     let expected_token_account_len = Account::LEN;
     let expected_token_account_balance =
         solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
@@ -79,7 +79,7 @@ async fn success_using_deprecated_instruction_creator() {
         account_builder::AccountBuilder::system_account(1_000_000),
     ));
     // Ensure the derived ATA exists as a placeholder system account for Mollusk
-    ensure_ata_system_account_exists(&mut accounts, associated_token_address);
+    ensure_system_account_exists(&mut accounts, associated_token_address, 0);
 
     let expected_token_account_len = Account::LEN;
     let expected_token_account_balance =

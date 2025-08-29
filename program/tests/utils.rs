@@ -265,17 +265,15 @@ fn update_account_from_result(
     }
 }
 
-/// Ensures the derived ATA address exists as a system account in the accounts list
-/// This is required by Mollusk since the ATA program expects to write to this address
-/// The program will convert this system account into a token account during execution
-pub fn ensure_ata_system_account_exists(
+/// Ensures a given `address` exists as a system account with the specified `lamports`.
+/// If an account for `address` already exists, it is left unchanged.
+pub fn ensure_system_account_exists(
     accounts: &mut Vec<(Pubkey, Account)>,
-    ata_address: Pubkey,
+    address: Pubkey,
+    lamports: u64,
 ) {
-    // Check if ATA account already exists in the accounts list
-    if !accounts.iter().any(|(pubkey, _)| *pubkey == ata_address) {
-        // Add system account at the derived ATA address (program expects system ownership initially)
-        accounts.push((ata_address, Account::new(0, 0, &system_program::id())));
+    if !accounts.iter().any(|(pubkey, _)| *pubkey == address) {
+        accounts.push((address, Account::new(lamports, 0, &system_program::id())));
     }
 }
 
@@ -316,7 +314,7 @@ pub fn build_create_ata_instruction_with_system_account(
     instruction_type: CreateAtaInstructionType,
 ) -> Instruction {
     // Ensure the derived ATA address exists as a system account (as the program expects)
-    ensure_ata_system_account_exists(accounts, ata_address);
+    ensure_system_account_exists(accounts, ata_address, 0);
 
     // Build the instruction
     build_create_ata_instruction(

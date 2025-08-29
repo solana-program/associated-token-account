@@ -96,9 +96,7 @@ fn create_associated_token_account_mollusk(
 
     // Ensure the provided owner (wallet) account exists in the accounts list.
     // Mollusk requires every AccountMeta in the instruction to have a backing Account entry.
-    if !accounts.iter().any(|(pubkey, _)| *pubkey == *owner) {
-        accounts.push((*owner, account_builder::AccountBuilder::system_account(0)));
-    }
+    ensure_system_account_exists(accounts, *owner, 0);
 
     let instruction = build_create_ata_instruction_with_system_account(
         accounts,

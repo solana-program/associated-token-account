@@ -8,7 +8,6 @@ use {
         program_error::ProgramError, rent::Rent, signature::Signer, signer::keypair::Keypair,
     },
     solana_system_interface::instruction as system_instruction,
-    spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{
         extension::{
             transfer_fee, BaseStateWithExtensions, ExtensionType, StateWithExtensionsOwned,
@@ -90,63 +89,40 @@ async fn test_associated_token_account_with_transfer_fees() {
     let pr = process_and_merge_instruction(&mollusk, &init_mint_ix, &mut accounts);
     assert!(matches!(pr, ProgramResult::Success));
 
-    // create extended ATAs
-    let associated_token_address_sender = get_associated_token_address_with_program_id(
+    // create extended ATAs (sender)
+    let (associated_token_address_sender, pr) = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
         &wallet_address_sender,
         &token_mint_address,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    // Provide placeholder for sender ATA so Mollusk can write it
-    ensure_system_account_exists(&mut accounts, associated_token_address_sender, 0);
-    let create_ata_sender_ix = build_create_ata_instruction(
-        spl_associated_token_account::id(),
-        payer.pubkey(),
-        associated_token_address_sender,
-        wallet_address_sender,
-        token_mint_address,
-        spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
-    );
-    let pr = process_and_merge_instruction(&mollusk, &create_ata_sender_ix, &mut accounts);
     assert!(matches!(pr, ProgramResult::Success));
 
-    let associated_token_address_receiver = get_associated_token_address_with_program_id(
+    let (associated_token_address_receiver, pr) = create_associated_token_account_mollusk(
+        &mollusk,
+        &mut accounts,
+        &payer,
         &wallet_address_receiver,
         &token_mint_address,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    // Provide placeholder for receiver ATA so Mollusk can write it
-    ensure_system_account_exists(&mut accounts, associated_token_address_receiver, 0);
-    let create_ata_receiver_ix = build_create_ata_instruction(
-        spl_associated_token_account::id(),
-        payer.pubkey(),
-        associated_token_address_receiver,
-        wallet_address_receiver,
-        token_mint_address,
-        spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
-    );
-    let pr = process_and_merge_instruction(&mollusk, &create_ata_receiver_ix, &mut accounts);
     assert!(matches!(pr, ProgramResult::Success));
 
     // mint tokens
     let sender_amount = 50 * maximum_fee;
-    let mint_to_ix = spl_token_2022_interface::instruction::mint_to(
+    let pr = mint_to_and_merge(
+        &mollusk,
+        &mut accounts,
         &spl_token_2022_interface::id(),
         &token_mint_address,
         &associated_token_address_sender,
         &mint_authority.pubkey(),
-        &[],
         sender_amount,
-    )
-    .unwrap();
-    let pr = process_and_merge_instruction(&mollusk, &mint_to_ix, &mut accounts);
+    );
     assert!(matches!(pr, ProgramResult::Success));
 
     // not enough tokens

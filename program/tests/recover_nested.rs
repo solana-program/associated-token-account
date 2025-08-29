@@ -18,45 +18,7 @@ use {
 };
 
 /// Ensure all accounts required by a recover_nested instruction are provided to Mollusk
-fn ensure_recover_nested_accounts(
-    accounts: &mut Vec<(Pubkey, Account)>,
-    wallet_address: &Pubkey,
-    nested_token_mint_address: &Pubkey,
-    owner_token_mint_address: &Pubkey,
-    token_program: &Pubkey,
-) {
-    // The recover_nested instruction derives these addresses internally:
-    // 1. owner_associated_account_address (wallet's ATA for owner mint)
-    let owner_ata = get_associated_token_address_with_program_id(
-        wallet_address,
-        owner_token_mint_address,
-        token_program,
-    );
-
-    // 2. destination_associated_account_address (wallet's ATA for nested mint)
-    let destination_ata = get_associated_token_address_with_program_id(
-        wallet_address,
-        nested_token_mint_address,
-        token_program,
-    );
-
-    // 3. nested_associated_account_address (owner_ata's ATA for nested mint)
-    let nested_ata = get_associated_token_address_with_program_id(
-        &owner_ata,
-        nested_token_mint_address,
-        token_program,
-    );
-
-    // Ensure all derived addresses are present as system accounts
-    for ata_address in [owner_ata, destination_ata, nested_ata] {
-        if !accounts.iter().any(|(pubkey, _)| *pubkey == ata_address) {
-            accounts.push((
-                ata_address,
-                account_builder::AccountBuilder::system_account(0),
-            ));
-        }
-    }
-}
+// moved to utils::ensure_recover_nested_accounts
 
 fn create_mint_mollusk(
     mollusk: &mollusk_svm::Mollusk,
@@ -84,52 +46,7 @@ fn create_mint_mollusk(
     (mint_account.pubkey(), mint_authority)
 }
 
-fn create_associated_token_account_mollusk(
-    mollusk: &mollusk_svm::Mollusk,
-    accounts: &mut Vec<(Pubkey, Account)>,
-    payer: &Keypair,
-    owner: &Pubkey,
-    mint: &Pubkey,
-    program_id: &Pubkey,
-) -> Pubkey {
-    let ata_address = get_associated_token_address_with_program_id(owner, mint, program_id);
-
-    // Ensure the provided owner (wallet) account exists in the accounts list.
-    // Mollusk requires every AccountMeta in the instruction to have a backing Account entry.
-    ensure_system_account_exists(accounts, *owner, 0);
-
-    let instruction = build_create_ata_instruction_with_system_account(
-        accounts,
-        spl_associated_token_account::id(),
-        payer.pubkey(),
-        ata_address,
-        *owner,
-        *mint,
-        *program_id,
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
-    );
-    let result = mollusk.process_instruction(&instruction, accounts);
-    if !result.program_result.is_ok() {
-        panic!("ATA creation failed: {:?}", result.program_result);
-    }
-    if let Some((_, account)) = result
-        .resulting_accounts
-        .into_iter()
-        .find(|(pubkey, _)| *pubkey == ata_address)
-    {
-        // Update the existing account in the accounts list instead of pushing a duplicate
-        if let Some((_, existing_account)) = accounts
-            .iter_mut()
-            .find(|(pubkey, _)| *pubkey == ata_address)
-        {
-            *existing_account = account;
-        }
-    }
-    ata_address
-}
+// replaced by utils::create_associated_token_account_mollusk
 
 #[allow(clippy::too_many_arguments)]
 fn try_recover_nested_mollusk(
@@ -152,16 +69,16 @@ fn try_recover_nested_mollusk(
 
     // mint to nested account
     let amount = 100;
-    let mint_to_ix = spl_token_2022_interface::instruction::mint_to(
+    // Mint tokens into nested account and merge updates
+    let pr = mint_to_and_merge(
+        mollusk,
+        accounts,
         program_id,
         &nested_mint,
         &nested_associated_token_address,
         &nested_mint_authority.pubkey(),
-        &[],
         amount,
-    )
-    .unwrap();
-    let pr = process_and_merge_instruction(mollusk, &mint_to_ix, accounts);
+    );
     assert!(matches!(pr, mollusk_svm::result::ProgramResult::Success));
 
     // transfer / close nested account
@@ -236,21 +153,23 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
     ));
 
     let (mint, mint_authority) = create_mint_mollusk(&mollusk, &mut accounts, &payer, program_id);
-    let owner_associated_token_address = create_associated_token_account_mollusk(
+    let (owner_associated_token_address, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         program_id,
+        CreateAtaOptions::default(),
     );
-    let nested_associated_token_address = create_associated_token_account_mollusk(
+    let (nested_associated_token_address, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_associated_token_address,
         &mint,
         program_id,
+        CreateAtaOptions::default(),
     );
     // Create destination ATA (wallet's ATA for the mint) - this is the same as owner_associated_token_address for same mint case
     let destination_token_address = owner_associated_token_address;
@@ -295,29 +214,32 @@ fn check_different_mints_mollusk(program_id: &Pubkey) {
         create_mint_mollusk(&mollusk, &mut accounts, &payer, program_id);
     let (nested_mint, nested_mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, program_id);
-    let owner_associated_token_address = create_associated_token_account_mollusk(
+    let (owner_associated_token_address, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &owner_mint,
         program_id,
+        CreateAtaOptions::default(),
     );
-    let nested_associated_token_address = create_associated_token_account_mollusk(
+    let (nested_associated_token_address, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_associated_token_address,
         &nested_mint,
         program_id,
+        CreateAtaOptions::default(),
     );
-    let destination_token_address = create_associated_token_account_mollusk(
+    let (destination_token_address, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &nested_mint,
         program_id,
+        CreateAtaOptions::default(),
     );
 
     let recover_instruction =
@@ -364,21 +286,23 @@ fn fail_missing_wallet_signature_2022() {
         &payer,
         &spl_token_2022_interface::id(),
     );
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     let mut recover = instruction::recover_nested(
@@ -414,21 +338,23 @@ fn fail_missing_wallet_signature() {
     ));
     let (mint, mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_interface::id());
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata,
         &mint,
         &spl_token_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     let mut recover =
@@ -472,21 +398,23 @@ fn fail_wrong_signer_2022() {
         &payer,
         &spl_token_2022_interface::id(),
     );
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -537,21 +465,23 @@ fn fail_wrong_signer() {
     ]);
     let (mint, mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_interface::id());
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata,
         &mint,
         &spl_token_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -607,21 +537,23 @@ fn fail_not_nested_2022() {
         &payer,
         &spl_token_2022_interface::id(),
     );
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wrong_wallet,
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     ); // Not nested under owner_ata
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -672,21 +604,23 @@ fn fail_not_nested() {
     ]);
     let (mint, mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_interface::id());
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wrong_wallet,
         &mint,
         &spl_token_interface::id(),
+        CreateAtaOptions::default(),
     ); // Not nested under owner_ata
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -730,21 +664,23 @@ fn fail_wrong_address_derivation_owner_2022() {
         &payer,
         &spl_token_2022_interface::id(),
     );
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -797,21 +733,23 @@ fn fail_wrong_address_derivation_owner() {
     ));
     let (mint, mint_authority) =
         create_mint_mollusk(&mollusk, &mut accounts, &payer, &spl_token_interface::id());
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata,
         &mint,
         &spl_token_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -878,13 +816,14 @@ fn fail_owner_account_does_not_exist() {
         &mint,
         &spl_token_2022_interface::id(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata_address,
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     // Ensure all accounts required by recover_nested are provided to Mollusk
@@ -907,48 +846,15 @@ fn fail_owner_account_does_not_exist() {
         ));
     }
 
-    // Ensure the token program is provided as an account
-    if !accounts
-        .iter()
-        .any(|(pubkey, _)| *pubkey == spl_token_2022_interface::id())
-    {
-        accounts.push((
+    // Ensure required program and sysvar accounts are present
+    ensure_program_accounts_present(
+        &mut accounts,
+        &[
             spl_token_2022_interface::id(),
-            account_builder::AccountBuilder::executable_program(spl_token_2022_interface::id()),
-        ));
-    }
-
-    // Ensure the ATA program is provided as an account
-    if !accounts
-        .iter()
-        .any(|(pubkey, _)| *pubkey == spl_associated_token_account::id())
-    {
-        accounts.push((
             spl_associated_token_account::id(),
-            account_builder::AccountBuilder::executable_program(spl_associated_token_account::id()),
-        ));
-    }
-
-    // Ensure the system program is provided as an account
-    let system_program_id = solana_program::pubkey!("11111111111111111111111111111111");
-    if !accounts
-        .iter()
-        .any(|(pubkey, _)| *pubkey == system_program_id)
-    {
-        accounts.push((
-            system_program_id,
-            account_builder::AccountBuilder::executable_program(system_program_id),
-        ));
-    }
-
-    // Ensure the rent sysvar is provided as an account
-    let rent_sysvar_id = solana_program::pubkey!("SysvarRent111111111111111111111111111111111");
-    if !accounts.iter().any(|(pubkey, _)| *pubkey == rent_sysvar_id) {
-        accounts.push((
-            rent_sysvar_id,
-            account_builder::AccountBuilder::system_account(0),
-        ));
-    }
+            solana_system_interface::program::id(),
+        ],
+    );
 
     let recover_instruction = instruction::recover_nested(
         &wallet.pubkey(),
@@ -987,21 +893,23 @@ fn fail_wrong_spl_token_program() {
         &payer,
         &spl_token_2022_interface::id(),
     );
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     // Ensure all derived ATA accounts are provided to Mollusk
@@ -1022,11 +930,8 @@ fn fail_wrong_spl_token_program() {
         &spl_token_interface::id(),
     );
 
-    // The instruction also needs the token program itself as an account
-    accounts.push((
-        spl_token_interface::id(),
-        account_builder::AccountBuilder::executable_program(spl_token_interface::id()),
-    ));
+    // Ensure the token program is present as an executable
+    ensure_program_accounts_present(&mut accounts, &[spl_token_interface::id()]);
 
     let recover_instruction =
         instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token_interface::id()); // Wrong program ID
@@ -1068,29 +973,32 @@ fn fail_destination_not_wallet_ata() {
         &payer,
         &spl_token_2022_interface::id(),
     );
-    let owner_ata = create_associated_token_account_mollusk(
+    let (owner_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wallet.pubkey(),
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let nested_ata = create_associated_token_account_mollusk(
+    let (nested_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &owner_ata,
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
-    let wrong_destination_ata = create_associated_token_account_mollusk(
+    let (wrong_destination_ata, _) = create_associated_token_account_mollusk(
         &mollusk,
         &mut accounts,
         &payer,
         &wrong_wallet,
         &mint,
         &spl_token_2022_interface::id(),
+        CreateAtaOptions::default(),
     );
 
     let mut recover_instruction = instruction::recover_nested(

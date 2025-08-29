@@ -11,6 +11,7 @@ use {
     solana_sdk::{account::Account, signature::Keypair, signer::Signer},
     solana_system_interface::instruction as system_instruction,
     solana_system_interface::program as system_program,
+    spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     std::path::Path,
     std::vec::Vec,
 };
@@ -297,6 +298,138 @@ pub fn process_and_merge_instruction(
     }
 
     result.program_result
+}
+
+/// Options to control ATA creation helper behavior.
+#[derive(Default, Clone, Copy)]
+pub struct CreateAtaOptions {
+    /// If set, creates the placeholder system account with this lamports amount.
+    /// If `skip_placeholder` is true, this is ignored.
+    pub placeholder_lamports: Option<u64>,
+    /// If true, do not create a placeholder system account before calling the program.
+    pub skip_placeholder: bool,
+    /// If true, send legacy-style empty instruction data.
+    pub legacy_empty_data: bool,
+}
+
+/// Creates an associated token account via the ATA program and merges account updates.
+/// Returns `(associated_token_address, program_result)`.
+pub fn create_associated_token_account_mollusk(
+    mollusk: &Mollusk,
+    accounts: &mut Vec<(Pubkey, Account)>,
+    payer: &Keypair,
+    owner: &Pubkey,
+    mint: &Pubkey,
+    token_program: &Pubkey,
+    options: CreateAtaOptions,
+) -> (Pubkey, ProgramResult) {
+    let ata_address = get_associated_token_address_with_program_id(owner, mint, token_program);
+
+    // Ensure the provided owner (wallet) account exists in the accounts list for Mollusk metas
+    ensure_system_account_exists(accounts, *owner, 0);
+
+    if !options.skip_placeholder {
+        let lamports = options.placeholder_lamports.unwrap_or(0);
+        ensure_system_account_exists(accounts, ata_address, lamports);
+    }
+
+    let mut instruction = build_create_ata_instruction(
+        spl_associated_token_account::id(),
+        payer.pubkey(),
+        ata_address,
+        *owner,
+        *mint,
+        *token_program,
+        CreateAtaInstructionType::Create {
+            bump: None,
+            account_len: None,
+        },
+    );
+    if options.legacy_empty_data {
+        instruction.data = Vec::new();
+    }
+
+    let pr = process_and_merge_instruction(mollusk, &instruction, accounts);
+    (ata_address, pr)
+}
+
+/// Ensures all recover-nested derived ATAs exist as system accounts: owner ATA, destination ATA, nested ATA.
+pub fn ensure_recover_nested_accounts(
+    accounts: &mut Vec<(Pubkey, Account)>,
+    wallet_address: &Pubkey,
+    nested_token_mint_address: &Pubkey,
+    owner_token_mint_address: &Pubkey,
+    token_program: &Pubkey,
+) {
+    let owner_ata = get_associated_token_address_with_program_id(
+        wallet_address,
+        owner_token_mint_address,
+        token_program,
+    );
+    let destination_ata = get_associated_token_address_with_program_id(
+        wallet_address,
+        nested_token_mint_address,
+        token_program,
+    );
+    let nested_ata = get_associated_token_address_with_program_id(
+        &owner_ata,
+        nested_token_mint_address,
+        token_program,
+    );
+    for ata in [owner_ata, destination_ata, nested_ata] {
+        ensure_system_account_exists(accounts, ata, 0);
+    }
+}
+
+/// Ensures executable program and sysvar accounts are present.
+/// Provide any mix of program IDs (e.g., token-2022, token classic, ATA, system) and it will add executable accounts.
+/// Always ensures rent sysvar is present.
+pub fn ensure_program_accounts_present(
+    accounts: &mut Vec<(Pubkey, Account)>,
+    program_ids: &[Pubkey],
+) {
+    for pid in program_ids.iter().copied() {
+        if !accounts.iter().any(|(pk, _)| *pk == pid) {
+            accounts.push((
+                pid,
+                Account {
+                    lamports: 0,
+                    data: Vec::new(),
+                    owner: LOADER_V3,
+                    executable: true,
+                    rent_epoch: 0,
+                },
+            ));
+        }
+    }
+    if !accounts.iter().any(|(pk, _)| *pk == sysvar::rent::id()) {
+        accounts.push((
+            sysvar::rent::id(),
+            account_builder::AccountBuilder::rent_sysvar(),
+        ));
+    }
+}
+
+/// Convenience: build and process a mint_to, merging updates, and assert success.
+pub fn mint_to_and_merge(
+    mollusk: &Mollusk,
+    accounts: &mut Vec<(Pubkey, Account)>,
+    token_program: &Pubkey,
+    mint: &Pubkey,
+    destination: &Pubkey,
+    authority: &Pubkey,
+    amount: u64,
+) -> ProgramResult {
+    let ix = spl_token_2022_interface::instruction::mint_to(
+        token_program,
+        mint,
+        destination,
+        authority,
+        &[],
+        amount,
+    )
+    .unwrap();
+    process_and_merge_instruction(mollusk, &ix, accounts)
 }
 
 /// Build a create ATA instruction and ensure the derived ATA address exists as a system account

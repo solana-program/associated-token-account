@@ -40,8 +40,8 @@ async fn success_create() {
             account_len: None,
         },
     );
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(pr.is_ok());
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(mollusk_result.is_ok());
     let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_interface::id());
@@ -87,8 +87,8 @@ async fn success_using_deprecated_instruction_creator() {
     );
     instruction.data = vec![]; // Legacy deprecated instruction had empty data
 
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(pr.is_ok());
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(mollusk_result.is_ok());
     let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_interface::id());

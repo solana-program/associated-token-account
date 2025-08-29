@@ -66,7 +66,7 @@ fn try_recover_nested_mollusk(
     // mint to nested account
     let amount = 100;
     // Mint tokens into nested account and merge updates
-    let pr = mint_to_and_merge(
+    let mollusk_result = mint_to_and_merge(
         mollusk,
         accounts,
         program_id,
@@ -75,7 +75,10 @@ fn try_recover_nested_mollusk(
         &nested_mint_authority.pubkey(),
         amount,
     );
-    assert!(matches!(pr, mollusk_svm::result::ProgramResult::Success));
+    assert!(matches!(
+        mollusk_result,
+        mollusk_svm::result::ProgramResult::Success
+    ));
 
     // transfer / close nested account
     if let Some(expected_error) = expected_error {
@@ -85,8 +88,11 @@ fn try_recover_nested_mollusk(
             &[Check::err(expected_error)],
         );
     } else {
-        let pr = process_and_merge_instruction(mollusk, &recover_instruction, accounts);
-        assert!(matches!(pr, mollusk_svm::result::ProgramResult::Success));
+        let mollusk_result = process_and_merge_instruction(mollusk, &recover_instruction, accounts);
+        assert!(matches!(
+            mollusk_result,
+            mollusk_svm::result::ProgramResult::Success
+        ));
         let destination_account = get_account(accounts, destination_token_address);
 
         // Calculate rent for assertions

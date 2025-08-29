@@ -30,11 +30,11 @@ async fn success_account_exists() {
         account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
     ));
     ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
+    let rent = solana_sdk::rent::Rent::default();
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
             .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = rent.minimum_balance(expected_token_account_len);
 
     let instruction = build_create_ata_instruction_with_system_account(
         &mut accounts,
@@ -46,8 +46,8 @@ async fn success_account_exists() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
     let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_2022_interface::id());
@@ -97,8 +97,8 @@ async fn success_account_exists() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
     let associated_account = get_account(&accounts, associated_token_address);
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_2022_interface::id());
@@ -150,9 +150,9 @@ async fn fail_account_exists_with_wrong_owner() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
     assert_eq!(
-        pr,
+        mollusk_result,
         ProgramResult::Failure(ProgramError::Custom(
             spl_associated_token_account::error::AssociatedTokenAccountError::InvalidOwner as u32,
         ))
@@ -201,6 +201,9 @@ async fn fail_non_ata() {
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
     instruction.accounts[1] = AccountMeta::new(account.pubkey(), false);
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert_eq!(pr, ProgramResult::Failure(ProgramError::InvalidSeeds));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert_eq!(
+        mollusk_result,
+        ProgramResult::Failure(ProgramError::InvalidSeeds)
+    );
 }

@@ -26,7 +26,6 @@ async fn test_associated_token_account_with_transfer_fees() {
     let payer = Keypair::new();
     let mut accounts =
         create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-
     let mint_account = Keypair::new();
     let token_mint_address = mint_account.pubkey();
     let mint_authority = Keypair::new();
@@ -55,8 +54,8 @@ async fn test_associated_token_account_with_transfer_fees() {
         space as u64,
         &spl_token_2022_interface::id(),
     );
-    let pr = process_and_merge_instruction(&mollusk, &create_mint_ix, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &create_mint_ix, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
 
     // Initialize transfer fee config
     let init_fee_ix = transfer_fee::instruction::initialize_transfer_fee_config(
@@ -68,8 +67,8 @@ async fn test_associated_token_account_with_transfer_fees() {
         maximum_fee,
     )
     .unwrap();
-    let pr = process_and_merge_instruction(&mollusk, &init_fee_ix, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &init_fee_ix, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
 
     // Initialize mint
     let init_mint_ix = spl_token_2022_interface::instruction::initialize_mint(
@@ -80,8 +79,8 @@ async fn test_associated_token_account_with_transfer_fees() {
         0,
     )
     .unwrap();
-    let pr = process_and_merge_instruction(&mollusk, &init_mint_ix, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &init_mint_ix, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
 
     // create extended ATAs (sender)
     let (associated_token_address_sender, pr) = create_associated_token_account_mollusk(
@@ -106,7 +105,7 @@ async fn test_associated_token_account_with_transfer_fees() {
 
     // mint tokens
     let sender_amount = 50 * maximum_fee;
-    let pr = mint_to_and_merge(
+    let mollusk_result = mint_to_and_merge(
         &mollusk,
         &mut accounts,
         &spl_token_2022_interface::id(),
@@ -115,7 +114,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         &mint_authority.pubkey(),
         sender_amount,
     );
-    assert!(matches!(pr, ProgramResult::Success));
+    assert!(matches!(mollusk_result, ProgramResult::Success));
 
     // not enough tokens
     let insufficient_transfer_ix = transfer_fee::instruction::transfer_checked_with_fee(
@@ -130,10 +129,11 @@ async fn test_associated_token_account_with_transfer_fees() {
         maximum_fee,
     )
     .unwrap();
-    let pr = process_and_merge_instruction(&mollusk, &insufficient_transfer_ix, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Failure(_)));
+    let mollusk_result =
+        process_and_merge_instruction(&mollusk, &insufficient_transfer_ix, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Failure(_)));
     assert_eq!(
-        pr,
+        mollusk_result,
         ProgramResult::Failure(ProgramError::Custom(
             spl_token_2022_interface::error::TokenError::InsufficientFunds as u32,
         ))
@@ -154,8 +154,8 @@ async fn test_associated_token_account_with_transfer_fees() {
         fee,
     )
     .unwrap();
-    let pr = process_and_merge_instruction(&mollusk, &transfer_ix, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &transfer_ix, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
 
     // Verify final account states by reading from updated accounts
     let sender_account = get_account(&accounts, associated_token_address_sender);

@@ -58,8 +58,8 @@ async fn test_associated_token_address() {
         },
     );
 
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
 
     // Associated account now exists
     let associated_account = get_account(&accounts, associated_token_address);
@@ -122,8 +122,8 @@ async fn test_create_with_fewer_lamports() {
         },
     );
 
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
 
     // Verify the created account has the correct balance (program should add extra lamports)
     let created_account = get_account(&accounts, associated_token_address);
@@ -177,8 +177,8 @@ async fn test_create_with_excess_lamports() {
             account_len: None,
         },
     );
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
     let created_account = get_account(&accounts, associated_token_address);
     assert_eq!(
         (created_account.lamports, created_account.owner),
@@ -241,8 +241,11 @@ async fn test_create_account_mismatch() {
             },
         );
         instruction.accounts[account_idx] = AccountMeta::new(Pubkey::default(), false); // <-- {comment}
-        let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-        assert_eq!(pr, ProgramResult::Failure(ProgramError::InvalidSeeds));
+        let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+        assert_eq!(
+            mollusk_result,
+            ProgramResult::Failure(ProgramError::InvalidSeeds)
+        );
     }
 }
 
@@ -298,8 +301,8 @@ async fn test_create_associated_token_account_using_legacy_implicit_instruction(
     instruction
         .accounts
         .push(AccountMeta::new_readonly(sysvar::rent::id(), false));
-    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
-    assert!(matches!(pr, ProgramResult::Success));
+    let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(matches!(mollusk_result, ProgramResult::Success));
     let associated_account = accounts
         .iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address)

@@ -354,8 +354,8 @@ pub fn create_associated_token_account_mollusk(
         },
     );
 
-    let pr = process_and_merge_instruction(mollusk, &instruction, accounts);
-    (ata_address, pr)
+    let mollusk_result = process_and_merge_instruction(mollusk, &instruction, accounts);
+    (ata_address, mollusk_result)
 }
 
 /// Legacy variant: creates ATA using empty instruction data (deprecated path).
@@ -387,8 +387,8 @@ pub fn create_associated_token_account_legacy_mollusk(
     );
     instruction.data = Vec::new();
 
-    let pr = process_and_merge_instruction(mollusk, &instruction, accounts);
-    (ata_address, pr)
+    let mollusk_result = process_and_merge_instruction(mollusk, &instruction, accounts);
+    (ata_address, mollusk_result)
 }
 
 /// Ensures all recover-nested derived ATAs exist as system accounts: owner ATA, destination ATA, nested ATA.

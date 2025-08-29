@@ -45,14 +45,14 @@ async fn success_create() {
             account_len: None,
         },
     );
-    let result = mollusk.process_instruction(&instruction, &accounts);
-    assert!(result.program_result.is_ok());
-    let associated_account = result
-        .resulting_accounts
-        .into_iter()
+    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(pr.is_ok());
+    let associated_account = accounts
+        .iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address)
         .expect("associated_account not none")
-        .1;
+        .1
+        .clone();
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
@@ -100,14 +100,14 @@ async fn success_using_deprecated_instruction_creator() {
     );
     instruction.data = vec![]; // Legacy deprecated instruction had empty data
 
-    let result = mollusk.process_instruction(&instruction, &accounts);
-    assert!(result.program_result.is_ok());
-    let associated_account = result
-        .resulting_accounts
-        .into_iter()
+    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(pr.is_ok());
+    let associated_account = accounts
+        .iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address)
         .expect("associated_account not none")
-        .1;
+        .1
+        .clone();
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);

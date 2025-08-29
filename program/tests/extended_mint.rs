@@ -62,22 +62,8 @@ async fn test_associated_token_account_with_transfer_fees() {
         space as u64,
         &spl_token_2022_interface::id(),
     );
-    let result = mollusk.process_instruction(&create_mint_ix, &accounts);
-    assert!(result.program_result.is_ok());
-
-    // Update accounts with created mint
-    if let Some((_, account)) = result
-        .resulting_accounts
-        .into_iter()
-        .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-    {
-        if let Some((_, existing_account)) = accounts
-            .iter_mut()
-            .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-        {
-            *existing_account = account;
-        }
-    }
+    let pr = process_and_merge_instruction(&mollusk, &create_mint_ix, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
 
     // Initialize transfer fee config
     let init_fee_ix = transfer_fee::instruction::initialize_transfer_fee_config(
@@ -89,22 +75,8 @@ async fn test_associated_token_account_with_transfer_fees() {
         maximum_fee,
     )
     .unwrap();
-    let result = mollusk.process_instruction(&init_fee_ix, &accounts);
-    assert!(result.program_result.is_ok());
-
-    // Update accounts after fee config
-    if let Some((_, account)) = result
-        .resulting_accounts
-        .into_iter()
-        .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-    {
-        if let Some((_, existing_account)) = accounts
-            .iter_mut()
-            .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-        {
-            *existing_account = account;
-        }
-    }
+    let pr = process_and_merge_instruction(&mollusk, &init_fee_ix, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
 
     // Initialize mint
     let init_mint_ix = spl_token_2022_interface::instruction::initialize_mint(
@@ -115,22 +87,8 @@ async fn test_associated_token_account_with_transfer_fees() {
         0,
     )
     .unwrap();
-    let result = mollusk.process_instruction(&init_mint_ix, &accounts);
-    assert!(result.program_result.is_ok());
-
-    // Update accounts after mint initialization
-    if let Some((_, account)) = result
-        .resulting_accounts
-        .into_iter()
-        .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-    {
-        if let Some((_, existing_account)) = accounts
-            .iter_mut()
-            .find(|(pubkey, _)| *pubkey == mint_account.pubkey())
-        {
-            *existing_account = account;
-        }
-    }
+    let pr = process_and_merge_instruction(&mollusk, &init_mint_ix, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
 
     // create extended ATAs
     let associated_token_address_sender = get_associated_token_address_with_program_id(
@@ -155,24 +113,8 @@ async fn test_associated_token_account_with_transfer_fees() {
             account_len: None,
         },
     );
-    let result = mollusk.process_instruction(&create_ata_sender_ix, &accounts);
-    assert!(result.program_result.is_ok());
-
-    // Update accounts with created sender ATA
-    if let Some((_, account)) = result
-        .resulting_accounts
-        .into_iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address_sender)
-    {
-        if let Some((_, existing)) = accounts
-            .iter_mut()
-            .find(|(pubkey, _)| *pubkey == associated_token_address_sender)
-        {
-            *existing = account;
-        } else {
-            accounts.push((associated_token_address_sender, account));
-        }
-    }
+    let pr = process_and_merge_instruction(&mollusk, &create_ata_sender_ix, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
 
     let associated_token_address_receiver = get_associated_token_address_with_program_id(
         &wallet_address_receiver,
@@ -196,24 +138,8 @@ async fn test_associated_token_account_with_transfer_fees() {
             account_len: None,
         },
     );
-    let result = mollusk.process_instruction(&create_ata_receiver_ix, &accounts);
-    assert!(result.program_result.is_ok());
-
-    // Update accounts with created receiver ATA
-    if let Some((_, account)) = result
-        .resulting_accounts
-        .into_iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address_receiver)
-    {
-        if let Some((_, existing)) = accounts
-            .iter_mut()
-            .find(|(pubkey, _)| *pubkey == associated_token_address_receiver)
-        {
-            *existing = account;
-        } else {
-            accounts.push((associated_token_address_receiver, account));
-        }
-    }
+    let pr = process_and_merge_instruction(&mollusk, &create_ata_receiver_ix, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
 
     // mint tokens
     let sender_amount = 50 * maximum_fee;
@@ -226,22 +152,8 @@ async fn test_associated_token_account_with_transfer_fees() {
         sender_amount,
     )
     .unwrap();
-    let result = mollusk.process_instruction(&mint_to_ix, &accounts);
-    assert!(result.program_result.is_ok());
-
-    // Update sender account after minting
-    if let Some((_, account)) = result
-        .resulting_accounts
-        .into_iter()
-        .find(|(pubkey, _)| *pubkey == associated_token_address_sender)
-    {
-        if let Some((_, existing_account)) = accounts
-            .iter_mut()
-            .find(|(pubkey, _)| *pubkey == associated_token_address_sender)
-        {
-            *existing_account = account;
-        }
-    }
+    let pr = process_and_merge_instruction(&mollusk, &mint_to_ix, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
 
     // not enough tokens
     let insufficient_transfer_ix = transfer_fee::instruction::transfer_checked_with_fee(
@@ -256,10 +168,10 @@ async fn test_associated_token_account_with_transfer_fees() {
         maximum_fee,
     )
     .unwrap();
-    let result = mollusk.process_instruction(&insufficient_transfer_ix, &accounts);
-    assert!(result.program_result.is_err());
+    let pr = process_and_merge_instruction(&mollusk, &insufficient_transfer_ix, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Failure(_)));
     assert_eq!(
-        result.program_result,
+        pr,
         ProgramResult::Failure(ProgramError::Custom(
             spl_token_2022_interface::error::TokenError::InsufficientFunds as u32,
         ))
@@ -280,12 +192,11 @@ async fn test_associated_token_account_with_transfer_fees() {
         fee,
     )
     .unwrap();
-    let result = mollusk.process_instruction(&transfer_ix, &accounts);
-    assert!(result.program_result.is_ok());
+    let pr = process_and_merge_instruction(&mollusk, &transfer_ix, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
 
-    // Verify final account states
-    let sender_account = result
-        .resulting_accounts
+    // Verify final account states by reading from updated accounts
+    let sender_account = accounts
         .iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address_sender)
         .unwrap()
@@ -298,8 +209,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         .unwrap();
     assert_eq!(extension.withheld_amount, 0.into());
 
-    let receiver_account = result
-        .resulting_accounts
+    let receiver_account = accounts
         .iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address_receiver)
         .unwrap()

@@ -51,14 +51,14 @@ async fn success_account_exists() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
-    let result = mollusk.process_instruction(&instruction, &accounts);
-    assert!(result.program_result.is_ok());
-    let associated_account = result
-        .resulting_accounts
-        .into_iter()
+    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
+    let associated_account = accounts
+        .iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address)
         .expect("associated_account not none")
-        .1;
+        .1
+        .clone();
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_2022_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
@@ -107,14 +107,14 @@ async fn success_account_exists() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
-    let result = mollusk.process_instruction(&instruction, &accounts);
-    assert!(result.program_result.is_ok());
-    let associated_account = result
-        .resulting_accounts
-        .into_iter()
+    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert!(matches!(pr, ProgramResult::Success));
+    let associated_account = accounts
+        .iter()
         .find(|(pubkey, _)| *pubkey == associated_token_address)
         .expect("associated_account not none")
-        .1;
+        .1
+        .clone();
     assert_eq!(associated_account.data.len(), expected_token_account_len);
     assert_eq!(associated_account.owner, spl_token_2022_interface::id());
     assert_eq!(associated_account.lamports, expected_token_account_balance);
@@ -169,10 +169,9 @@ async fn fail_account_exists_with_wrong_owner() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
+    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
     assert_eq!(
-        mollusk
-            .process_instruction(&instruction, &accounts)
-            .program_result,
+        pr,
         ProgramResult::Failure(ProgramError::Custom(
             spl_associated_token_account::error::AssociatedTokenAccountError::InvalidOwner as u32,
         ))
@@ -224,10 +223,6 @@ async fn fail_non_ata() {
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
     instruction.accounts[1] = AccountMeta::new(account.pubkey(), false);
-    assert_eq!(
-        mollusk
-            .process_instruction(&instruction, &accounts)
-            .program_result,
-        ProgramResult::Failure(ProgramError::InvalidSeeds)
-    );
+    let pr = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
+    assert_eq!(pr, ProgramResult::Failure(ProgramError::InvalidSeeds));
 }

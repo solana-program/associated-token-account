@@ -2,7 +2,7 @@
 //! Adapted from p-ata/migrated/test_utils.rs and test_helpers.rs
 
 use {
-    mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk},
+    mollusk_svm::{program::loader_keys::LOADER_V3, result::ProgramResult, Mollusk},
     solana_program::{
         instruction::{AccountMeta, Instruction},
         pubkey::Pubkey,
@@ -277,6 +277,28 @@ pub fn ensure_ata_system_account_exists(
         // Add system account at the derived ATA address (program expects system ownership initially)
         accounts.push((ata_address, Account::new(0, 0, &system_program::id())));
     }
+}
+
+/// Processes an instruction with Mollusk and merges resulting account updates back into `accounts`.
+/// Returns the `ProgramResult` from the execution for assertions.
+pub fn process_and_merge_instruction(
+    mollusk: &Mollusk,
+    instruction: &Instruction,
+    accounts: &mut Vec<(Pubkey, Account)>,
+) -> ProgramResult {
+    let result = mollusk.process_instruction(instruction, accounts);
+
+    for (updated_pubkey, updated_account) in result.resulting_accounts.into_iter() {
+        if let Some((_, existing_account)) =
+            accounts.iter_mut().find(|(pk, _)| *pk == updated_pubkey)
+        {
+            *existing_account = updated_account;
+        } else {
+            accounts.push((updated_pubkey, updated_account));
+        }
+    }
+
+    result.program_result
 }
 
 /// Build a create ATA instruction and ensure the derived ATA address exists as a system account

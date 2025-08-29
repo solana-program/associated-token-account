@@ -163,20 +163,8 @@ fn try_recover_nested_mollusk(
         amount,
     )
     .unwrap();
-    let result = mollusk.process_instruction(&mint_to_ix, accounts);
-    assert!(result.program_result.is_ok());
-    if let Some((_, account)) = result
-        .resulting_accounts
-        .into_iter()
-        .find(|(pubkey, _)| *pubkey == nested_associated_token_address)
-    {
-        if let Some((_, existing_account)) = accounts
-            .iter_mut()
-            .find(|(pubkey, _)| *pubkey == nested_associated_token_address)
-        {
-            *existing_account = account;
-        }
-    }
+    let pr = process_and_merge_instruction(mollusk, &mint_to_ix, accounts);
+    assert!(matches!(pr, mollusk_svm::result::ProgramResult::Success));
 
     // transfer / close nested account
     if let Some(expected_error) = expected_error {
@@ -186,10 +174,9 @@ fn try_recover_nested_mollusk(
             &[Check::err(expected_error)],
         );
     } else {
-        let result = mollusk.process_instruction(&recover_instruction, accounts);
-        assert!(result.program_result.is_ok());
-        let destination_account = result
-            .resulting_accounts
+        let pr = process_and_merge_instruction(mollusk, &recover_instruction, accounts);
+        assert!(matches!(pr, mollusk_svm::result::ProgramResult::Success));
+        let destination_account = accounts
             .iter()
             .find(|(pubkey, _)| *pubkey == destination_token_address)
             .expect("Destination account should exist")
@@ -212,8 +199,7 @@ fn try_recover_nested_mollusk(
         let destination_state =
             StateWithExtensionsOwned::<TokenAccount>::unpack(destination_account.data).unwrap();
         assert_eq!(destination_state.base.amount, amount);
-        let wallet_account = result
-            .resulting_accounts
+        let wallet_account = accounts
             .iter()
             .find(|(pubkey, _)| *pubkey == wallet.pubkey())
             .expect("Wallet account should exist")

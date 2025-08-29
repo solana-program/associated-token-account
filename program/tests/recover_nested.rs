@@ -115,9 +115,10 @@ fn try_recover_nested_mollusk(
 
         // Calculate the rent for the nested ATA that gets closed
         let ata_space = if *program_id == spl_token_2022_interface::id() {
-            // spl-token-2022 accounts get the ImmutableOwner extension, which adds 5 bytes
-            // (2 bytes extension type + 2 bytes length + 1 byte data)
-            spl_token_2022_interface::state::Account::LEN + 5
+            spl_token_2022_interface::extension::ExtensionType::try_calculate_account_len::<
+                spl_token_2022_interface::state::Account,
+            >(&[spl_token_2022_interface::extension::ExtensionType::ImmutableOwner])
+            .expect("failed to calculate Token-2022 account length")
         } else {
             spl_token_interface::state::Account::LEN
         };
@@ -158,7 +159,7 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
         &mint,
         program_id,
     );
-    // Create destination ATA (wallet's ATA for the mint) - this is the same cargo cargo fmas owner_associated_token_address for same mint case
+    // Create destination ATA (wallet's ATA for the mint) - this is the same as owner_associated_token_address for same mint case
     let destination_token_address = owner_associated_token_address;
 
     let recover_instruction =
@@ -639,7 +640,7 @@ fn fail_wrong_address_derivation_owner_2022() {
         &spl_token_2022_interface::id(),
     );
     let wrong_owner_address = Pubkey::new_unique();
-    recover_instruction.accounts[3] = AccountMeta::new(wrong_owner_address, false); // Wrong owner address
+    recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false); // Wrong owner address
 
     // Ensure the wrong owner address is also provided as a system account
     accounts.push((
@@ -699,7 +700,7 @@ fn fail_wrong_address_derivation_owner() {
     let mut recover_instruction =
         instruction::recover_nested(&wallet.pubkey(), &mint, &mint, &spl_token_interface::id());
     let wrong_owner_address = Pubkey::new_unique();
-    recover_instruction.accounts[3] = AccountMeta::new(wrong_owner_address, false); // Wrong owner address
+    recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false); // Wrong owner address
 
     // Ensure the wrong owner address is also provided as a system account
     accounts.push((

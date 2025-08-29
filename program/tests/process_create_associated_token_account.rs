@@ -240,7 +240,11 @@ async fn test_create_account_mismatch() {
                 account_len: None,
             },
         );
-        instruction.accounts[account_idx] = AccountMeta::new(Pubkey::default(), false); // <-- {comment}
+        instruction.accounts[account_idx] = if account_idx == 1 {
+            AccountMeta::new(Pubkey::default(), false)
+        } else {
+            AccountMeta::new_readonly(Pubkey::default(), false)
+        }; // <-- {comment}
         let mollusk_result = process_and_merge_instruction(&mollusk, &instruction, &mut accounts);
         assert_eq!(
             mollusk_result,

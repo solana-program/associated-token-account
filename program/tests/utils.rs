@@ -201,8 +201,7 @@ pub mod test_util_exports {
 
     /// Comprehensive test harness for ATA testing scenarios
     pub struct TestHarness {
-        pub mollusk: mollusk_svm::Mollusk,
-        pub accounts: Vec<(Pubkey, Account)>,
+        pub ctx: MolluskContext<HashMap<Pubkey, Account>>,
         pub token_program_id: Pubkey,
         pub payer: Keypair,
         pub wallet: Option<Keypair>,
@@ -216,11 +215,18 @@ pub mod test_util_exports {
         pub fn new(token_program_id: &Pubkey) -> Self {
             let mollusk = setup_mollusk_with_programs(token_program_id);
             let payer = Keypair::new();
-            let accounts = create_mollusk_base_accounts_with_token(&payer, token_program_id);
+
+            // Initialize base accounts in context
+            let base_accounts = create_mollusk_base_accounts_with_token(&payer, token_program_id);
+            let mut accounts = HashMap::new();
+            for (pubkey, account) in base_accounts {
+                accounts.insert(pubkey, account);
+            }
+
+            let ctx = mollusk.with_context(accounts);
 
             Self {
-                mollusk,
-                accounts,
+                ctx,
                 token_program_id: *token_program_id,
                 payer,
                 wallet: None,
@@ -233,10 +239,7 @@ pub mod test_util_exports {
         /// Add a wallet with the specified lamports
         pub fn with_wallet(mut self, lamports: u64) -> Self {
             let wallet = Keypair::new();
-            ensure_system_accounts_with_lamports(
-                &mut self.accounts,
-                &[(wallet.pubkey(), lamports)],
-            );
+            ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wallet.pubkey(), lamports)]);
             self.wallet = Some(wallet);
             self
         }
@@ -246,13 +249,13 @@ pub mod test_util_exports {
             let mint_account = Keypair::new();
             let mint_authority = Keypair::new();
 
-            self.accounts.push((
+            self.ctx.account_store.borrow_mut().insert(
                 mint_authority.pubkey(),
                 account_builder::AccountBuilder::system_account(1_000_000),
-            ));
+            );
 
             let mint_accounts = create_test_mint(
-                &self.mollusk,
+                &self.ctx.mollusk,
                 &mint_account,
                 &mint_authority,
                 &self.payer,
@@ -263,11 +266,7 @@ pub mod test_util_exports {
             // Merge the mint-related accounts
             for (pubkey, account) in mint_accounts {
                 if pubkey == mint_account.pubkey() || pubkey == mint_authority.pubkey() {
-                    if let Some(pos) = self.accounts.iter().position(|(pk, _)| *pk == pubkey) {
-                        self.accounts[pos] = (pubkey, account);
-                    } else {
-                        self.accounts.push((pubkey, account));
-                    }
+                    self.ctx.account_store.borrow_mut().insert(pubkey, account);
                 }
             }
 
@@ -290,14 +289,21 @@ pub mod test_util_exports {
                 &self.token_program_id,
             );
 
-            let (_, _) = create_associated_token_account_mollusk(
-                &self.mollusk,
-                &mut self.accounts,
-                &self.payer,
-                &wallet.pubkey(),
-                &mint,
-                &self.token_program_id,
+            // Ensure system account exists for ATA
+            ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
+
+            let instruction = build_create_ata_instruction(
+                spl_associated_token_account::id(),
+                self.payer.pubkey(),
+                ata_address,
+                wallet.pubkey(),
+                mint,
+                self.token_program_id,
+                CreateAtaInstructionType::default(),
             );
+
+            self.ctx
+                .process_and_validate_instruction(&instruction, &[Check::success()]);
 
             self.ata_address = Some(ata_address);
             self
@@ -309,7 +315,8 @@ pub mod test_util_exports {
             instruction: &solana_program::instruction::Instruction,
             checks: &[mollusk_svm::result::Check],
         ) -> mollusk_svm::result::InstructionResult {
-            process_and_validate_then_merge(&self.mollusk, instruction, &mut self.accounts, checks)
+            self.ctx
+                .process_and_validate_instruction(instruction, checks)
         }
 
         /// Execute an instruction expecting success
@@ -334,7 +341,12 @@ pub mod test_util_exports {
 
         /// Get a reference to an account by pubkey
         pub fn get_account(&self, pubkey: Pubkey) -> Account {
-            get_account(&self.accounts, pubkey)
+            self.ctx
+                .account_store
+                .borrow()
+                .get(&pubkey)
+                .expect("account not found")
+                .clone()
         }
 
         /// Mint tokens to the ATA (requires mint_authority and ata_address to be set)
@@ -390,7 +402,7 @@ pub mod test_util_exports {
             );
 
             // Ensure ATA address exists as system account
-            ensure_system_account_exists(&mut self.accounts, ata_address, 0);
+            ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
             self.ata_address = Some(ata_address);
 
             build_create_ata_instruction(
@@ -407,29 +419,55 @@ pub mod test_util_exports {
         /// Create a nested ATA (ATA owned by another ATA) and return the nested ATA address
         pub fn create_nested_ata(&mut self, owner_ata: Pubkey) -> Pubkey {
             let mint = self.mint.expect("Mint must be set");
-            let (nested_ata_address, _) = create_associated_token_account_mollusk(
-                &self.mollusk,
-                &mut self.accounts,
-                &self.payer,
+            let nested_ata_address = get_associated_token_address_with_program_id(
                 &owner_ata,
                 &mint,
                 &self.token_program_id,
             );
+
+            // Ensure system account exists for nested ATA
+            ctx_ensure_system_account_exists(&self.ctx, nested_ata_address, 0);
+
+            let instruction = build_create_ata_instruction(
+                spl_associated_token_account::id(),
+                self.payer.pubkey(),
+                nested_ata_address,
+                owner_ata,
+                mint,
+                self.token_program_id,
+                CreateAtaInstructionType::default(),
+            );
+
+            self.ctx
+                .process_and_validate_instruction(&instruction, &[Check::success()]);
+
             nested_ata_address
         }
 
         /// Create an ATA for a different owner (for error testing)
         pub fn create_ata_for_owner(&mut self, owner: Pubkey) -> Pubkey {
             let mint = self.mint.expect("Mint must be set");
-            ensure_system_accounts_with_lamports(&mut self.accounts, &[(owner, 1_000_000)]);
-            let (ata_address, _) = create_associated_token_account_mollusk(
-                &self.mollusk,
-                &mut self.accounts,
-                &self.payer,
-                &owner,
-                &mint,
-                &self.token_program_id,
+            ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(owner, 1_000_000)]);
+
+            let ata_address =
+                get_associated_token_address_with_program_id(&owner, &mint, &self.token_program_id);
+
+            // Ensure system account exists for ATA
+            ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
+
+            let instruction = build_create_ata_instruction(
+                spl_associated_token_account::id(),
+                self.payer.pubkey(),
+                ata_address,
+                owner,
+                mint,
+                self.token_program_id,
+                CreateAtaInstructionType::default(),
             );
+
+            self.ctx
+                .process_and_validate_instruction(&instruction, &[Check::success()]);
+
             ata_address
         }
 
@@ -441,14 +479,27 @@ pub mod test_util_exports {
         ) -> solana_program::instruction::Instruction {
             let wallet = self.wallet.as_ref().expect("Wallet must be set");
 
-            // Ensure all derived ATA accounts exist as system accounts for mollusk
-            ensure_recover_nested_accounts(
-                &mut self.accounts,
+            // Calculate all derived ATA addresses
+            let owner_ata = get_associated_token_address_with_program_id(
                 &wallet.pubkey(),
-                &nested_mint,
                 &owner_mint,
                 &self.token_program_id,
             );
+            let destination_ata = get_associated_token_address_with_program_id(
+                &wallet.pubkey(),
+                &nested_mint,
+                &self.token_program_id,
+            );
+            let nested_ata = get_associated_token_address_with_program_id(
+                &owner_ata,
+                &nested_mint,
+                &self.token_program_id,
+            );
+
+            // Ensure all ATAs exist as system accounts
+            for ata in [owner_ata, destination_ata, nested_ata] {
+                ctx_ensure_system_account_exists(&self.ctx, ata, 0);
+            }
 
             spl_associated_token_account_interface::instruction::recover_nested(
                 &wallet.pubkey(),
@@ -641,8 +692,7 @@ pub mod test_util_exports {
                 ),
             );
 
-            let mut instruction = build_create_ata_instruction_with_system_account(
-                &mut Vec::new(),
+            let mut instruction = build_create_ata_instruction(
                 spl_associated_token_account::id(),
                 self.payer.pubkey(),
                 get_associated_token_address_with_program_id(
@@ -957,36 +1007,6 @@ pub mod test_util_exports {
         (ata_address, mollusk_result)
     }
 
-    /// Legacy variant: creates ATA using empty instruction data (deprecated path).
-    #[allow(dead_code)]
-    pub fn create_associated_token_account_legacy_mollusk(
-        mollusk: &Mollusk,
-        accounts: &mut Vec<(Pubkey, Account)>,
-        payer: &Keypair,
-        owner: &Pubkey,
-        mint: &Pubkey,
-        token_program: &Pubkey,
-    ) -> (Pubkey, ProgramResult) {
-        let ata_address = get_associated_token_address_with_program_id(owner, mint, token_program);
-
-        ensure_system_account_exists(accounts, *owner, 0);
-        ensure_system_account_exists(accounts, ata_address, 0);
-
-        let mut instruction = build_create_ata_instruction(
-            spl_associated_token_account::id(),
-            payer.pubkey(),
-            ata_address,
-            *owner,
-            *mint,
-            *token_program,
-            CreateAtaInstructionType::default(),
-        );
-        instruction.data = Vec::new();
-
-        let mollusk_result = process_and_merge_instruction(mollusk, &instruction, accounts);
-        (ata_address, mollusk_result)
-    }
-
     /// Ensures all recover-nested derived ATAs exist as system accounts: owner ATA, destination ATA, nested ATA.
     #[allow(dead_code)]
     pub fn ensure_recover_nested_accounts(
@@ -1061,36 +1081,6 @@ pub mod test_util_exports {
         )
         .unwrap();
         process_and_merge_instruction(mollusk, &ix, accounts)
-    }
-
-    /// Build a create ATA instruction and ensure the derived ATA address exists as a system account
-    /// This only adds a system account if NO account exists at the ATA address
-    /// If an account already exists (regardless of owner), it is preserved unchanged
-    #[allow(dead_code, reason = "exported for benching consumers")]
-    #[allow(clippy::too_many_arguments)]
-    pub fn build_create_ata_instruction_with_system_account(
-        accounts: &mut Vec<(Pubkey, Account)>,
-        ata_program_id: Pubkey,
-        payer: Pubkey,
-        ata_address: Pubkey,
-        wallet: Pubkey,
-        mint: Pubkey,
-        token_program: Pubkey,
-        instruction_type: CreateAtaInstructionType,
-    ) -> Instruction {
-        // Ensure the derived ATA address exists as a system account (as the program expects)
-        ensure_system_account_exists(accounts, ata_address, 0);
-
-        // Build the instruction
-        build_create_ata_instruction(
-            ata_program_id,
-            payer,
-            ata_address,
-            wallet,
-            mint,
-            token_program,
-            instruction_type,
-        )
     }
 
     /// Creates and initializes a mint account with the given parameters.

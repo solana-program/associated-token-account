@@ -2,8 +2,7 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::{
-        build_create_ata_instruction, build_create_ata_instruction_with_system_account,
-        test_calculations, ContextHarness, CreateAtaInstructionType,
+        build_create_ata_instruction, test_calculations, ContextHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_pubkey::Pubkey,
@@ -43,8 +42,7 @@ fn success_account_exists() {
     harness.execute_error(&instruction, ProgramError::IllegalOwner);
 
     // Test success case: CreateIdempotent should succeed even when account exists
-    let instruction = build_create_ata_instruction_with_system_account(
-        &mut Vec::new(),
+    let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         harness.payer.pubkey(),
         ata_address,
@@ -75,8 +73,7 @@ fn fail_account_exists_with_wrong_owner() {
     let wrong_owner = Pubkey::new_unique();
     let ata_address = harness.insert_wrong_owner_token_account(wrong_owner);
 
-    let instruction = build_create_ata_instruction_with_system_account(
-        &mut Vec::new(),
+    let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         harness.payer.pubkey(),
         ata_address,

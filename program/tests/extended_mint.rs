@@ -2,7 +2,7 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::{
-        build_create_ata_instruction_with_system_account, create_mollusk_base_accounts_with_token,
+        build_create_ata_instruction, create_mollusk_base_accounts_with_token,
         ensure_system_account_exists, ensure_system_accounts_with_lamports, get_account,
         process_and_validate_then_merge, CreateAtaInstructionType,
     },
@@ -95,8 +95,7 @@ fn test_associated_token_account_with_transfer_fees() {
         &spl_token_2022_interface::id(),
     );
     ensure_system_account_exists(&mut accounts, associated_token_address_sender, 0);
-    let create_sender_ata_ix = build_create_ata_instruction_with_system_account(
-        &mut accounts,
+    let create_sender_ata_ix = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address_sender,
@@ -118,8 +117,7 @@ fn test_associated_token_account_with_transfer_fees() {
         &spl_token_2022_interface::id(),
     );
     ensure_system_account_exists(&mut accounts, associated_token_address_receiver, 0);
-    let create_receiver_ata_ix = build_create_ata_instruction_with_system_account(
-        &mut accounts,
+    let create_receiver_ata_ix = build_create_ata_instruction(
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address_receiver,

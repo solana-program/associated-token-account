@@ -2,9 +2,8 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::{
-        build_create_ata_instruction, build_create_ata_instruction_with_system_account,
-        ctx_ensure_system_account_exists, test_calculations, ContextHarness,
-        CreateAtaInstructionType,
+        build_create_ata_instruction, ctx_ensure_system_account_exists, test_calculations,
+        ContextHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_program::{instruction::*, sysvar},
@@ -36,8 +35,7 @@ fn test_create_with_fewer_lamports() {
     let insufficient_lamports = 890880;
     ctx_ensure_system_account_exists(&harness.ctx, ata_address, insufficient_lamports);
 
-    let instruction = build_create_ata_instruction_with_system_account(
-        &mut Vec::new(),
+    let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         harness.payer.pubkey(),
         ata_address,

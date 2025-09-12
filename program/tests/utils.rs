@@ -173,6 +173,41 @@ pub mod test_util_exports {
         }
     }
 
+    /// Helper functions for common test calculations
+    pub mod test_calculations {
+        use {
+            solana_program::program_pack::Pack,
+            solana_sdk::rent::Rent,
+            spl_token_2022_interface::{
+                extension::ExtensionType, state::Account as Token2022Account,
+            },
+            spl_token_interface::state::Account as TokenAccount,
+        };
+
+        /// Calculate the expected account length for a Token-2022 account with ImmutableOwner extension
+        pub fn token_2022_account_len() -> usize {
+            ExtensionType::try_calculate_account_len::<Token2022Account>(&[
+                ExtensionType::ImmutableOwner,
+            ])
+            .expect("Failed to calculate Token-2022 account length")
+        }
+
+        /// Calculate the expected account length for a standard SPL token account
+        pub fn token_account_len() -> usize {
+            TokenAccount::LEN
+        }
+
+        /// Calculate the rent-exempt balance for a Token-2022 account with ImmutableOwner extension
+        pub fn token_2022_account_balance() -> u64 {
+            Rent::default().minimum_balance(token_2022_account_len())
+        }
+
+        /// Calculate the rent-exempt balance for a standard SPL token account
+        pub fn token_account_balance() -> u64 {
+            Rent::default().minimum_balance(token_account_len())
+        }
+    }
+
     /// Encodes the instruction data payload for ATA creation-related instructions.
     pub fn encode_create_ata_instruction_data(
         instruction_type: &CreateAtaInstructionType,

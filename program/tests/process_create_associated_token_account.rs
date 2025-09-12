@@ -4,7 +4,7 @@ use {
     crate::utils::test_util_exports::{
         account_builder, build_create_ata_instruction,
         build_create_ata_instruction_with_system_account, ctx_ensure_system_account_exists,
-        ctx_ensure_system_accounts_with_lamports, setup_context_with_programs,
+        ctx_ensure_system_accounts_with_lamports, setup_context_with_programs, test_calculations,
         CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
@@ -12,7 +12,6 @@ use {
     solana_pubkey::Pubkey,
     solana_sdk::{program_error::ProgramError, signature::Signer},
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
-    spl_token_2022_interface::{extension::ExtensionType, state::Account},
 };
 
 #[test]
@@ -27,11 +26,7 @@ fn test_associated_token_address() {
 
     let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),
@@ -44,11 +39,7 @@ fn test_associated_token_address() {
     );
     ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
 
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
 
     let instruction = build_create_ata_instruction_with_system_account(
         &mut Vec::new(),
@@ -66,7 +57,7 @@ fn test_associated_token_address() {
         &[
             Check::success(),
             Check::account(&associated_token_address)
-                .space(expected_token_account_len)
+                .space(test_calculations::token_2022_account_len())
                 .owner(&spl_token_2022_interface::id())
                 .lamports(expected_token_account_balance)
                 .build(),
@@ -86,11 +77,7 @@ fn test_create_with_fewer_lamports() {
 
     let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),
@@ -106,11 +93,7 @@ fn test_create_with_fewer_lamports() {
         account_builder::AccountBuilder::system_account(1_000_000),
     );
 
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
 
     // Pre-fund the ATA address with insufficient lamports (only enough for 0 data)
     let insufficient_lamports = 890880; // rent-exempt for 0 data but not for token account
@@ -152,11 +135,7 @@ fn test_create_with_excess_lamports() {
 
     let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),
@@ -169,11 +148,7 @@ fn test_create_with_excess_lamports() {
         wallet_address,
         account_builder::AccountBuilder::system_account(1_000_000),
     );
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
     let excess_lamports = expected_token_account_balance + 1;
     ctx_ensure_system_account_exists(&ctx, associated_token_address, excess_lamports);
 
@@ -211,11 +186,7 @@ fn test_create_account_mismatch() {
 
     let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),
@@ -282,11 +253,7 @@ fn test_create_associated_token_account_using_legacy_implicit_instruction() {
 
     let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),
@@ -299,11 +266,7 @@ fn test_create_associated_token_account_using_legacy_implicit_instruction() {
         wallet_address,
         account_builder::AccountBuilder::system_account(1_000_000),
     );
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
 
     // Add ATA system account for Mollusk
     ctx.account_store.borrow_mut().insert(
@@ -329,7 +292,7 @@ fn test_create_associated_token_account_using_legacy_implicit_instruction() {
         &[
             Check::success(),
             Check::account(&associated_token_address)
-                .space(expected_token_account_len)
+                .space(test_calculations::token_2022_account_len())
                 .owner(&spl_token_2022_interface::id())
                 .lamports(expected_token_account_balance)
                 .build(),

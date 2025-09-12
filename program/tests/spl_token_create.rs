@@ -2,15 +2,13 @@ mod utils;
 
 use crate::utils::test_util_exports::{
     account_builder, build_create_ata_instruction, ctx_ensure_system_account_exists,
-    ctx_ensure_system_accounts_with_lamports, setup_context_with_programs,
+    ctx_ensure_system_accounts_with_lamports, setup_context_with_programs, test_calculations,
     CreateAtaInstructionType,
 };
 
 use {
-    mollusk_svm::result::Check, solana_program_pack::Pack, solana_pubkey::Pubkey,
-    solana_sdk::signature::Signer,
+    mollusk_svm::result::Check, solana_pubkey::Pubkey, solana_sdk::signature::Signer,
     spl_associated_token_account_interface::address::get_associated_token_address,
-    spl_token_interface::state::Account,
 };
 
 #[test]
@@ -22,8 +20,7 @@ fn success_create() {
 
     let ctx = setup_context_with_programs(&spl_token_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(Account::LEN);
+    let expected_token_account_balance = test_calculations::token_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),
@@ -34,9 +31,7 @@ fn success_create() {
     );
     ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
     ctx_ensure_system_account_exists(&ctx, associated_token_address, 0);
-    let expected_token_account_len = Account::LEN;
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_account_balance();
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
@@ -52,7 +47,7 @@ fn success_create() {
         &[
             Check::success(),
             Check::account(&associated_token_address)
-                .space(expected_token_account_len)
+                .space(test_calculations::token_account_len())
                 .owner(&spl_token_interface::id())
                 .lamports(expected_token_account_balance)
                 .build(),
@@ -69,8 +64,7 @@ fn success_using_deprecated_instruction_creator() {
 
     let ctx = setup_context_with_programs(&spl_token_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(Account::LEN);
+    let expected_token_account_balance = test_calculations::token_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),
@@ -82,9 +76,7 @@ fn success_using_deprecated_instruction_creator() {
     ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
     ctx_ensure_system_account_exists(&ctx, associated_token_address, 0);
 
-    let expected_token_account_len = Account::LEN;
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_account_balance();
 
     // Use legacy-style instruction (empty data to simulate deprecated function)
     let mut instruction = build_create_ata_instruction(
@@ -103,7 +95,7 @@ fn success_using_deprecated_instruction_creator() {
         &[
             Check::success(),
             Check::account(&associated_token_address)
-                .space(expected_token_account_len)
+                .space(test_calculations::token_account_len())
                 .owner(&spl_token_interface::id())
                 .lamports(expected_token_account_balance)
                 .build(),

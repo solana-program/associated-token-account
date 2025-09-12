@@ -4,7 +4,7 @@ use {
     crate::utils::test_util_exports::{
         account_builder, build_create_ata_instruction,
         build_create_ata_instruction_with_system_account, ctx_ensure_system_account_exists,
-        ctx_ensure_system_accounts_with_lamports, setup_context_with_programs,
+        ctx_ensure_system_accounts_with_lamports, setup_context_with_programs, test_calculations,
         CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
@@ -12,7 +12,6 @@ use {
     solana_pubkey::Pubkey,
     solana_sdk::{program_error::ProgramError, signature::Signer, signer::keypair::Keypair},
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
-    spl_token_2022_interface::{extension::ExtensionType, state::Account},
 };
 
 #[test]
@@ -33,11 +32,7 @@ fn success_account_exists() {
     );
     ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
     ctx_ensure_system_account_exists(&ctx, associated_token_address, 0);
-    let rent = solana_sdk::rent::Rent::default();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance = rent.minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
 
     // Fund payer with exactly the token account rent amount.
     ctx.account_store.borrow_mut().insert(
@@ -60,7 +55,7 @@ fn success_account_exists() {
         &[
             Check::success(),
             Check::account(&associated_token_address)
-                .space(expected_token_account_len)
+                .space(test_calculations::token_2022_account_len())
                 .owner(&spl_token_2022_interface::id())
                 .lamports(expected_token_account_balance)
                 .build(),
@@ -109,7 +104,7 @@ fn success_account_exists() {
         &[
             Check::success(),
             Check::account(&associated_token_address)
-                .space(expected_token_account_len)
+                .space(test_calculations::token_2022_account_len())
                 .owner(&spl_token_2022_interface::id())
                 .lamports(expected_token_account_balance)
                 .build(),
@@ -130,11 +125,7 @@ fn fail_account_exists_with_wrong_owner() {
     let wrong_owner = Pubkey::new_unique();
     let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = Keypair::new();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),
@@ -184,11 +175,7 @@ fn fail_non_ata() {
     let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = Keypair::new();
     // For this test the instruction fails before funding; minimal rent amount is sufficient if needed.
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance =
-        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    let expected_token_account_balance = test_calculations::token_2022_account_balance();
     ctx.account_store.borrow_mut().insert(
         payer.pubkey(),
         account_builder::AccountBuilder::system_account(expected_token_account_balance),

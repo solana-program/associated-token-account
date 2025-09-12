@@ -7,7 +7,7 @@ use {
         ensure_recover_nested_accounts, ensure_system_accounts_with_lamports, get_account,
         process_and_validate_then_merge,
     },
-    mollusk_svm::result::Check,
+    mollusk_svm::result::{config::Config, Check},
     solana_program::program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_sdk::{
@@ -52,6 +52,11 @@ fn create_mint_mollusk(
 
 const TEST_MINT_AMOUNT: u64 = 100;
 
+const VALIDATION_CONFIG: Config = Config {
+    panic: true,
+    verbose: true,
+};
+
 struct RecoverNestedTestContext<'a> {
     mollusk: &'a mollusk_svm::Mollusk,
     accounts: &'a mut Vec<(Pubkey, Account)>,
@@ -81,29 +86,22 @@ fn execute_recover_nested_test_scenario(context: &mut RecoverNestedTestContext) 
 }
 
 fn mint_test_tokens_to_nested_account(context: &mut RecoverNestedTestContext) {
-    let mint_to_ix = if *context.program_id == spl_token_interface::id() {
-        spl_token_interface::instruction::mint_to(
-            context.program_id,
-            &context.nested_mint,
-            &context.nested_associated_token_address,
-            &context.nested_mint_authority.pubkey(),
-            &[],
-            TEST_MINT_AMOUNT,
-        )
-        .unwrap()
+    let mint_to_fn = if *context.program_id == spl_token_interface::id() {
+        spl_token_interface::instruction::mint_to
     } else if *context.program_id == spl_token_2022_interface::id() {
-        spl_token_2022_interface::instruction::mint_to(
-            context.program_id,
-            &context.nested_mint,
-            &context.nested_associated_token_address,
-            &context.nested_mint_authority.pubkey(),
-            &[],
-            TEST_MINT_AMOUNT,
-        )
-        .unwrap()
+        spl_token_2022_interface::instruction::mint_to
     } else {
         panic!("Unsupported token program id: {}", context.program_id);
     };
+    let mint_to_ix = mint_to_fn(
+        context.program_id,
+        &context.nested_mint,
+        &context.nested_associated_token_address,
+        &context.nested_mint_authority.pubkey(),
+        &[],
+        TEST_MINT_AMOUNT,
+    )
+    .unwrap();
     process_and_validate_then_merge(
         context.mollusk,
         &mint_to_ix,
@@ -122,51 +120,49 @@ fn execute_successful_recovery_and_validate(
         context.accounts,
         &[Check::success()],
     );
-    validate_destination_token_account(context);
-    validate_wallet_lamport_recovery(context, initial_wallet_lamports);
+    let result = validate_destination_token_account(context);
+    validate_wallet_lamport_recovery(context, initial_wallet_lamports, result);
 }
 
-fn validate_destination_token_account(context: &RecoverNestedTestContext) {
+fn validate_destination_token_account(
+    context: &RecoverNestedTestContext,
+) -> mollusk_svm::result::InstructionResult {
     let destination_account = get_account(context.accounts, context.destination_token_address);
-    mollusk_svm::result::InstructionResult {
+    let result = mollusk_svm::result::InstructionResult {
         resulting_accounts: vec![(
             context.destination_token_address,
             destination_account.clone(),
         )],
         ..Default::default()
-    }
-    .run_checks::<mollusk_svm::Mollusk>(
+    };
+    result.run_checks::<mollusk_svm::Mollusk>(
         &[Check::account(&context.destination_token_address)
             .owner(context.program_id)
             .rent_exempt()
             .build()],
-        &mollusk_svm::result::config::Config {
-            panic: true,
-            verbose: true,
-        },
+        &VALIDATION_CONFIG,
         context.mollusk,
     );
     let destination_state =
         StateWithExtensionsOwned::<TokenAccount>::unpack(destination_account.data).unwrap();
     assert_eq!(destination_state.base.amount, TEST_MINT_AMOUNT);
+    result
 }
 
-fn validate_wallet_lamport_recovery(context: &RecoverNestedTestContext, initial_lamports: u64) {
+fn validate_wallet_lamport_recovery(
+    context: &RecoverNestedTestContext,
+    initial_lamports: u64,
+    mut result: mollusk_svm::result::InstructionResult,
+) {
     let wallet_account = get_account(context.accounts, context.wallet.pubkey());
     let expected_final_lamports =
         initial_lamports.saturating_add(calculate_ata_rent_for_program(context.program_id));
-    mollusk_svm::result::InstructionResult {
-        resulting_accounts: vec![(context.wallet.pubkey(), wallet_account.clone())],
-        ..Default::default()
-    }
-    .run_checks::<mollusk_svm::Mollusk>(
+    result.resulting_accounts = vec![(context.wallet.pubkey(), wallet_account.clone())];
+    result.run_checks::<mollusk_svm::Mollusk>(
         &[Check::account(&context.wallet.pubkey())
             .lamports(expected_final_lamports)
             .build()],
-        &mollusk_svm::result::config::Config {
-            panic: true,
-            verbose: true,
-        },
+        &VALIDATION_CONFIG,
         context.mollusk,
     );
 }

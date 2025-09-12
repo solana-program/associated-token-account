@@ -5,11 +5,7 @@ use {
     mollusk_svm::{
         program::loader_keys::LOADER_V3, result::ProgramResult, Mollusk, MolluskContext,
     },
-    solana_program::{
-        instruction::{AccountMeta, Instruction},
-        pubkey::Pubkey,
-        sysvar,
-    },
+    solana_program::{instruction::Instruction, pubkey::Pubkey, sysvar},
     solana_sdk::{account::Account, signature::Keypair, signer::Signer},
     solana_system_interface::instruction as system_instruction,
     solana_system_interface::program as system_program,
@@ -62,15 +58,10 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
 
 pub mod test_util_exports {
     #![allow(dead_code)]
-    use super::*;
-
-    /// Setup a MolluskContext with ATA and token programs for testing
-    pub fn setup_context_with_programs(
-        token_program_id: &Pubkey,
-    ) -> MolluskContext<HashMap<Pubkey, Account>> {
-        let mollusk = setup_mollusk_with_programs(token_program_id);
-        mollusk.with_context(HashMap::new())
-    }
+    use {
+        super::*, mollusk_svm::result::Check, solana_program::instruction::AccountMeta,
+        solana_sdk::program_error::ProgramError,
+    };
 
     /// Ensure a system-owned account exists in the context store with the given lamports
     pub fn ctx_ensure_system_account_exists(
@@ -205,6 +196,530 @@ pub mod test_util_exports {
         /// Calculate the rent-exempt balance for a standard SPL token account
         pub fn token_account_balance() -> u64 {
             Rent::default().minimum_balance(token_account_len())
+        }
+    }
+
+    /// Comprehensive test harness for ATA testing scenarios
+    pub struct TestHarness {
+        pub mollusk: mollusk_svm::Mollusk,
+        pub accounts: Vec<(Pubkey, Account)>,
+        pub token_program_id: Pubkey,
+        pub payer: Keypair,
+        pub wallet: Option<Keypair>,
+        pub mint: Option<Pubkey>,
+        pub mint_authority: Option<Keypair>,
+        pub ata_address: Option<Pubkey>,
+    }
+
+    impl TestHarness {
+        /// Create a new test harness with the specified token program
+        pub fn new(token_program_id: &Pubkey) -> Self {
+            let mollusk = setup_mollusk_with_programs(token_program_id);
+            let payer = Keypair::new();
+            let accounts = create_mollusk_base_accounts_with_token(&payer, token_program_id);
+
+            Self {
+                mollusk,
+                accounts,
+                token_program_id: *token_program_id,
+                payer,
+                wallet: None,
+                mint: None,
+                mint_authority: None,
+                ata_address: None,
+            }
+        }
+
+        /// Add a wallet with the specified lamports
+        pub fn with_wallet(mut self, lamports: u64) -> Self {
+            let wallet = Keypair::new();
+            ensure_system_accounts_with_lamports(
+                &mut self.accounts,
+                &[(wallet.pubkey(), lamports)],
+            );
+            self.wallet = Some(wallet);
+            self
+        }
+
+        /// Create and initialize a mint with the specified decimals
+        pub fn with_mint(mut self, decimals: u8) -> Self {
+            let mint_account = Keypair::new();
+            let mint_authority = Keypair::new();
+
+            self.accounts.push((
+                mint_authority.pubkey(),
+                account_builder::AccountBuilder::system_account(1_000_000),
+            ));
+
+            let mint_accounts = create_test_mint(
+                &self.mollusk,
+                &mint_account,
+                &mint_authority,
+                &self.payer,
+                &self.token_program_id,
+                decimals,
+            );
+
+            // Merge the mint-related accounts
+            for (pubkey, account) in mint_accounts {
+                if pubkey == mint_account.pubkey() || pubkey == mint_authority.pubkey() {
+                    if let Some(pos) = self.accounts.iter().position(|(pk, _)| *pk == pubkey) {
+                        self.accounts[pos] = (pubkey, account);
+                    } else {
+                        self.accounts.push((pubkey, account));
+                    }
+                }
+            }
+
+            self.mint = Some(mint_account.pubkey());
+            self.mint_authority = Some(mint_authority);
+            self
+        }
+
+        /// Create an ATA for the wallet and mint (requires wallet and mint to be set)
+        pub fn with_ata(mut self) -> Self {
+            let wallet = self
+                .wallet
+                .as_ref()
+                .expect("Wallet must be set before creating ATA");
+            let mint = self.mint.expect("Mint must be set before creating ATA");
+
+            let ata_address = get_associated_token_address_with_program_id(
+                &wallet.pubkey(),
+                &mint,
+                &self.token_program_id,
+            );
+
+            let (_, _) = create_associated_token_account_mollusk(
+                &self.mollusk,
+                &mut self.accounts,
+                &self.payer,
+                &wallet.pubkey(),
+                &mint,
+                &self.token_program_id,
+            );
+
+            self.ata_address = Some(ata_address);
+            self
+        }
+
+        /// Execute an instruction and validate with the given checks
+        pub fn execute_and_validate(
+            &mut self,
+            instruction: &solana_program::instruction::Instruction,
+            checks: &[mollusk_svm::result::Check],
+        ) -> mollusk_svm::result::InstructionResult {
+            process_and_validate_then_merge(&self.mollusk, instruction, &mut self.accounts, checks)
+        }
+
+        /// Execute an instruction expecting success
+        pub fn execute_success(
+            &mut self,
+            instruction: &solana_program::instruction::Instruction,
+        ) -> mollusk_svm::result::InstructionResult {
+            self.execute_and_validate(instruction, &[mollusk_svm::result::Check::success()])
+        }
+
+        /// Execute an instruction expecting a specific error
+        pub fn execute_error(
+            &mut self,
+            instruction: &solana_program::instruction::Instruction,
+            expected_error: ProgramError,
+        ) -> mollusk_svm::result::InstructionResult {
+            self.execute_and_validate(
+                instruction,
+                &[mollusk_svm::result::Check::err(expected_error)],
+            )
+        }
+
+        /// Get a reference to an account by pubkey
+        pub fn get_account(&self, pubkey: Pubkey) -> Account {
+            get_account(&self.accounts, pubkey)
+        }
+
+        /// Mint tokens to the ATA (requires mint_authority and ata_address to be set)
+        pub fn mint_tokens(&mut self, amount: u64) {
+            let ata_address = self.ata_address.expect("ATA must be set");
+            self.mint_tokens_to(ata_address, amount);
+        }
+
+        /// Mint tokens to a specific address
+        pub fn mint_tokens_to(&mut self, destination: Pubkey, amount: u64) {
+            let mint = self.mint.expect("Mint must be set");
+            let mint_authority = self
+                .mint_authority
+                .as_ref()
+                .expect("Mint authority must be set");
+
+            let mint_to_ix = if self.token_program_id == spl_token_2022_interface::id() {
+                spl_token_2022_interface::instruction::mint_to(
+                    &self.token_program_id,
+                    &mint,
+                    &destination,
+                    &mint_authority.pubkey(),
+                    &[],
+                    amount,
+                )
+                .unwrap()
+            } else {
+                spl_token_interface::instruction::mint_to(
+                    &self.token_program_id,
+                    &mint,
+                    &destination,
+                    &mint_authority.pubkey(),
+                    &[],
+                    amount,
+                )
+                .unwrap()
+            };
+
+            self.execute_success(&mint_to_ix);
+        }
+
+        /// Build a create ATA instruction for the current wallet and mint
+        pub fn build_create_ata_instruction(
+            &mut self,
+            instruction_type: CreateAtaInstructionType,
+        ) -> solana_program::instruction::Instruction {
+            let wallet = self.wallet.as_ref().expect("Wallet must be set");
+            let mint = self.mint.expect("Mint must be set");
+            let ata_address = get_associated_token_address_with_program_id(
+                &wallet.pubkey(),
+                &mint,
+                &self.token_program_id,
+            );
+
+            // Ensure ATA address exists as system account
+            ensure_system_account_exists(&mut self.accounts, ata_address, 0);
+            self.ata_address = Some(ata_address);
+
+            build_create_ata_instruction(
+                spl_associated_token_account::id(),
+                self.payer.pubkey(),
+                ata_address,
+                wallet.pubkey(),
+                mint,
+                self.token_program_id,
+                instruction_type,
+            )
+        }
+
+        /// Create a nested ATA (ATA owned by another ATA) and return the nested ATA address
+        pub fn create_nested_ata(&mut self, owner_ata: Pubkey) -> Pubkey {
+            let mint = self.mint.expect("Mint must be set");
+            let (nested_ata_address, _) = create_associated_token_account_mollusk(
+                &self.mollusk,
+                &mut self.accounts,
+                &self.payer,
+                &owner_ata,
+                &mint,
+                &self.token_program_id,
+            );
+            nested_ata_address
+        }
+
+        /// Create an ATA for a different owner (for error testing)
+        pub fn create_ata_for_owner(&mut self, owner: Pubkey) -> Pubkey {
+            let mint = self.mint.expect("Mint must be set");
+            ensure_system_accounts_with_lamports(&mut self.accounts, &[(owner, 1_000_000)]);
+            let (ata_address, _) = create_associated_token_account_mollusk(
+                &self.mollusk,
+                &mut self.accounts,
+                &self.payer,
+                &owner,
+                &mint,
+                &self.token_program_id,
+            );
+            ata_address
+        }
+
+        /// Build a recover_nested instruction and ensure all required accounts exist
+        pub fn build_recover_nested_instruction(
+            &mut self,
+            owner_mint: Pubkey,
+            nested_mint: Pubkey,
+        ) -> solana_program::instruction::Instruction {
+            let wallet = self.wallet.as_ref().expect("Wallet must be set");
+
+            // Ensure all derived ATA accounts exist as system accounts for mollusk
+            ensure_recover_nested_accounts(
+                &mut self.accounts,
+                &wallet.pubkey(),
+                &nested_mint,
+                &owner_mint,
+                &self.token_program_id,
+            );
+
+            spl_associated_token_account_interface::instruction::recover_nested(
+                &wallet.pubkey(),
+                &owner_mint,
+                &nested_mint,
+                &self.token_program_id,
+            )
+        }
+    }
+
+    /// Simple context-based test harness for lightweight testing scenarios
+    pub struct ContextHarness {
+        pub ctx: MolluskContext<HashMap<Pubkey, Account>>,
+        pub token_program_id: Pubkey,
+        pub payer: Keypair,
+        pub wallet: Option<Keypair>,
+        pub mint: Option<Pubkey>,
+        pub ata_address: Option<Pubkey>,
+    }
+
+    impl ContextHarness {
+        /// Create a new context-based harness
+        pub fn new(token_program_id: &Pubkey) -> Self {
+            let mollusk = setup_mollusk_with_programs(token_program_id);
+            let ctx = mollusk.with_context(HashMap::new());
+            let payer = Keypair::new();
+
+            Self {
+                ctx,
+                token_program_id: *token_program_id,
+                payer,
+                wallet: None,
+                mint: None,
+                ata_address: None,
+            }
+        }
+
+        /// Add a wallet and mint, and fund the payer
+        pub fn with_wallet_and_mint(mut self, wallet_lamports: u64, decimals: u8) -> Self {
+            let wallet = Keypair::new();
+            let mint = Pubkey::new_unique();
+
+            // Fund payer
+            let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
+                test_calculations::token_2022_account_balance()
+            } else {
+                test_calculations::token_account_balance()
+            };
+
+            self.ctx.account_store.borrow_mut().insert(
+                self.payer.pubkey(),
+                account_builder::AccountBuilder::system_account(expected_balance),
+            );
+
+            // Add mint
+            if self.token_program_id == spl_token_2022_interface::id() {
+                self.ctx.account_store.borrow_mut().insert(
+                    mint,
+                    account_builder::AccountBuilder::extended_mint(decimals, &self.payer.pubkey()),
+                );
+            } else {
+                self.ctx.account_store.borrow_mut().insert(
+                    mint,
+                    account_builder::AccountBuilder::mint(decimals, &self.payer.pubkey()),
+                );
+            }
+
+            // Add wallet
+            ctx_ensure_system_accounts_with_lamports(
+                &self.ctx,
+                &[(wallet.pubkey(), wallet_lamports)],
+            );
+
+            self.wallet = Some(wallet);
+            self.mint = Some(mint);
+            self
+        }
+
+        /// Build and execute a create ATA instruction
+        pub fn create_ata(&mut self, instruction_type: CreateAtaInstructionType) -> Pubkey {
+            let wallet = self.wallet.as_ref().expect("Wallet must be set");
+            let mint = self.mint.expect("Mint must be set");
+            let ata_address = get_associated_token_address_with_program_id(
+                &wallet.pubkey(),
+                &mint,
+                &self.token_program_id,
+            );
+
+            ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
+
+            let instruction = build_create_ata_instruction(
+                spl_associated_token_account::id(),
+                self.payer.pubkey(),
+                ata_address,
+                wallet.pubkey(),
+                mint,
+                self.token_program_id,
+                instruction_type,
+            );
+
+            let expected_len = if self.token_program_id == spl_token_2022_interface::id() {
+                test_calculations::token_2022_account_len()
+            } else {
+                test_calculations::token_account_len()
+            };
+
+            let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
+                test_calculations::token_2022_account_balance()
+            } else {
+                test_calculations::token_account_balance()
+            };
+
+            self.ctx.process_and_validate_instruction(
+                &instruction,
+                &[
+                    Check::success(),
+                    Check::account(&ata_address)
+                        .space(expected_len)
+                        .owner(&self.token_program_id)
+                        .lamports(expected_balance)
+                        .build(),
+                ],
+            );
+
+            self.ata_address = Some(ata_address);
+            ata_address
+        }
+
+        /// Execute an instruction expecting an error
+        pub fn execute_error(
+            &self,
+            instruction: &solana_program::instruction::Instruction,
+            expected_error: ProgramError,
+        ) {
+            self.ctx
+                .process_and_validate_instruction(instruction, &[Check::err(expected_error)]);
+        }
+
+        /// Get the current ATA address (if set)
+        pub fn ata_address(&self) -> Option<Pubkey> {
+            self.ata_address
+        }
+
+        /// Insert a specific account into the context
+        pub fn insert_account(&self, pubkey: Pubkey, account: Account) {
+            self.ctx.account_store.borrow_mut().insert(pubkey, account);
+        }
+
+        /// Create a token account with wrong owner at the ATA address (for error testing)
+        pub fn insert_wrong_owner_token_account(&self, wrong_owner: Pubkey) -> Pubkey {
+            let wallet = self.wallet.as_ref().expect("Wallet must be set");
+            let mint = self.mint.expect("Mint must be set");
+            let ata_address = get_associated_token_address_with_program_id(
+                &wallet.pubkey(),
+                &mint,
+                &self.token_program_id,
+            );
+
+            // Create token account with wrong owner
+            let wrong_account = account_builder::AccountBuilder::token_account(
+                &mint,
+                &wrong_owner,
+                0,
+                &self.token_program_id,
+            );
+
+            self.insert_account(ata_address, wrong_account);
+            ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wrong_owner, 1_000_000)]);
+
+            ata_address
+        }
+
+        /// Execute an instruction with a modified account address (for testing non-ATA addresses)
+        pub fn execute_with_wrong_account_address(
+            &self,
+            account_keypair: &Keypair,
+            expected_error: ProgramError,
+        ) {
+            let wallet = self.wallet.as_ref().expect("Wallet must be set");
+            let mint = self.mint.expect("Mint must be set");
+
+            // Create a token account at the wrong address
+            self.insert_account(
+                account_keypair.pubkey(),
+                account_builder::AccountBuilder::token_account(
+                    &mint,
+                    &wallet.pubkey(),
+                    0,
+                    &self.token_program_id,
+                ),
+            );
+
+            let mut instruction = build_create_ata_instruction_with_system_account(
+                &mut Vec::new(),
+                spl_associated_token_account::id(),
+                self.payer.pubkey(),
+                get_associated_token_address_with_program_id(
+                    &wallet.pubkey(),
+                    &mint,
+                    &self.token_program_id,
+                ),
+                wallet.pubkey(),
+                mint,
+                self.token_program_id,
+                CreateAtaInstructionType::CreateIdempotent { bump: None },
+            );
+
+            // Replace the ATA address with the wrong account address
+            instruction.accounts[1] = AccountMeta::new(account_keypair.pubkey(), false);
+
+            self.execute_error(&instruction, expected_error);
+        }
+
+        /// Create ATA instruction with custom modifications (for special cases like legacy empty data)
+        pub fn create_and_check_ata_with_custom_instruction<F>(
+            &mut self,
+            instruction_type: CreateAtaInstructionType,
+            modify_instruction: F,
+        ) -> Pubkey
+        where
+            F: FnOnce(&mut solana_program::instruction::Instruction),
+        {
+            let wallet = self.wallet.as_ref().expect("Wallet must be set");
+            let mint = self.mint.expect("Mint must be set");
+            let ata_address = get_associated_token_address_with_program_id(
+                &wallet.pubkey(),
+                &mint,
+                &self.token_program_id,
+            );
+
+            ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
+
+            let mut instruction = build_create_ata_instruction(
+                spl_associated_token_account::id(),
+                self.payer.pubkey(),
+                ata_address,
+                wallet.pubkey(),
+                mint,
+                self.token_program_id,
+                instruction_type,
+            );
+
+            // Apply custom modification
+            modify_instruction(&mut instruction);
+
+            let expected_len = if self.token_program_id == spl_token_2022_interface::id() {
+                test_calculations::token_2022_account_len()
+            } else {
+                test_calculations::token_account_len()
+            };
+
+            let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
+                test_calculations::token_2022_account_balance()
+            } else {
+                test_calculations::token_account_balance()
+            };
+
+            self.ctx.process_and_validate_instruction(
+                &instruction,
+                &[
+                    Check::success(),
+                    Check::account(&ata_address)
+                        .space(expected_len)
+                        .owner(&self.token_program_id)
+                        .lamports(expected_balance)
+                        .build(),
+                ],
+            );
+
+            self.ata_address = Some(ata_address);
+            ata_address
         }
     }
 

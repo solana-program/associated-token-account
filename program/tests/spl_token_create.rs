@@ -1,104 +1,24 @@
 mod utils;
 
-use crate::utils::test_util_exports::{
-    account_builder, build_create_ata_instruction, ctx_ensure_system_account_exists,
-    ctx_ensure_system_accounts_with_lamports, setup_context_with_programs, test_calculations,
-    CreateAtaInstructionType,
-};
-
-use {
-    mollusk_svm::result::Check, solana_pubkey::Pubkey, solana_sdk::signature::Signer,
-    spl_associated_token_account_interface::address::get_associated_token_address,
-};
+use crate::utils::test_util_exports::{ContextHarness, CreateAtaInstructionType};
 
 #[test]
 fn success_create() {
-    let wallet_address = Pubkey::new_unique();
-    let token_mint_address = Pubkey::new_unique();
-    let associated_token_address =
-        get_associated_token_address(&wallet_address, &token_mint_address);
-
-    let ctx = setup_context_with_programs(&spl_token_interface::id());
-    let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_balance = test_calculations::token_account_balance();
-    ctx.account_store.borrow_mut().insert(
-        payer.pubkey(),
-        account_builder::AccountBuilder::system_account(expected_token_account_balance),
-    );
-    ctx.account_store.borrow_mut().insert(
-        token_mint_address,
-        account_builder::AccountBuilder::mint(6, &payer.pubkey()),
-    );
-    ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
-    ctx_ensure_system_account_exists(&ctx, associated_token_address, 0);
-    let expected_token_account_balance = test_calculations::token_account_balance();
-
-    let instruction = build_create_ata_instruction(
-        spl_associated_token_account::id(),
-        payer.pubkey(),
-        associated_token_address,
-        wallet_address,
-        token_mint_address,
-        spl_token_interface::id(),
-        CreateAtaInstructionType::default(),
-    );
-    ctx.process_and_validate_instruction(
-        &instruction,
-        &[
-            Check::success(),
-            Check::account(&associated_token_address)
-                .space(test_calculations::token_account_len())
-                .owner(&spl_token_interface::id())
-                .lamports(expected_token_account_balance)
-                .build(),
-        ],
-    );
+    // Using ContextHarness - compare this concise version with the verbose version below
+    let mut harness =
+        ContextHarness::new(&spl_token_interface::id()).with_wallet_and_mint(1_000_000, 6);
+    harness.create_ata(CreateAtaInstructionType::default());
 }
 
 #[test]
 fn success_using_deprecated_instruction_creator() {
-    let wallet_address = Pubkey::new_unique();
-    let token_mint_address = Pubkey::new_unique();
-    let associated_token_address =
-        get_associated_token_address(&wallet_address, &token_mint_address);
+    let mut harness =
+        ContextHarness::new(&spl_token_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
-    let ctx = setup_context_with_programs(&spl_token_interface::id());
-    let payer = solana_sdk::signer::keypair::Keypair::new();
-    let expected_token_account_balance = test_calculations::token_account_balance();
-    ctx.account_store.borrow_mut().insert(
-        payer.pubkey(),
-        account_builder::AccountBuilder::system_account(expected_token_account_balance),
-    );
-    ctx.account_store.borrow_mut().insert(
-        token_mint_address,
-        account_builder::AccountBuilder::mint(6, &payer.pubkey()),
-    );
-    ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
-    ctx_ensure_system_account_exists(&ctx, associated_token_address, 0);
-
-    let expected_token_account_balance = test_calculations::token_account_balance();
-
-    // Use legacy-style instruction (empty data to simulate deprecated function)
-    let mut instruction = build_create_ata_instruction(
-        spl_associated_token_account::id(),
-        payer.pubkey(),
-        associated_token_address,
-        wallet_address,
-        token_mint_address,
-        spl_token_interface::id(),
+    harness.create_and_check_ata_with_custom_instruction(
         CreateAtaInstructionType::default(),
-    );
-    instruction.data = vec![]; // Legacy deprecated instruction had empty data
-
-    ctx.process_and_validate_instruction(
-        &instruction,
-        &[
-            Check::success(),
-            Check::account(&associated_token_address)
-                .space(test_calculations::token_account_len())
-                .owner(&spl_token_interface::id())
-                .lamports(expected_token_account_balance)
-                .build(),
-        ],
+        |instruction| {
+            instruction.data = vec![]; // Legacy deprecated instruction had empty data
+        },
     );
 }

@@ -1,11 +1,18 @@
 mod utils;
 
 use solana_program_test::tokio;
+
+use crate::utils::test_util_exports::{
+    account_builder, build_create_ata_instruction, ctx_ensure_system_account_exists,
+    ctx_ensure_system_accounts_with_lamports, setup_context_with_programs,
+    CreateAtaInstructionType,
+};
+
 use {
     mollusk_svm::result::Check, solana_program_pack::Pack, solana_pubkey::Pubkey,
     solana_sdk::signature::Signer,
     spl_associated_token_account_interface::address::get_associated_token_address,
-    spl_token_interface::state::Account, utils::*,
+    spl_token_interface::state::Account,
 };
 
 #[tokio::test]
@@ -15,16 +22,20 @@ async fn success_create() {
     let associated_token_address =
         get_associated_token_address(&wallet_address, &token_mint_address);
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_interface::id());
+    let ctx = setup_context_with_programs(&spl_token_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
-    accounts.push((
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(Account::LEN);
+    ctx.account_store.borrow_mut().insert(
+        payer.pubkey(),
+        account_builder::AccountBuilder::system_account(expected_token_account_balance),
+    );
+    ctx.account_store.borrow_mut().insert(
         token_mint_address,
         account_builder::AccountBuilder::mint(6, &payer.pubkey()),
-    ));
-    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
-    // Ensure the derived ATA exists as a placeholder system account for Mollusk
-    ensure_system_account_exists(&mut accounts, associated_token_address, 0);
+    );
+    ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
+    ctx_ensure_system_account_exists(&ctx, associated_token_address, 0);
     let expected_token_account_len = Account::LEN;
     let expected_token_account_balance =
         solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
@@ -41,9 +52,8 @@ async fn success_create() {
             account_len: None,
         },
     );
-    mollusk.process_and_validate_instruction(
+    ctx.process_and_validate_instruction(
         &instruction,
-        &accounts,
         &[
             Check::success(),
             Check::account(&associated_token_address)
@@ -62,18 +72,20 @@ async fn success_using_deprecated_instruction_creator() {
     let associated_token_address =
         get_associated_token_address(&wallet_address, &token_mint_address);
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_interface::id());
+    let ctx = setup_context_with_programs(&spl_token_interface::id());
     let payer = solana_sdk::signer::keypair::Keypair::new();
-    let mut accounts = create_mollusk_base_accounts_with_token(&payer, &spl_token_interface::id());
-
-    // Add mint and wallet to accounts
-    accounts.push((
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(Account::LEN);
+    ctx.account_store.borrow_mut().insert(
+        payer.pubkey(),
+        account_builder::AccountBuilder::system_account(expected_token_account_balance),
+    );
+    ctx.account_store.borrow_mut().insert(
         token_mint_address,
         account_builder::AccountBuilder::mint(6, &payer.pubkey()),
-    ));
-    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
-    // Ensure the derived ATA exists as a placeholder system account for Mollusk
-    ensure_system_account_exists(&mut accounts, associated_token_address, 0);
+    );
+    ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
+    ctx_ensure_system_account_exists(&ctx, associated_token_address, 0);
 
     let expected_token_account_len = Account::LEN;
     let expected_token_account_balance =
@@ -94,9 +106,8 @@ async fn success_using_deprecated_instruction_creator() {
     );
     instruction.data = vec![]; // Legacy deprecated instruction had empty data
 
-    mollusk.process_and_validate_instruction(
+    ctx.process_and_validate_instruction(
         &instruction,
-        &accounts,
         &[
             Check::success(),
             Check::account(&associated_token_address)

@@ -1,6 +1,12 @@
 mod utils;
 
 use {
+    crate::utils::test_util_exports::{
+        account_builder, build_create_ata_instruction,
+        build_create_ata_instruction_with_system_account, ctx_ensure_system_account_exists,
+        ctx_ensure_system_accounts_with_lamports, setup_context_with_programs,
+        CreateAtaInstructionType,
+    },
     mollusk_svm::result::Check,
     solana_program::instruction::*,
     solana_program_test::*,
@@ -8,7 +14,6 @@ use {
     solana_sdk::{program_error::ProgramError, signature::Signer, signer::keypair::Keypair},
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account},
-    utils::*,
 };
 
 #[tokio::test]
@@ -21,23 +26,28 @@ async fn success_account_exists() {
         &spl_token_2022_interface::id(),
     );
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
+    let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = Keypair::new();
-    let mut accounts =
-        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.push((
+    ctx.account_store.borrow_mut().insert(
         token_mint_address,
         account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
-    ));
-    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
+    );
+    ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
+    ctx_ensure_system_account_exists(&ctx, associated_token_address, 0);
     let rent = solana_sdk::rent::Rent::default();
     let expected_token_account_len =
         ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
             .unwrap();
     let expected_token_account_balance = rent.minimum_balance(expected_token_account_len);
 
+    // Fund payer with exactly the token account rent amount.
+    ctx.account_store.borrow_mut().insert(
+        payer.pubkey(),
+        account_builder::AccountBuilder::system_account(expected_token_account_balance),
+    );
+
     let instruction = build_create_ata_instruction_with_system_account(
-        &mut accounts,
+        &mut Vec::new(),
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address,
@@ -46,9 +56,8 @@ async fn success_account_exists() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
-    let result = mollusk.process_and_validate_instruction(
+    ctx.process_and_validate_instruction(
         &instruction,
-        &accounts,
         &[
             Check::success(),
             Check::account(&associated_token_address)
@@ -58,33 +67,18 @@ async fn success_account_exists() {
                 .build(),
         ],
     );
-    // Merge resulting accounts so subsequent steps see the token-owned ATA
-    for (updated_pubkey, updated_account) in result.resulting_accounts.into_iter() {
-        if let Some((_, existing_account)) =
-            accounts.iter_mut().find(|(pk, _)| *pk == updated_pubkey)
-        {
-            *existing_account = updated_account;
-        } else {
-            accounts.push((updated_pubkey, updated_account));
-        }
-    }
-    let associated_account = accounts
-        .iter()
-        .find(|(pk, _)| *pk == associated_token_address)
-        .expect("associated account exists")
-        .1
-        .clone();
+    let associated_account = ctx
+        .account_store
+        .borrow()
+        .get(&associated_token_address)
+        .cloned()
+        .expect("associated account exists");
 
     // Test failure case: try to Create when ATA already exists as token account
     // Replace any existing account at the ATA address with the token account from the first instruction
-    if let Some(existing_index) = accounts
-        .iter()
-        .position(|(pk, _)| *pk == associated_token_address)
-    {
-        accounts[existing_index] = (associated_token_address, associated_account.clone());
-    } else {
-        accounts.push((associated_token_address, associated_account.clone()));
-    }
+    ctx.account_store
+        .borrow_mut()
+        .insert(associated_token_address, associated_account.clone());
 
     // Build Create instruction - this should fail because account exists and is owned by token program
     // Note: We use the raw build_create_ata_instruction because we want to test the failure case
@@ -102,14 +96,10 @@ async fn success_account_exists() {
         },
     );
     // Should fail with IllegalOwner because the account already exists and is owned by token program
-    mollusk.process_and_validate_instruction(
-        &instruction,
-        &accounts,
-        &[Check::err(ProgramError::IllegalOwner)],
-    );
+    ctx.process_and_validate_instruction(&instruction, &[Check::err(ProgramError::IllegalOwner)]);
 
     let instruction = build_create_ata_instruction_with_system_account(
-        &mut accounts,
+        &mut Vec::new(),
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address,
@@ -118,9 +108,8 @@ async fn success_account_exists() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
-    mollusk.process_and_validate_instruction(
+    ctx.process_and_validate_instruction(
         &instruction,
-        &accounts,
         &[
             Check::success(),
             Check::account(&associated_token_address)
@@ -143,32 +132,37 @@ async fn fail_account_exists_with_wrong_owner() {
     );
 
     let wrong_owner = Pubkey::new_unique();
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
+    let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = Keypair::new();
-    let mut accounts =
-        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.extend([
-        (
-            token_mint_address,
-            account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
+    let expected_token_account_len =
+        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
+            .unwrap();
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    ctx.account_store.borrow_mut().insert(
+        payer.pubkey(),
+        account_builder::AccountBuilder::system_account(expected_token_account_balance),
+    );
+    ctx.account_store.borrow_mut().insert(
+        token_mint_address,
+        account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
+    );
+    ctx.account_store.borrow_mut().insert(
+        associated_token_address,
+        account_builder::AccountBuilder::token_account(
+            &token_mint_address,
+            &wrong_owner,
+            0,
+            &spl_token_2022_interface::id(),
         ),
-        (
-            associated_token_address,
-            account_builder::AccountBuilder::token_account(
-                &token_mint_address,
-                &wrong_owner,
-                0,
-                &spl_token_2022_interface::id(),
-            ),
-        ),
-    ]);
-    ensure_system_accounts_with_lamports(
-        &mut accounts,
+    );
+    ctx_ensure_system_accounts_with_lamports(
+        &ctx,
         &[(wallet_address, 1_000_000), (wrong_owner, 1_000_000)],
     );
 
     let instruction = build_create_ata_instruction_with_system_account(
-        &mut accounts,
+        &mut Vec::new(),
         spl_associated_token_account::id(),
         payer.pubkey(),
         associated_token_address,
@@ -177,9 +171,8 @@ async fn fail_account_exists_with_wrong_owner() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
-    mollusk.process_and_validate_instruction(
+    ctx.process_and_validate_instruction(
         &instruction,
-        &accounts,
         &[Check::err(ProgramError::Custom(
             spl_associated_token_account::error::AssociatedTokenAccountError::InvalidOwner as u32,
         ))],
@@ -192,29 +185,35 @@ async fn fail_non_ata() {
     let wallet_address = Pubkey::new_unique();
     let account = Keypair::new();
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022_interface::id());
+    let ctx = setup_context_with_programs(&spl_token_2022_interface::id());
     let payer = Keypair::new();
-    let mut accounts =
-        create_mollusk_base_accounts_with_token(&payer, &spl_token_2022_interface::id());
-    accounts.extend([
-        (
-            token_mint_address,
-            account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
+    // For this test the instruction fails before funding; minimal rent amount is sufficient if needed.
+    let expected_token_account_len =
+        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
+            .unwrap();
+    let expected_token_account_balance =
+        solana_sdk::rent::Rent::default().minimum_balance(expected_token_account_len);
+    ctx.account_store.borrow_mut().insert(
+        payer.pubkey(),
+        account_builder::AccountBuilder::system_account(expected_token_account_balance),
+    );
+    ctx.account_store.borrow_mut().insert(
+        token_mint_address,
+        account_builder::AccountBuilder::extended_mint(6, &payer.pubkey()),
+    );
+    ctx.account_store.borrow_mut().insert(
+        account.pubkey(),
+        account_builder::AccountBuilder::token_account(
+            &token_mint_address,
+            &wallet_address,
+            0,
+            &spl_token_2022_interface::id(),
         ),
-        (
-            account.pubkey(),
-            account_builder::AccountBuilder::token_account(
-                &token_mint_address,
-                &wallet_address,
-                0,
-                &spl_token_2022_interface::id(),
-            ),
-        ),
-    ]);
-    ensure_system_accounts_with_lamports(&mut accounts, &[(wallet_address, 1_000_000)]);
+    );
+    ctx_ensure_system_accounts_with_lamports(&ctx, &[(wallet_address, 1_000_000)]);
 
     let mut instruction = build_create_ata_instruction_with_system_account(
-        &mut accounts,
+        &mut Vec::new(),
         spl_associated_token_account::id(),
         payer.pubkey(),
         get_associated_token_address_with_program_id(
@@ -228,9 +227,5 @@ async fn fail_non_ata() {
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
     instruction.accounts[1] = AccountMeta::new(account.pubkey(), false);
-    mollusk.process_and_validate_instruction(
-        &instruction,
-        &accounts,
-        &[Check::err(ProgramError::InvalidSeeds)],
-    );
+    ctx.process_and_validate_instruction(&instruction, &[Check::err(ProgramError::InvalidSeeds)]);
 }

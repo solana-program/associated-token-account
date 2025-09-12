@@ -59,10 +59,7 @@ async fn test_associated_token_address() {
         wallet_address,
         token_mint_address,
         spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
 
     ctx.process_and_validate_instruction(
@@ -129,10 +126,7 @@ async fn test_create_with_fewer_lamports() {
         wallet_address,
         token_mint_address,
         spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
 
     ctx.process_and_validate_instruction(
@@ -192,10 +186,7 @@ async fn test_create_with_excess_lamports() {
         wallet_address,
         token_mint_address,
         spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
     ctx.process_and_validate_instruction(
         &instruction,
@@ -328,10 +319,7 @@ async fn test_create_associated_token_account_using_legacy_implicit_instruction(
         wallet_address,
         token_mint_address,
         spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
     instruction.data = vec![];
     instruction

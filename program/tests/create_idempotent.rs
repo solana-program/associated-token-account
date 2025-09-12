@@ -90,10 +90,7 @@ async fn success_account_exists() {
         wallet_address,
         token_mint_address,
         spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
     // Should fail with IllegalOwner because the account already exists and is owned by token program
     ctx.process_and_validate_instruction(&instruction, &[Check::err(ProgramError::IllegalOwner)]);

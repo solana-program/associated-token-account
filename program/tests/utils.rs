@@ -164,6 +164,15 @@ pub mod test_util_exports {
         CreateIdempotent { bump: Option<u8> },
     }
 
+    impl Default for CreateAtaInstructionType {
+        fn default() -> Self {
+            Self::Create {
+                bump: None,
+                account_len: None,
+            }
+        }
+    }
+
     /// Encodes the instruction data payload for ATA creation-related instructions.
     pub fn encode_create_ata_instruction_data(
         instruction_type: &CreateAtaInstructionType,
@@ -391,10 +400,7 @@ pub mod test_util_exports {
             *owner,
             *mint,
             *token_program,
-            CreateAtaInstructionType::Create {
-                bump: None,
-                account_len: None,
-            },
+            CreateAtaInstructionType::default(),
         );
 
         let mollusk_result = process_and_merge_instruction(mollusk, &instruction, accounts);
@@ -423,10 +429,7 @@ pub mod test_util_exports {
             *owner,
             *mint,
             *token_program,
-            CreateAtaInstructionType::Create {
-                bump: None,
-                account_len: None,
-            },
+            CreateAtaInstructionType::default(),
         );
         instruction.data = Vec::new();
 

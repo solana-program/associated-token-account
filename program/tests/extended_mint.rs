@@ -104,10 +104,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         wallet_address_sender,
         token_mint_address,
         spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
     process_and_validate_then_merge(
         &mollusk,
@@ -130,10 +127,7 @@ async fn test_associated_token_account_with_transfer_fees() {
         wallet_address_receiver,
         token_mint_address,
         spl_token_2022_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
     process_and_validate_then_merge(
         &mollusk,

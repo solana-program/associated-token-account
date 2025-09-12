@@ -47,10 +47,7 @@ async fn success_create() {
         wallet_address,
         token_mint_address,
         spl_token_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
     ctx.process_and_validate_instruction(
         &instruction,
@@ -99,10 +96,7 @@ async fn success_using_deprecated_instruction_creator() {
         wallet_address,
         token_mint_address,
         spl_token_interface::id(),
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::default(),
     );
     instruction.data = vec![]; // Legacy deprecated instruction had empty data
 

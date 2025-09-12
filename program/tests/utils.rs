@@ -244,6 +244,16 @@ pub mod test_util_exports {
             self
         }
 
+        /// Add an additional wallet (for sender/receiver scenarios) - returns harness and the new wallet
+        pub fn with_additional_wallet(self, lamports: u64) -> (Self, Keypair) {
+            let additional_wallet = Keypair::new();
+            ctx_ensure_system_accounts_with_lamports(
+                &self.ctx,
+                &[(additional_wallet.pubkey(), lamports)],
+            );
+            (self, additional_wallet)
+        }
+
         /// Create and initialize a mint with the specified decimals
         pub fn with_mint(mut self, decimals: u8) -> Self {
             let mint_account = Keypair::new();
@@ -272,6 +282,114 @@ pub mod test_util_exports {
 
             self.mint = Some(mint_account.pubkey());
             self.mint_authority = Some(mint_authority);
+            self
+        }
+
+        /// Create and initialize a Token-2022 mint with specific extensions
+        pub fn with_mint_with_extensions(
+            mut self,
+            _decimals: u8,
+            extensions: &[spl_token_2022_interface::extension::ExtensionType],
+        ) -> Self {
+            if self.token_program_id != spl_token_2022_interface::id() {
+                panic!("with_mint_with_extensions() can only be used with Token-2022 program");
+            }
+
+            let mint_account = Keypair::new();
+            let mint_authority = Keypair::new();
+
+            self.ctx.account_store.borrow_mut().insert(
+                mint_authority.pubkey(),
+                account_builder::AccountBuilder::system_account(1_000_000),
+            );
+
+            // Calculate space needed for extensions
+            let space =
+                spl_token_2022_interface::extension::ExtensionType::try_calculate_account_len::<
+                    spl_token_2022_interface::state::Mint,
+                >(extensions)
+                .expect("Failed to calculate mint space with extensions");
+
+            // Create mint account with proper space
+            self.ctx.account_store.borrow_mut().insert(
+                mint_account.pubkey(),
+                solana_sdk::account::Account::new(0, 0, &solana_system_interface::program::id()),
+            );
+
+            let mint_rent = solana_sdk::rent::Rent::default().minimum_balance(space);
+            let create_mint_ix = solana_system_interface::instruction::create_account(
+                &self.payer.pubkey(),
+                &mint_account.pubkey(),
+                mint_rent,
+                space as u64,
+                &spl_token_2022_interface::id(),
+            );
+
+            self.ctx.process_and_validate_instruction(
+                &create_mint_ix,
+                &[mollusk_svm::result::Check::success()],
+            );
+
+            self.mint = Some(mint_account.pubkey());
+            self.mint_authority = Some(mint_authority);
+            self
+        }
+
+        /// Initialize transfer fee extension on the current mint (requires Token-2022 mint with TransferFeeConfig extension)
+        pub fn initialize_transfer_fee(
+            mut self,
+            transfer_fee_basis_points: u16,
+            maximum_fee: u64,
+        ) -> Self {
+            let mint = self.mint.expect("Mint must be set");
+            let mint_authority = self
+                .mint_authority
+                .as_ref()
+                .expect("Mint authority must be set");
+
+            let init_fee_ix = spl_token_2022_interface::extension::transfer_fee::instruction::initialize_transfer_fee_config(
+                &spl_token_2022_interface::id(),
+                &mint,
+                Some(&mint_authority.pubkey()),
+                Some(&mint_authority.pubkey()),
+                transfer_fee_basis_points,
+                maximum_fee,
+            )
+            .expect("Failed to create initialize_transfer_fee_config instruction");
+
+            self.execute_instruction(&init_fee_ix);
+            self
+        }
+
+        /// Initialize the mint (must be called after extensions are initialized)
+        pub fn initialize_mint(mut self, decimals: u8) -> Self {
+            let mint = self.mint.expect("Mint must be set");
+            let mint_authority = self
+                .mint_authority
+                .as_ref()
+                .expect("Mint authority must be set");
+
+            let init_mint_ix = if self.token_program_id == spl_token_2022_interface::id() {
+                spl_token_2022_interface::instruction::initialize_mint(
+                    &self.token_program_id,
+                    &mint,
+                    &mint_authority.pubkey(),
+                    Some(&mint_authority.pubkey()),
+                    decimals,
+                )
+                .expect("Failed to create initialize_mint instruction")
+            } else {
+                spl_token_interface::instruction::initialize_mint(
+                    &self.token_program_id,
+                    &mint,
+                    &mint_authority.pubkey(),
+                    Some(&mint_authority.pubkey()),
+                    decimals,
+                )
+                .expect("Failed to create initialize_mint instruction")
+            };
+
+            self.execute_instruction(&init_mint_ix);
             self
         }
 
@@ -337,6 +455,27 @@ pub mod test_util_exports {
                 instruction,
                 &[mollusk_svm::result::Check::err(expected_error)],
             )
+        }
+
+        /// Execute any instruction directly with the harness context (no validation)
+        pub fn execute_instruction(
+            &mut self,
+            instruction: &solana_program::instruction::Instruction,
+        ) -> mollusk_svm::result::InstructionResult {
+            self.ctx.process_and_validate_instruction(
+                instruction,
+                &[mollusk_svm::result::Check::success()],
+            )
+        }
+
+        /// Execute any instruction with custom checks
+        pub fn execute_instruction_with_checks(
+            &mut self,
+            instruction: &solana_program::instruction::Instruction,
+            checks: &[mollusk_svm::result::Check],
+        ) -> mollusk_svm::result::InstructionResult {
+            self.ctx
+                .process_and_validate_instruction(instruction, checks)
         }
 
         /// Get a reference to an account by pubkey

@@ -1,7 +1,5 @@
 mod utils;
 
-use solana_program_test::tokio;
-
 use crate::utils::test_util_exports::{
     account_builder, build_create_ata_instruction, ctx_ensure_system_account_exists,
     ctx_ensure_system_accounts_with_lamports, setup_context_with_programs,
@@ -15,8 +13,8 @@ use {
     spl_token_interface::state::Account,
 };
 
-#[tokio::test]
-async fn success_create() {
+#[test]
+fn success_create() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let associated_token_address =
@@ -62,8 +60,8 @@ async fn success_create() {
     );
 }
 
-#[tokio::test]
-async fn success_using_deprecated_instruction_creator() {
+#[test]
+fn success_using_deprecated_instruction_creator() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let associated_token_address =

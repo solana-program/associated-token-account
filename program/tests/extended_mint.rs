@@ -7,7 +7,6 @@ use {
         process_and_validate_then_merge, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
-    solana_program_test::tokio,
     solana_pubkey::Pubkey,
     solana_sdk::{
         program_error::ProgramError, rent::Rent, signature::Signer, signer::keypair::Keypair,
@@ -22,8 +21,8 @@ use {
     utils::*,
 };
 
-#[tokio::test]
-async fn test_associated_token_account_with_transfer_fees() {
+#[test]
+fn test_associated_token_account_with_transfer_fees() {
     let wallet_sender = Keypair::new();
     let wallet_address_sender = wallet_sender.pubkey();
     let wallet_address_receiver = Pubkey::new_unique();

@@ -9,15 +9,14 @@ use {
     },
     mollusk_svm::result::Check,
     solana_program::instruction::*,
-    solana_program_test::*,
     solana_pubkey::Pubkey,
     solana_sdk::{program_error::ProgramError, signature::Signer, signer::keypair::Keypair},
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account},
 };
 
-#[tokio::test]
-async fn success_account_exists() {
+#[test]
+fn success_account_exists() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let associated_token_address = get_associated_token_address_with_program_id(
@@ -118,8 +117,8 @@ async fn success_account_exists() {
     );
 }
 
-#[tokio::test]
-async fn fail_account_exists_with_wrong_owner() {
+#[test]
+fn fail_account_exists_with_wrong_owner() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let associated_token_address = get_associated_token_address_with_program_id(
@@ -176,8 +175,8 @@ async fn fail_account_exists_with_wrong_owner() {
     );
 }
 
-#[tokio::test]
-async fn fail_non_ata() {
+#[test]
+fn fail_non_ata() {
     let token_mint_address = Pubkey::new_unique();
     let wallet_address = Pubkey::new_unique();
     let account = Keypair::new();

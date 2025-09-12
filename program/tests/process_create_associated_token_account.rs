@@ -9,15 +9,14 @@ use {
     },
     mollusk_svm::result::Check,
     solana_program::{instruction::*, sysvar},
-    solana_program_test::tokio,
     solana_pubkey::Pubkey,
     solana_sdk::{program_error::ProgramError, signature::Signer},
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account},
 };
 
-#[tokio::test]
-async fn test_associated_token_address() {
+#[test]
+fn test_associated_token_address() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let associated_token_address = get_associated_token_address_with_program_id(
@@ -75,8 +74,8 @@ async fn test_associated_token_address() {
     );
 }
 
-#[tokio::test]
-async fn test_create_with_fewer_lamports() {
+#[test]
+fn test_create_with_fewer_lamports() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let associated_token_address = get_associated_token_address_with_program_id(
@@ -141,8 +140,8 @@ async fn test_create_with_fewer_lamports() {
     );
 }
 
-#[tokio::test]
-async fn test_create_with_excess_lamports() {
+#[test]
+fn test_create_with_excess_lamports() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let associated_token_address = get_associated_token_address_with_program_id(
@@ -200,8 +199,8 @@ async fn test_create_with_excess_lamports() {
     );
 }
 
-#[tokio::test]
-async fn test_create_account_mismatch() {
+#[test]
+fn test_create_account_mismatch() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let _associated_token_address = get_associated_token_address_with_program_id(
@@ -271,8 +270,8 @@ async fn test_create_account_mismatch() {
     }
 }
 
-#[tokio::test]
-async fn test_create_associated_token_account_using_legacy_implicit_instruction() {
+#[test]
+fn test_create_associated_token_account_using_legacy_implicit_instruction() {
     let wallet_address = Pubkey::new_unique();
     let token_mint_address = Pubkey::new_unique();
     let associated_token_address = get_associated_token_address_with_program_id(

@@ -16,7 +16,7 @@ use {
 
 const TEST_MINT_AMOUNT: u64 = 100;
 
-fn check_same_mint_mollusk(program_id: &Pubkey) {
+fn test_recover_nested_same_mint(program_id: &Pubkey) {
     let mut harness = TestHarness::new(program_id)
         .with_wallet(1_000_000)
         .with_mint(0)
@@ -25,7 +25,7 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
 
-    // Create nested ATA and mint tokens to it (not to the main ATA)
+    // Create nested ATA and mint tokens to it (not to the main, canonical ATA)
     let nested_ata = harness.create_nested_ata(owner_ata);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
@@ -50,15 +50,15 @@ fn check_same_mint_mollusk(program_id: &Pubkey) {
 
 #[test]
 fn success_same_mint_2022() {
-    check_same_mint_mollusk(&spl_token_2022_interface::id());
+    test_recover_nested_same_mint(&spl_token_2022_interface::id());
 }
 
 #[test]
 fn success_same_mint() {
-    check_same_mint_mollusk(&spl_token_interface::id());
+    test_recover_nested_same_mint(&spl_token_interface::id());
 }
 
-fn check_different_mints_mollusk(program_id: &Pubkey) {
+fn test_recover_nested_different_mints(program_id: &Pubkey) {
     let harness = TestHarness::new(program_id)
         .with_wallet(1_000_000)
         .with_mint(0)
@@ -99,15 +99,14 @@ fn check_different_mints_mollusk(program_id: &Pubkey) {
 
 #[test]
 fn success_different_mints() {
-    check_different_mints_mollusk(&spl_token_interface::id());
+    test_recover_nested_different_mints(&spl_token_interface::id());
 }
 
 #[test]
 fn success_different_mints_2022() {
-    check_different_mints_mollusk(&spl_token_2022_interface::id());
+    test_recover_nested_different_mints(&spl_token_2022_interface::id());
 }
 
-// Error test cases using mollusk
 #[test]
 fn fail_missing_wallet_signature_2022() {
     let mut harness = TestHarness::new(&spl_token_2022_interface::id())
@@ -158,7 +157,7 @@ fn fail_wrong_signer_2022() {
     let nested_ata = harness.create_nested_ata(owner_ata);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
-    // Test-specific logic: create wrong wallet and instruction with wrong signer
+    // Create wrong wallet and instruction with wrong signer
     let wrong_wallet = Keypair::new();
     harness.create_ata_for_owner(wrong_wallet.pubkey());
 
@@ -296,7 +295,7 @@ fn fail_owner_account_does_not_exist() {
         &spl_token_2022_interface::id(),
     );
 
-    // Test-specific logic: create nested ATA using non-existent owner ATA address
+    // Create nested ATA using non-existent owner ATA address
     let nested_ata = harness.create_nested_ata(owner_ata_address);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
@@ -322,7 +321,7 @@ fn fail_wrong_spl_token_program() {
     let nested_ata = harness.create_nested_ata(owner_ata);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
-    // Test-specific logic: use wrong program in instruction
+    // Use wrong program in instruction
     let recover_instruction = instruction::recover_nested(
         &harness.wallet.as_ref().unwrap().pubkey(),
         &mint,

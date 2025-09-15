@@ -16,27 +16,23 @@ use {
 fn test_associated_token_account_with_transfer_fees() {
     let maximum_fee = 100;
     let transfer_fee_basis_points = 1_000;
-
     let (harness, receiver_wallet) = TestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_additional_wallet(1_000_000);
-
     let mut harness = harness
         .with_mint_with_extensions(0, &[ExtensionType::TransferFeeConfig])
         .initialize_transfer_fee(transfer_fee_basis_points, maximum_fee)
         .initialize_mint(0)
         .with_ata();
-
     let (sender_pubkey, mint, sender_ata, receiver_ata) = (
         harness.wallet.as_ref().unwrap().pubkey(),
         harness.mint.unwrap(),
         harness.ata_address.unwrap(),
         harness.create_ata_for_owner(receiver_wallet.pubkey()),
     );
-
     harness.mint_tokens(50 * maximum_fee);
 
-    // Test insufficient funds transfer
+    // Insufficient funds transfer
     harness.execute_error(
         &transfer_fee::instruction::transfer_checked_with_fee(
             &spl_token_2022_interface::id(),
@@ -53,7 +49,7 @@ fn test_associated_token_account_with_transfer_fees() {
         ProgramError::Custom(spl_token_2022_interface::error::TokenError::InsufficientFunds as u32),
     );
 
-    // Test successful transfer
+    // Successful transfer
     let (transfer_amount, fee) = (500, 50);
     harness.execute_success(
         &transfer_fee::instruction::transfer_checked_with_fee(

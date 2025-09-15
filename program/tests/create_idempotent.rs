@@ -13,14 +13,10 @@ use {
 
 #[test]
 fn success_account_exists() {
-    // Using ContextHarness - dramatically simplified version
     let mut harness =
         ContextHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
-
-    // First: Create ATA successfully with CreateIdempotent
+    // CreateIdempotent will create the ATA if it doesn't exist
     let ata_address = harness.create_ata(CreateAtaInstructionType::CreateIdempotent { bump: None });
-
-    // Get the created account for later test
     let associated_account = harness
         .ctx
         .account_store
@@ -29,9 +25,8 @@ fn success_account_exists() {
         .cloned()
         .unwrap();
 
-    // Test failure case: try to Create when ATA already exists as token account
+    // Failure case: try to Create when ATA already exists as token account
     harness.insert_account(ata_address, associated_account.clone());
-
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         harness.payer.pubkey(),
@@ -43,7 +38,7 @@ fn success_account_exists() {
     );
     harness.execute_error(&instruction, ProgramError::IllegalOwner);
 
-    // Test success case: CreateIdempotent should succeed even when account exists
+    // But CreateIdempotent should succeed when account exists
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         harness.payer.pubkey(),
@@ -68,13 +63,10 @@ fn success_account_exists() {
 
 #[test]
 fn fail_account_exists_with_wrong_owner() {
-    // Using ContextHarness - simplified error testing
     let harness =
         ContextHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
-
     let wrong_owner = Pubkey::new_unique();
     let ata_address = harness.insert_wrong_owner_token_account(wrong_owner);
-
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         harness.payer.pubkey(),
@@ -96,7 +88,6 @@ fn fail_account_exists_with_wrong_owner() {
 fn fail_non_ata() {
     let harness =
         ContextHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
-
     let account = Keypair::new();
     harness.execute_with_wrong_account_address(&account, ProgramError::InvalidSeeds);
 }

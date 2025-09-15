@@ -2,7 +2,8 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::TestHarness,
-    solana_sdk::{program_error::ProgramError, signature::Signer},
+    solana_program_error::ProgramError,
+    solana_signer::Signer,
     spl_token_2022_interface::{
         extension::{
             transfer_fee, BaseStateWithExtensions, ExtensionType, StateWithExtensionsOwned,

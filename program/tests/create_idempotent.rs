@@ -5,8 +5,10 @@ use {
         build_create_ata_instruction, test_calculations, ContextHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
+    solana_keypair::Keypair,
+    solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
-    solana_sdk::{program_error::ProgramError, signature::Signer, signer::keypair::Keypair},
+    solana_signer::Signer,
 };
 
 #[test]

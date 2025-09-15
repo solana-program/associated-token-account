@@ -6,9 +6,11 @@ use {
         ContextHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
-    solana_program::{instruction::*, sysvar},
+    solana_instruction::AccountMeta,
+    solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
-    solana_sdk::{program_error::ProgramError, signature::Signer},
+    solana_signer::Signer,
+    solana_sysvar as sysvar,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
 };
 

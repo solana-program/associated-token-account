@@ -2,12 +2,12 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::{account_builder, TestHarness},
-    solana_program::program_pack::Pack,
+    solana_instruction::AccountMeta,
+    solana_keypair::Keypair,
+    solana_program_error::ProgramError,
+    solana_program_pack::Pack,
     solana_pubkey::Pubkey,
-    solana_sdk::{
-        instruction::AccountMeta, program_error::ProgramError, signature::Signer,
-        signer::keypair::Keypair,
-    },
+    solana_signer::Signer,
     spl_associated_token_account_interface::{
         address::get_associated_token_address_with_program_id, instruction,
     },

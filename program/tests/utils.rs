@@ -1193,6 +1193,3 @@ pub mod test_util_exports {
         }
     }
 }
-
-// Re-exports removed to avoid unused import warnings. Import from
-// `crate::utils::legacy_utils::...` at call sites instead.

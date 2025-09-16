@@ -4,7 +4,6 @@ use crate::utils::test_util_exports::{ATATestHarness, CreateAtaInstructionType};
 
 #[test]
 fn success_create() {
-    // Using ContextHarness - compare this concise version with the verbose version below
     let mut harness =
         ATATestHarness::new(&spl_token_interface::id()).with_wallet_and_mint(1_000_000, 6);
     harness.create_ata(CreateAtaInstructionType::default());

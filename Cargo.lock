@@ -4398,10 +4398,8 @@ version = "2.0.0"
 dependencies = [
  "borsh",
  "solana-instruction",
- "solana-program",
  "solana-pubkey",
  "solana-sdk-ids",
- "solana-system-program",
 ]
 
 [[package]]

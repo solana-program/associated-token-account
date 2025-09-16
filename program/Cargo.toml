@@ -33,7 +33,6 @@ solana-keypair = "3.0"
 solana-program-error = "3.0"
 solana-program-option = "3.0"
 solana-program-pack = "3.0"
-solana-program-test = "3.0"
 solana-signer = "3.0"
 solana-sysvar = "3.0"
 mollusk-svm = { version = "0.5.1", git = "https://github.com/rustopian/mollusk.git", branch = "use-3.0-crates", features = ["all-builtins"] }

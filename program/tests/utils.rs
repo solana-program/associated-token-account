@@ -341,11 +341,11 @@ pub mod test_util_exports {
             )
             .expect("Failed to create initialize_transfer_fee_config instruction");
 
-            self.execute_instruction(&init_fee_ix);
+            self.execute_success(&init_fee_ix);
             self
         }
 
-        /// Initialize the mint (must be called after extensions are initialized)
+        /// Initialize mint (must be called after extensions are initialized)
         pub fn initialize_mint(mut self, decimals: u8) -> Self {
             let mint = self.mint.expect("Mint must be set");
             let mint_authority = self
@@ -373,7 +373,7 @@ pub mod test_util_exports {
                 .expect("Failed to create initialize_mint instruction")
             };
 
-            self.execute_instruction(&init_mint_ix);
+            self.execute_success(&init_mint_ix);
             self
         }
 
@@ -439,27 +439,6 @@ pub mod test_util_exports {
                 instruction,
                 &[mollusk_svm::result::Check::err(expected_error)],
             )
-        }
-
-        /// Execute any instruction directly with the harness context (no validation)
-        pub fn execute_instruction(
-            &mut self,
-            instruction: &solana_program::instruction::Instruction,
-        ) -> mollusk_svm::result::InstructionResult {
-            self.ctx.process_and_validate_instruction(
-                instruction,
-                &[mollusk_svm::result::Check::success()],
-            )
-        }
-
-        /// Execute any instruction with custom checks
-        pub fn execute_instruction_with_checks(
-            &mut self,
-            instruction: &solana_program::instruction::Instruction,
-            checks: &[mollusk_svm::result::Check],
-        ) -> mollusk_svm::result::InstructionResult {
-            self.ctx
-                .process_and_validate_instruction(instruction, checks)
         }
 
         /// Get a reference to an account by pubkey

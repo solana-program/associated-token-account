@@ -2,6 +2,7 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::{ATATestHarness, AccountBuilder},
+    mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
     solana_keypair::Keypair,
     solana_program_error::ProgramError,
@@ -31,10 +32,9 @@ fn test_recover_nested_same_mint(program_id: &Pubkey) {
 
     // Build and execute recover instruction
     let recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[mollusk_svm::result::Check::success()],
-    );
+    harness
+        .ctx
+        .process_and_validate_instruction(&recover_instruction, &[Check::success()]);
 
     // Validate the recovery worked - tokens should be in the destination ATA (owner_ata)
     let destination_account = harness.get_account(owner_ata);
@@ -83,10 +83,9 @@ fn test_recover_nested_different_mints(program_id: &Pubkey) {
 
     // Build and execute recover instruction
     let recover_instruction = harness.build_recover_nested_instruction(owner_mint, nested_mint);
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[mollusk_svm::result::Check::success()],
-    );
+    harness
+        .ctx
+        .process_and_validate_instruction(&recover_instruction, &[Check::success()]);
 
     // Validate the recovery worked - tokens should be in the destination ATA
     let destination_account = harness.get_account(destination_ata);
@@ -131,9 +130,7 @@ fn fail_missing_wallet_signature_2022() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(
-            ProgramError::MissingRequiredSignature,
-        )],
+        &[Check::err(ProgramError::MissingRequiredSignature)],
     );
 }
 
@@ -155,9 +152,7 @@ fn fail_missing_wallet_signature() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(
-            ProgramError::MissingRequiredSignature,
-        )],
+        &[Check::err(ProgramError::MissingRequiredSignature)],
     );
 }
 
@@ -186,7 +181,7 @@ fn fail_wrong_signer_2022() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::IllegalOwner)],
+        &[Check::err(ProgramError::IllegalOwner)],
     );
 }
 
@@ -215,7 +210,7 @@ fn fail_wrong_signer() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::IllegalOwner)],
+        &[Check::err(ProgramError::IllegalOwner)],
     );
 }
 
@@ -236,7 +231,7 @@ fn fail_not_nested_2022() {
     let recover_instruction = harness.build_recover_nested_instruction(mint, mint);
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::IllegalOwner)],
+        &[Check::err(ProgramError::IllegalOwner)],
     );
 }
 
@@ -257,7 +252,7 @@ fn fail_not_nested() {
     let recover_instruction = harness.build_recover_nested_instruction(mint, mint);
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::IllegalOwner)],
+        &[Check::err(ProgramError::IllegalOwner)],
     );
 }
 #[test]
@@ -284,7 +279,7 @@ fn fail_wrong_address_derivation_owner_2022() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::InvalidSeeds)],
+        &[Check::err(ProgramError::InvalidSeeds)],
     );
 }
 
@@ -312,7 +307,7 @@ fn fail_wrong_address_derivation_owner() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::InvalidSeeds)],
+        &[Check::err(ProgramError::InvalidSeeds)],
     );
 }
 
@@ -344,7 +339,7 @@ fn fail_owner_account_does_not_exist() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::IllegalOwner)],
+        &[Check::err(ProgramError::IllegalOwner)],
     );
 }
 
@@ -370,7 +365,7 @@ fn fail_wrong_spl_token_program() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::IllegalOwner)],
+        &[Check::err(ProgramError::IllegalOwner)],
     );
 }
 
@@ -395,6 +390,6 @@ fn fail_destination_not_wallet_ata() {
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::InvalidSeeds)],
+        &[Check::err(ProgramError::InvalidSeeds)],
     );
 }

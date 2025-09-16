@@ -2,6 +2,7 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::ATATestHarness,
+    mollusk_svm::result::Check,
     solana_program_error::ProgramError,
     solana_signer::Signer,
     spl_token_2022_interface::{
@@ -46,7 +47,7 @@ fn test_associated_token_account_with_transfer_fees() {
             maximum_fee,
         )
         .unwrap(),
-        &[mollusk_svm::result::Check::err(ProgramError::Custom(
+        &[Check::err(ProgramError::Custom(
             spl_token_2022_interface::error::TokenError::InsufficientFunds as u32,
         ))],
     );
@@ -66,7 +67,7 @@ fn test_associated_token_account_with_transfer_fees() {
             fee,
         )
         .unwrap(),
-        &[mollusk_svm::result::Check::success()],
+        &[Check::success()],
     );
 
     // Verify final account states

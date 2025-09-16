@@ -37,10 +37,9 @@ fn success_account_exists() {
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::default(),
     );
-    harness.ctx.process_and_validate_instruction(
-        &instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::IllegalOwner)],
-    );
+    harness
+        .ctx
+        .process_and_validate_instruction(&instruction, &[Check::err(ProgramError::IllegalOwner)]);
 
     // But CreateIdempotent should succeed when account exists
     let instruction = build_create_ata_instruction(
@@ -82,7 +81,7 @@ fn fail_account_exists_with_wrong_owner() {
     );
     harness.ctx.process_and_validate_instruction(
         &instruction,
-        &[mollusk_svm::result::Check::err(ProgramError::Custom(
+        &[Check::err(ProgramError::Custom(
             spl_associated_token_account::error::AssociatedTokenAccountError::InvalidOwner as u32,
         ))],
     );

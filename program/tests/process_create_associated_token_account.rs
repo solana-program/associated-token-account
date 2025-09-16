@@ -131,7 +131,7 @@ fn test_create_account_mismatch() {
 
         harness.ctx.process_and_validate_instruction(
             &instruction,
-            &[mollusk_svm::result::Check::err(ProgramError::InvalidSeeds)],
+            &[Check::err(ProgramError::InvalidSeeds)],
         );
     }
 }

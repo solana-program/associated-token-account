@@ -189,10 +189,8 @@ pub mod test_util_exports {
                 &mint_program_id,
             );
 
-            self.ctx.process_and_validate_instruction(
-                &create_mint_ix,
-                &[mollusk_svm::result::Check::success()],
-            );
+            self.ctx
+                .process_and_validate_instruction(&create_mint_ix, &[Check::success()]);
         }
 
         /// Create a new test harness with the specified token program
@@ -305,10 +303,8 @@ pub mod test_util_exports {
             )
             .expect("Failed to create initialize_transfer_fee_config instruction");
 
-            self.ctx.process_and_validate_instruction(
-                &init_fee_ix,
-                &[mollusk_svm::result::Check::success()],
-            );
+            self.ctx
+                .process_and_validate_instruction(&init_fee_ix, &[Check::success()]);
             self
         }
 
@@ -340,10 +336,8 @@ pub mod test_util_exports {
                 .expect("Failed to create initialize_mint instruction")
             };
 
-            self.ctx.process_and_validate_instruction(
-                &init_mint_ix,
-                &[mollusk_svm::result::Check::success()],
-            );
+            self.ctx
+                .process_and_validate_instruction(&init_mint_ix, &[Check::success()]);
             self
         }
 
@@ -427,10 +421,8 @@ pub mod test_util_exports {
                 .unwrap()
             };
 
-            self.ctx.process_and_validate_instruction(
-                &mint_to_ix,
-                &[mollusk_svm::result::Check::success()],
-            );
+            self.ctx
+                .process_and_validate_instruction(&mint_to_ix, &[Check::success()]);
         }
 
         /// Build a create ATA instruction for the current wallet and mint
@@ -702,10 +694,8 @@ pub mod test_util_exports {
             // Replace the ATA address with the wrong account address
             instruction.accounts[1] = AccountMeta::new(account_keypair.pubkey(), false);
 
-            self.ctx.process_and_validate_instruction(
-                &instruction,
-                &[mollusk_svm::result::Check::err(expected_error)],
-            );
+            self.ctx
+                .process_and_validate_instruction(&instruction, &[Check::err(expected_error)]);
         }
 
         /// Create ATA instruction with custom modifications (for special cases like legacy empty data)

@@ -129,7 +129,10 @@ fn test_create_account_mismatch() {
             AccountMeta::new_readonly(Pubkey::default(), false)
         };
 
-        harness.execute_error(&instruction, ProgramError::InvalidSeeds);
+        harness.ctx.process_and_validate_instruction(
+            &instruction,
+            &[mollusk_svm::result::Check::err(ProgramError::InvalidSeeds)],
+        );
     }
 }
 

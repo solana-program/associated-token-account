@@ -381,36 +381,6 @@ pub mod test_util_exports {
             self
         }
 
-        /// Execute an instruction and validate with the given checks
-        pub fn execute_and_validate(
-            &self,
-            instruction: &solana_program::instruction::Instruction,
-            checks: &[mollusk_svm::result::Check],
-        ) -> mollusk_svm::result::InstructionResult {
-            self.ctx
-                .process_and_validate_instruction(instruction, checks)
-        }
-
-        /// Execute an instruction expecting success
-        pub fn execute_success(
-            &self,
-            instruction: &solana_program::instruction::Instruction,
-        ) -> mollusk_svm::result::InstructionResult {
-            self.execute_and_validate(instruction, &[mollusk_svm::result::Check::success()])
-        }
-
-        /// Execute an instruction expecting a specific error
-        pub fn execute_error(
-            &self,
-            instruction: &solana_program::instruction::Instruction,
-            expected_error: ProgramError,
-        ) -> mollusk_svm::result::InstructionResult {
-            self.execute_and_validate(
-                instruction,
-                &[mollusk_svm::result::Check::err(expected_error)],
-            )
-        }
-
         /// Get a reference to an account by pubkey
         pub fn get_account(&self, pubkey: Pubkey) -> Account {
             self.ctx
@@ -457,7 +427,10 @@ pub mod test_util_exports {
                 .unwrap()
             };
 
-            self.execute_success(&mint_to_ix);
+            self.ctx.process_and_validate_instruction(
+                &mint_to_ix,
+                &[mollusk_svm::result::Check::success()],
+            );
         }
 
         /// Build a create ATA instruction for the current wallet and mint
@@ -729,7 +702,10 @@ pub mod test_util_exports {
             // Replace the ATA address with the wrong account address
             instruction.accounts[1] = AccountMeta::new(account_keypair.pubkey(), false);
 
-            let _ = self.execute_error(&instruction, expected_error);
+            self.ctx.process_and_validate_instruction(
+                &instruction,
+                &[mollusk_svm::result::Check::err(expected_error)],
+            );
         }
 
         /// Create ATA instruction with custom modifications (for special cases like legacy empty data)

@@ -33,7 +33,7 @@ fn test_associated_token_account_with_transfer_fees() {
     harness.mint_tokens(50 * maximum_fee);
 
     // Insufficient funds transfer
-    harness.execute_error(
+    harness.ctx.process_and_validate_instruction(
         &transfer_fee::instruction::transfer_checked_with_fee(
             &spl_token_2022_interface::id(),
             &sender_ata,
@@ -46,12 +46,14 @@ fn test_associated_token_account_with_transfer_fees() {
             maximum_fee,
         )
         .unwrap(),
-        ProgramError::Custom(spl_token_2022_interface::error::TokenError::InsufficientFunds as u32),
+        &[mollusk_svm::result::Check::err(ProgramError::Custom(
+            spl_token_2022_interface::error::TokenError::InsufficientFunds as u32,
+        ))],
     );
 
     // Successful transfer
     let (transfer_amount, fee) = (500, 50);
-    harness.execute_success(
+    harness.ctx.process_and_validate_instruction(
         &transfer_fee::instruction::transfer_checked_with_fee(
             &spl_token_2022_interface::id(),
             &sender_ata,
@@ -64,6 +66,7 @@ fn test_associated_token_account_with_transfer_fees() {
             fee,
         )
         .unwrap(),
+        &[mollusk_svm::result::Check::success()],
     );
 
     // Verify final account states

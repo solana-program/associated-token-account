@@ -58,8 +58,8 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
 pub mod test_util_exports {
     #![allow(dead_code)]
     use {
-        super::*, mollusk_svm::result::Check, solana_program::instruction::AccountMeta,
-        solana_sdk::program_error::ProgramError,
+        super::*, account_builder::AccountBuilder, mollusk_svm::result::Check,
+        solana_program::instruction::AccountMeta, solana_sdk::program_error::ProgramError,
     };
 
     /// Ensure a system-owned account exists in the context store with the given lamports
@@ -72,7 +72,7 @@ pub mod test_util_exports {
             context
                 .account_store
                 .borrow_mut()
-                .insert(address, Account::new(lamports, 0, &system_program::id()));
+                .insert(address, AccountBuilder::system_account(lamports));
         }
     }
 
@@ -94,35 +94,13 @@ pub mod test_util_exports {
         [
             (
                 payer.pubkey(),
-                Account::new(10_000_000_000, 0, &system_program::id()),
+                AccountBuilder::system_account(10_000_000_000),
             ),
             (
                 system_program::id(),
-                Account {
-                    lamports: 0,
-                    data: Vec::new(),
-                    owner: NATIVE_LOADER_ID,
-                    executable: true,
-                    rent_epoch: 0,
-                },
+                AccountBuilder::executable_program(NATIVE_LOADER_ID),
             ),
-            {
-                let rent = Rent::default();
-                (
-                    sysvar::rent::id(),
-                    Account {
-                        lamports: 0,
-                        data: create_rent_data(
-                            rent.lamports_per_byte_year,
-                            rent.exemption_threshold,
-                            rent.burn_percent,
-                        ),
-                        owner: solana_system_interface::program::id(),
-                        executable: false,
-                        rent_epoch: 0,
-                    },
-                )
-            },
+            (sysvar::rent::id(), AccountBuilder::rent_sysvar()),
             (
                 *token_program_id,
                 mollusk_svm::program::create_program_account_loader_v3(token_program_id),
@@ -195,16 +173,9 @@ pub mod test_util_exports {
                 store.extend([
                     (
                         mint_authority.pubkey(),
-                        account_builder::AccountBuilder::system_account(1_000_000),
+                        AccountBuilder::system_account(1_000_000),
                     ),
-                    (
-                        mint_account.pubkey(),
-                        solana_sdk::account::Account::new(
-                            0,
-                            0,
-                            &solana_system_interface::program::id(),
-                        ),
-                    ),
+                    (mint_account.pubkey(), AccountBuilder::system_account(0)),
                 ]);
             }
 
@@ -623,20 +594,20 @@ pub mod test_util_exports {
 
             self.ctx.account_store.borrow_mut().insert(
                 self.payer.pubkey(),
-                account_builder::AccountBuilder::system_account(expected_balance),
+                AccountBuilder::system_account(expected_balance),
             );
 
             // Add mint
             if self.token_program_id == spl_token_2022_interface::id() {
                 self.ctx.account_store.borrow_mut().insert(
                     mint,
-                    account_builder::AccountBuilder::extended_mint(decimals, &self.payer.pubkey()),
+                    AccountBuilder::extended_mint(decimals, &self.payer.pubkey()),
                 );
             } else {
-                self.ctx.account_store.borrow_mut().insert(
-                    mint,
-                    account_builder::AccountBuilder::mint(decimals, &self.payer.pubkey()),
-                );
+                self.ctx
+                    .account_store
+                    .borrow_mut()
+                    .insert(mint, AccountBuilder::mint(decimals, &self.payer.pubkey()));
             }
 
             // Add wallet
@@ -716,12 +687,8 @@ pub mod test_util_exports {
             );
 
             // Create token account with wrong owner
-            let wrong_account = account_builder::AccountBuilder::token_account(
-                &mint,
-                &wrong_owner,
-                0,
-                &self.token_program_id,
-            );
+            let wrong_account =
+                AccountBuilder::token_account(&mint, &wrong_owner, 0, &self.token_program_id);
 
             self.insert_account(ata_address, wrong_account);
             ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wrong_owner, 1_000_000)]);
@@ -741,12 +708,7 @@ pub mod test_util_exports {
             // Create a token account at the wrong address
             self.insert_account(
                 account_keypair.pubkey(),
-                account_builder::AccountBuilder::token_account(
-                    &mint,
-                    &wallet.pubkey(),
-                    0,
-                    &self.token_program_id,
-                ),
+                AccountBuilder::token_account(&mint, &wallet.pubkey(), 0, &self.token_program_id),
             );
 
             let mut instruction = build_create_ata_instruction(
@@ -916,20 +878,6 @@ pub mod test_util_exports {
         data[44] = decimals;
         data[45] = 1; // is_initialized = 1
         data
-    }
-
-    /// Create rent sysvar data for testing
-    pub fn create_rent_data(
-        lamports_per_byte_year: u64,
-        exemption_threshold: f64,
-        burn_percent: u8,
-    ) -> Vec<u8> {
-        lamports_per_byte_year
-            .to_le_bytes()
-            .into_iter()
-            .chain(exemption_threshold.to_le_bytes())
-            .chain([burn_percent])
-            .collect()
     }
 
     pub mod account_builder {

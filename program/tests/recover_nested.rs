@@ -1,7 +1,7 @@
 mod utils;
 
 use {
-    crate::utils::test_util_exports::{account_builder, ATATestHarness},
+    crate::utils::test_util_exports::{ATATestHarness, AccountBuilder},
     solana_instruction::AccountMeta,
     solana_keypair::Keypair,
     solana_program_error::ProgramError,
@@ -248,10 +248,11 @@ fn fail_wrong_address_derivation_owner_2022() {
     let wrong_owner_address = Pubkey::new_unique();
     recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false);
 
-    harness.ctx.account_store.borrow_mut().insert(
-        wrong_owner_address,
-        account_builder::AccountBuilder::system_account(0),
-    );
+    harness
+        .ctx
+        .account_store
+        .borrow_mut()
+        .insert(wrong_owner_address, AccountBuilder::system_account(0));
 
     harness.execute_error(&recover_instruction, ProgramError::InvalidSeeds);
 }
@@ -272,10 +273,11 @@ fn fail_wrong_address_derivation_owner() {
     let wrong_owner_address = Pubkey::new_unique();
     recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false);
 
-    harness.ctx.account_store.borrow_mut().insert(
-        wrong_owner_address,
-        account_builder::AccountBuilder::system_account(0),
-    );
+    harness
+        .ctx
+        .account_store
+        .borrow_mut()
+        .insert(wrong_owner_address, AccountBuilder::system_account(0));
 
     harness.execute_error(&recover_instruction, ProgramError::InvalidSeeds);
 }

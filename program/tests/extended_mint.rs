@@ -20,7 +20,7 @@ fn test_associated_token_account_with_transfer_fees() {
         .with_wallet(1_000_000)
         .with_additional_wallet(1_000_000);
     let mut harness = harness
-        .with_mint_with_extensions(0, &[ExtensionType::TransferFeeConfig])
+        .with_mint_with_extensions(&[ExtensionType::TransferFeeConfig])
         .initialize_transfer_fee(transfer_fee_basis_points, maximum_fee)
         .initialize_mint(0)
         .with_ata();

@@ -12,6 +12,7 @@ use {
     solana_signer::Signer,
     solana_system_interface::program as system_program,
     solana_sysvar as sysvar,
+    solana_sysvar::rent,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account as Token2022Account},
     spl_token_interface::state::Account as TokenAccount,
@@ -58,8 +59,8 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
 pub mod test_util_exports {
     #![allow(dead_code)]
     use {
-        super::*, account_builder::AccountBuilder, mollusk_svm::result::Check,
-        solana_program::instruction::AccountMeta, solana_sdk::program_error::ProgramError,
+        super::*, mollusk_svm::result::Check, solana_program::instruction::AccountMeta,
+        solana_sdk::program_error::ProgramError,
     };
 
     /// Ensure a system-owned account exists in the context store with the given lamports
@@ -193,6 +194,7 @@ pub mod test_util_exports {
                 &[mollusk_svm::result::Check::success()],
             );
         }
+
         /// Create a new test harness with the specified token program
         pub fn new(token_program_id: &Pubkey) -> Self {
             let mollusk = setup_mollusk_with_programs(token_program_id);
@@ -253,7 +255,6 @@ pub mod test_util_exports {
         /// Create and initialize a Token-2022 mint with specific extensions
         pub fn with_mint_with_extensions(
             mut self,
-            _decimals: u8,
             extensions: &[spl_token_2022_interface::extension::ExtensionType],
         ) -> Self {
             if self.token_program_id != spl_token_2022_interface::id() {
@@ -879,118 +880,107 @@ pub mod test_util_exports {
         data[45] = 1; // is_initialized = 1
         data
     }
+    pub struct AccountBuilder;
 
-    pub mod account_builder {
-        use {
-            super::{create_mollusk_mint_data, create_token_account_data},
-            mollusk_svm::Mollusk,
-            solana_program::{pubkey::Pubkey, sysvar::rent},
-            solana_sdk::account::Account,
-            std::vec::Vec,
-        };
+    impl AccountBuilder {
+        pub fn rent_sysvar() -> Account {
+            let mollusk = Mollusk::default();
+            let (_, mollusk_rent_account) = mollusk.sysvars.keyed_account_for_rent_sysvar();
 
-        pub struct AccountBuilder;
-
-        impl AccountBuilder {
-            pub fn rent_sysvar() -> Account {
-                let mollusk = Mollusk::default();
-                let (_, mollusk_rent_account) = mollusk.sysvars.keyed_account_for_rent_sysvar();
-
-                Account {
-                    lamports: mollusk_rent_account.lamports,
-                    data: mollusk_rent_account.data,
-                    owner: rent::id(),
-                    executable: false,
-                    rent_epoch: 0,
-                }
+            Account {
+                lamports: mollusk_rent_account.lamports,
+                data: mollusk_rent_account.data,
+                owner: rent::id(),
+                executable: false,
+                rent_epoch: 0,
             }
-            #[allow(dead_code, reason = "exported for benchmarking consumers")]
-            pub fn system_account(lamports: u64) -> Account {
-                Account {
-                    lamports,
-                    data: Vec::new(),
-                    owner: solana_system_interface::program::id(),
-                    executable: false,
-                    rent_epoch: 0,
-                }
+        }
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
+        pub fn system_account(lamports: u64) -> Account {
+            Account {
+                lamports,
+                data: Vec::new(),
+                owner: solana_system_interface::program::id(),
+                executable: false,
+                rent_epoch: 0,
             }
+        }
 
-            #[allow(dead_code, reason = "exported for benchmarking consumers")]
-            pub fn executable_program(loader: Pubkey) -> Account {
-                Account {
-                    lamports: 0,
-                    data: Vec::new(),
-                    owner: loader,
-                    executable: true,
-                    rent_epoch: 0,
-                }
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
+        pub fn executable_program(loader: Pubkey) -> Account {
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: loader,
+                executable: true,
+                rent_epoch: 0,
             }
+        }
 
-            #[allow(dead_code, reason = "exported for benchmarking consumers")]
-            pub fn mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
-                let data = create_mollusk_mint_data(decimals);
-                let rent = solana_sdk::rent::Rent::default();
-                Account {
-                    lamports: rent.minimum_balance(data.len()),
-                    data,
-                    owner: spl_token_interface::id(),
-                    executable: false,
-                    rent_epoch: 0,
-                }
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
+        pub fn mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
+            let data = create_mollusk_mint_data(decimals);
+            let rent = solana_sdk::rent::Rent::default();
+            Account {
+                lamports: rent.minimum_balance(data.len()),
+                data,
+                owner: spl_token_interface::id(),
+                executable: false,
+                rent_epoch: 0,
             }
+        }
 
-            #[allow(dead_code, reason = "exported for benchmarking consumers")]
-            pub fn extended_mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
-                use solana_program_option::COption;
-                use spl_token_2022_interface::{
-                    extension::{ExtensionType, PodStateWithExtensionsMut},
-                    pod::PodMint,
-                };
+        #[allow(dead_code, reason = "exported for benchmarking consumers")]
+        pub fn extended_mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
+            use solana_program_option::COption;
+            use spl_token_2022_interface::{
+                extension::{ExtensionType, PodStateWithExtensionsMut},
+                pod::PodMint,
+            };
 
-                // Calculate the minimum size for a Token-2022 mint without extensions
-                let required_size = ExtensionType::try_calculate_account_len::<
-                    spl_token_2022_interface::state::Mint,
-                >(&[])
-                .expect("Failed to calculate Token-2022 mint size");
+            // Calculate the minimum size for a Token-2022 mint without extensions
+            let required_size = ExtensionType::try_calculate_account_len::<
+                spl_token_2022_interface::state::Mint,
+            >(&[])
+            .expect("Failed to calculate Token-2022 mint size");
 
-                let mut data = vec![0u8; required_size];
+            let mut data = vec![0u8; required_size];
 
-                // Use Token-2022's proper unpacking to initialize the mint
-                let mint = PodStateWithExtensionsMut::<PodMint>::unpack_uninitialized(&mut data)
-                    .expect("Failed to unpack Token-2022 mint");
+            // Use Token-2022's proper unpacking to initialize the mint
+            let mint = PodStateWithExtensionsMut::<PodMint>::unpack_uninitialized(&mut data)
+                .expect("Failed to unpack Token-2022 mint");
 
-                // Initialize base mint fields
-                mint.base.mint_authority = COption::None.into();
-                mint.base.supply = 0u64.into();
-                mint.base.decimals = decimals;
-                mint.base.is_initialized = true.into();
-                mint.base.freeze_authority = COption::None.into();
+            // Initialize base mint fields
+            mint.base.mint_authority = COption::None.into();
+            mint.base.supply = 0u64.into();
+            mint.base.decimals = decimals;
+            mint.base.is_initialized = true.into();
+            mint.base.freeze_authority = COption::None.into();
 
-                let rent = solana_sdk::rent::Rent::default();
-                Account {
-                    lamports: rent.minimum_balance(data.len()),
-                    data,
-                    owner: spl_token_2022_interface::id(),
-                    executable: false,
-                    rent_epoch: 0,
-                }
+            let rent = solana_sdk::rent::Rent::default();
+            Account {
+                lamports: rent.minimum_balance(data.len()),
+                data,
+                owner: spl_token_2022_interface::id(),
+                executable: false,
+                rent_epoch: 0,
             }
+        }
 
-            pub fn token_account(
-                mint: &Pubkey,
-                owner: &Pubkey,
-                amount: u64,
-                token_program: &Pubkey,
-            ) -> Account {
-                let data = create_token_account_data(&mint.to_bytes(), &owner.to_bytes(), amount);
-                let rent = solana_sdk::rent::Rent::default();
-                Account {
-                    lamports: rent.minimum_balance(data.len()),
-                    data,
-                    owner: *token_program,
-                    executable: false,
-                    rent_epoch: 0,
-                }
+        pub fn token_account(
+            mint: &Pubkey,
+            owner: &Pubkey,
+            amount: u64,
+            token_program: &Pubkey,
+        ) -> Account {
+            let data = create_token_account_data(&mint.to_bytes(), &owner.to_bytes(), amount);
+            let rent = solana_sdk::rent::Rent::default();
+            Account {
+                lamports: rent.minimum_balance(data.len()),
+                data,
+                owner: *token_program,
+                executable: false,
+                rent_epoch: 0,
             }
         }
     }

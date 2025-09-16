@@ -2,9 +2,7 @@
 #![cfg(any(test, feature = "test-utils"))]
 
 use {
-    mollusk_svm::{
-        program::loader_keys::LOADER_V3, result::ProgramResult, Mollusk, MolluskContext,
-    },
+    mollusk_svm::{program::loader_keys::LOADER_V3, Mollusk, MolluskContext},
     solana_account::Account,
     solana_instruction::Instruction,
     solana_keypair::Keypair,
@@ -38,21 +36,15 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
         .parent()
         .expect("workspace root");
 
-    // 1) Load ATA by name from target deploy dir
-    {
-        let sbf_out = workspace_root.join("target/deploy");
-        std::env::set_var("SBF_OUT_DIR", &sbf_out);
-        std::env::set_var("BPF_OUT_DIR", sbf_out);
-    }
+    let set_out_dirs = |path: &Path| {
+        std::env::set_var("SBF_OUT_DIR", path);
+        std::env::set_var("BPF_OUT_DIR", path);
+    };
+    set_out_dirs(&workspace_root.join("target/deploy"));
     let ata_program_id = spl_associated_token_account::id();
     let mut mollusk = Mollusk::new(&ata_program_id, "spl_associated_token_account");
 
-    // 2) Load the selected token program by name from programs/ dir
-    {
-        let sbf_out = workspace_root.join("programs");
-        std::env::set_var("SBF_OUT_DIR", &sbf_out);
-        std::env::set_var("BPF_OUT_DIR", sbf_out);
-    }
+    set_out_dirs(&workspace_root.join("programs"));
     if *token_program_id == spl_token_2022_interface::id() {
         mollusk.add_program(token_program_id, "spl_token_2022", &LOADER_V3);
     } else {
@@ -938,91 +930,6 @@ pub mod test_util_exports {
             .chain(exemption_threshold.to_le_bytes())
             .chain([burn_percent])
             .collect()
-    }
-
-    /// Ensures a given `address` exists as a system account with the specified `lamports`.
-    /// If an account for `address` already exists, it is left unchanged.
-    pub fn ensure_system_account_exists(
-        accounts: &mut Vec<(Pubkey, Account)>,
-        address: Pubkey,
-        lamports: u64,
-    ) {
-        if !accounts.iter().any(|(pubkey, _)| *pubkey == address) {
-            accounts.push((address, Account::new(lamports, 0, &system_program::id())));
-        }
-    }
-
-    /// Ensures multiple system accounts exist with the provided lamport values.
-    /// Each tuple is `(pubkey, lamports)`.
-    pub fn ensure_system_accounts_with_lamports(
-        accounts: &mut Vec<(Pubkey, Account)>,
-        entries: &[(Pubkey, u64)],
-    ) {
-        for (address, lamports) in entries.iter().copied() {
-            ensure_system_account_exists(accounts, address, lamports);
-        }
-    }
-
-    /// Processes an instruction with Mollusk and merges resulting account updates back into `accounts`.
-    /// Returns the `ProgramResult` from the execution for assertions.
-    pub fn process_and_merge_instruction(
-        mollusk: &Mollusk,
-        instruction: &Instruction,
-        accounts: &mut Vec<(Pubkey, Account)>,
-    ) -> ProgramResult {
-        let result = mollusk.process_instruction(instruction, accounts);
-
-        for (updated_pubkey, updated_account) in result.resulting_accounts.into_iter() {
-            if let Some((_, existing_account)) =
-                accounts.iter_mut().find(|(pk, _)| *pk == updated_pubkey)
-            {
-                *existing_account = updated_account;
-            } else {
-                accounts.push((updated_pubkey, updated_account));
-            }
-        }
-
-        result.program_result
-    }
-
-    /// Process and validate an instruction, then merge resulting account updates into `accounts`.
-    /// Returns the full `InstructionResult` for optional further inspection.
-    pub fn process_and_validate_then_merge(
-        mollusk: &Mollusk,
-        instruction: &Instruction,
-        accounts: &mut Vec<(Pubkey, Account)>,
-        checks: &[mollusk_svm::result::Check],
-    ) -> mollusk_svm::result::InstructionResult {
-        let result = mollusk.process_and_validate_instruction(instruction, accounts, checks);
-        merge_resulting_accounts(accounts, &result);
-        result
-    }
-
-    /// Merge resulting accounts from a Mollusk `InstructionResult` back into the in-memory `accounts` list.
-    pub fn merge_resulting_accounts(
-        accounts: &mut Vec<(Pubkey, Account)>,
-        result: &mollusk_svm::result::InstructionResult,
-    ) {
-        for (updated_pubkey, updated_account) in result.resulting_accounts.clone().into_iter() {
-            if let Some((_, existing_account)) =
-                accounts.iter_mut().find(|(pk, _)| *pk == updated_pubkey)
-            {
-                *existing_account = updated_account;
-            } else {
-                accounts.push((updated_pubkey, updated_account));
-            }
-        }
-    }
-
-    /// Returns a cloned `Account` for the given `pubkey` from the in-memory `accounts` list.
-    /// Panics with a clear message if the account is not present.
-    pub fn get_account(accounts: &[(Pubkey, Account)], pubkey: Pubkey) -> Account {
-        accounts
-            .iter()
-            .find(|(pk, _)| *pk == pubkey)
-            .expect("account not found")
-            .1
-            .clone()
     }
 
     pub mod account_builder {

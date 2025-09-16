@@ -2,7 +2,8 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::{
-        build_create_ata_instruction, test_calculations, ContextHarness, CreateAtaInstructionType,
+        build_create_ata_instruction, token_2022_immutable_owner_account_len,
+        token_2022_immutable_owner_rent_exempt_balance, ContextHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_keypair::Keypair,
@@ -53,9 +54,9 @@ fn success_account_exists() {
         &[
             Check::success(),
             Check::account(&ata_address)
-                .space(test_calculations::token_2022_account_len())
+                .space(token_2022_immutable_owner_account_len())
                 .owner(&spl_token_2022_interface::id())
-                .lamports(test_calculations::token_2022_account_balance())
+                .lamports(token_2022_immutable_owner_rent_exempt_balance())
                 .build(),
         ],
     );

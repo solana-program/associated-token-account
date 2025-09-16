@@ -1,7 +1,7 @@
 mod utils;
 
 use {
-    crate::utils::test_util_exports::{account_builder, TestHarness},
+    crate::utils::test_util_exports::{account_builder, ATATestHarness},
     solana_instruction::AccountMeta,
     solana_keypair::Keypair,
     solana_program_error::ProgramError,
@@ -17,7 +17,7 @@ use {
 const TEST_MINT_AMOUNT: u64 = 100;
 
 fn test_recover_nested_same_mint(program_id: &Pubkey) {
-    let mut harness = TestHarness::new(program_id)
+    let mut harness = ATATestHarness::new(program_id)
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -59,7 +59,7 @@ fn success_same_mint() {
 }
 
 fn test_recover_nested_different_mints(program_id: &Pubkey) {
-    let harness = TestHarness::new(program_id)
+    let harness = ATATestHarness::new(program_id)
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -109,7 +109,7 @@ fn success_different_mints_2022() {
 
 #[test]
 fn fail_missing_wallet_signature_2022() {
-    let mut harness = TestHarness::new(&spl_token_2022_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -128,7 +128,7 @@ fn fail_missing_wallet_signature_2022() {
 
 #[test]
 fn fail_missing_wallet_signature() {
-    let mut harness = TestHarness::new(&spl_token_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -147,7 +147,7 @@ fn fail_missing_wallet_signature() {
 
 #[test]
 fn fail_wrong_signer_2022() {
-    let mut harness = TestHarness::new(&spl_token_2022_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -173,7 +173,7 @@ fn fail_wrong_signer_2022() {
 
 #[test]
 fn fail_wrong_signer() {
-    let mut harness = TestHarness::new(&spl_token_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -199,7 +199,7 @@ fn fail_wrong_signer() {
 
 #[test]
 fn fail_not_nested_2022() {
-    let mut harness = TestHarness::new(&spl_token_2022_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -217,7 +217,7 @@ fn fail_not_nested_2022() {
 
 #[test]
 fn fail_not_nested() {
-    let mut harness = TestHarness::new(&spl_token_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -234,7 +234,7 @@ fn fail_not_nested() {
 }
 #[test]
 fn fail_wrong_address_derivation_owner_2022() {
-    let mut harness = TestHarness::new(&spl_token_2022_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -258,7 +258,7 @@ fn fail_wrong_address_derivation_owner_2022() {
 
 #[test]
 fn fail_wrong_address_derivation_owner() {
-    let mut harness = TestHarness::new(&spl_token_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -282,7 +282,7 @@ fn fail_wrong_address_derivation_owner() {
 
 #[test]
 fn fail_owner_account_does_not_exist() {
-    let mut harness = TestHarness::new(&spl_token_2022_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0);
     // Note: deliberately NOT calling .with_ata() - owner ATA should not exist
@@ -311,7 +311,7 @@ fn fail_owner_account_does_not_exist() {
 
 #[test]
 fn fail_wrong_spl_token_program() {
-    let mut harness = TestHarness::new(&spl_token_2022_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();
@@ -334,7 +334,7 @@ fn fail_wrong_spl_token_program() {
 
 #[test]
 fn fail_destination_not_wallet_ata() {
-    let mut harness = TestHarness::new(&spl_token_2022_interface::id())
+    let mut harness = ATATestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_mint(0)
         .with_ata();

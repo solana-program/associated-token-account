@@ -1,4 +1,4 @@
-//! Test utilities for migrated mollusk tests
+//! Utilities for mollusk tests
 #![cfg(any(test, feature = "test-utils"))]
 
 use {
@@ -8,12 +8,16 @@ use {
     solana_account::Account,
     solana_instruction::Instruction,
     solana_keypair::Keypair,
+    solana_program_pack::Pack,
     solana_pubkey::Pubkey,
+    solana_rent::Rent,
     solana_signer::Signer,
     solana_system_interface::instruction as system_instruction,
     solana_system_interface::program as system_program,
     solana_sysvar as sysvar,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
+    spl_token_2022_interface::{extension::ExtensionType, state::Account as Token2022Account},
+    spl_token_interface::state::Account as TokenAccount,
     std::vec::Vec,
     std::{collections::HashMap, path::Path},
 };
@@ -23,7 +27,7 @@ const TOKEN_ACCOUNT_SIZE: usize = 165;
 // Standard mint account size (base size without extensions)
 const MINT_ACCOUNT_SIZE: usize = 82;
 
-// Native loader program ID (used across both test suites)
+// Native loader program ID
 const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
     5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
     101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
@@ -92,7 +96,10 @@ pub mod test_util_exports {
     }
 
     /// Create standard base accounts needed for mollusk tests
-    pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(Pubkey, Account)> {
+    pub fn create_mollusk_base_accounts(
+        payer: &Keypair,
+        token_program_id: &Pubkey,
+    ) -> Vec<(Pubkey, Account)> {
         [
             (
                 payer.pubkey(),
@@ -109,9 +116,7 @@ pub mod test_util_exports {
                 },
             ),
             {
-                use solana_sdk::rent::Rent;
                 let rent = Rent::default();
-
                 (
                     sysvar::rent::id(),
                     Account {
@@ -127,23 +132,12 @@ pub mod test_util_exports {
                     },
                 )
             },
+            (
+                *token_program_id,
+                mollusk_svm::program::create_program_account_loader_v3(token_program_id),
+            ),
         ]
         .into()
-    }
-
-    /// Create standard base accounts with token program
-    pub fn create_mollusk_base_accounts_with_token(
-        payer: &Keypair,
-        token_program_id: &Pubkey,
-    ) -> Vec<(Pubkey, Account)> {
-        let mut accounts = create_mollusk_base_accounts(payer);
-
-        accounts.push((
-            *token_program_id,
-            mollusk_svm::program::create_program_account_loader_v3(token_program_id),
-        ));
-
-        accounts
     }
 
     /// The type of ATA creation instruction to build.
@@ -154,7 +148,6 @@ pub mod test_util_exports {
             bump: Option<u8>,
             account_len: Option<u16>,
         },
-        #[allow(dead_code, reason = "Some tests construct only a subset of variants")]
         /// The `CreateIdempotent` instruction, which can optionally include a bump seed.
         CreateIdempotent { bump: Option<u8> },
     }
@@ -168,43 +161,26 @@ pub mod test_util_exports {
         }
     }
 
-    /// Helper functions for common test calculations
-    pub mod test_calculations {
-        use {
-            solana_program::program_pack::Pack,
-            solana_sdk::rent::Rent,
-            spl_token_2022_interface::{
-                extension::ExtensionType, state::Account as Token2022Account,
-            },
-            spl_token_interface::state::Account as TokenAccount,
-        };
-
-        /// Calculate the expected account length for a Token-2022 account with ImmutableOwner extension
-        pub fn token_2022_account_len() -> usize {
-            ExtensionType::try_calculate_account_len::<Token2022Account>(&[
-                ExtensionType::ImmutableOwner,
-            ])
-            .expect("Failed to calculate Token-2022 account length")
-        }
-
-        /// Calculate the expected account length for a standard SPL token account
-        pub fn token_account_len() -> usize {
-            TokenAccount::LEN
-        }
-
-        /// Calculate the rent-exempt balance for a Token-2022 account with ImmutableOwner extension
-        pub fn token_2022_account_balance() -> u64 {
-            Rent::default().minimum_balance(token_2022_account_len())
-        }
-
-        /// Calculate the rent-exempt balance for a standard SPL token account
-        pub fn token_account_balance() -> u64 {
-            Rent::default().minimum_balance(token_account_len())
-        }
+    /// Calculate the expected account length for a Token-2022 account with ImmutableOwner extension
+    pub fn token_2022_immutable_owner_account_len() -> usize {
+        ExtensionType::try_calculate_account_len::<Token2022Account>(&[
+            ExtensionType::ImmutableOwner,
+        ])
+        .expect("Failed to calculate Token-2022 account length")
     }
 
-    /// Comprehensive test harness for ATA testing scenarios
-    pub struct TestHarness {
+    /// Calculate the rent-exempt balance for a Token-2022 account with ImmutableOwner extension
+    pub fn token_2022_immutable_owner_rent_exempt_balance() -> u64 {
+        Rent::default().minimum_balance(token_2022_immutable_owner_account_len())
+    }
+
+    /// Calculate the rent-exempt balance for a standard SPL token account
+    pub fn token_account_rent_exempt_balance() -> u64 {
+        Rent::default().minimum_balance(TokenAccount::LEN)
+    }
+
+    /// Test harness for ATA testing scenarios
+    pub struct ATATestHarness {
         pub ctx: MolluskContext<HashMap<Pubkey, Account>>,
         pub token_program_id: Pubkey,
         pub payer: Keypair,
@@ -214,14 +190,14 @@ pub mod test_util_exports {
         pub ata_address: Option<Pubkey>,
     }
 
-    impl TestHarness {
+    impl ATATestHarness {
         /// Create a new test harness with the specified token program
         pub fn new(token_program_id: &Pubkey) -> Self {
             let mollusk = setup_mollusk_with_programs(token_program_id);
             let payer = Keypair::new();
 
             // Initialize base accounts in context
-            let base_accounts = create_mollusk_base_accounts_with_token(&payer, token_program_id);
+            let base_accounts = create_mollusk_base_accounts(&payer, token_program_id);
             let mut accounts = HashMap::new();
             for (pubkey, account) in base_accounts {
                 accounts.insert(pubkey, account);
@@ -687,9 +663,9 @@ pub mod test_util_exports {
 
             // Fund payer
             let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
-                test_calculations::token_2022_account_balance()
+                token_2022_immutable_owner_rent_exempt_balance()
             } else {
-                test_calculations::token_account_balance()
+                token_account_rent_exempt_balance()
             };
 
             self.ctx.account_store.borrow_mut().insert(
@@ -744,15 +720,15 @@ pub mod test_util_exports {
             );
 
             let expected_len = if self.token_program_id == spl_token_2022_interface::id() {
-                test_calculations::token_2022_account_len()
+                token_2022_immutable_owner_account_len()
             } else {
-                test_calculations::token_account_len()
+                TokenAccount::LEN
             };
 
             let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
-                test_calculations::token_2022_account_balance()
+                token_2022_immutable_owner_rent_exempt_balance()
             } else {
-                test_calculations::token_account_balance()
+                token_account_rent_exempt_balance()
             };
 
             self.ctx.process_and_validate_instruction(
@@ -888,15 +864,15 @@ pub mod test_util_exports {
             modify_instruction(&mut instruction);
 
             let expected_len = if self.token_program_id == spl_token_2022_interface::id() {
-                test_calculations::token_2022_account_len()
+                token_2022_immutable_owner_account_len()
             } else {
-                test_calculations::token_account_len()
+                TokenAccount::LEN
             };
 
             let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
-                test_calculations::token_2022_account_balance()
+                token_2022_immutable_owner_rent_exempt_balance()
             } else {
-                test_calculations::token_account_balance()
+                token_account_rent_exempt_balance()
             };
 
             self.ctx.process_and_validate_instruction(
@@ -1139,7 +1115,7 @@ pub mod test_util_exports {
             token_program,
         );
 
-        let mut accounts = create_mollusk_base_accounts_with_token(payer, token_program);
+        let mut accounts = create_mollusk_base_accounts(payer, token_program);
 
         accounts.push((
             mint_account.pubkey(),

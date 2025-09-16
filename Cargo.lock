@@ -7031,6 +7031,7 @@ dependencies = [
  "solana-program-pack",
  "solana-program-test",
  "solana-pubkey",
+ "solana-rent",
  "solana-sdk",
  "solana-signer",
  "solana-system-interface",

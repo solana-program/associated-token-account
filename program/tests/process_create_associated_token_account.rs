@@ -2,8 +2,8 @@ mod utils;
 
 use {
     crate::utils::test_util_exports::{
-        build_create_ata_instruction, ctx_ensure_system_account_exists, test_calculations,
-        ContextHarness, CreateAtaInstructionType,
+        build_create_ata_instruction, ctx_ensure_system_account_exists,
+        token_2022_immutable_owner_rent_exempt_balance, ContextHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
@@ -52,7 +52,7 @@ fn test_create_with_fewer_lamports() {
         &[
             Check::success(),
             Check::account(&ata_address)
-                .lamports(test_calculations::token_2022_account_balance())
+                .lamports(token_2022_immutable_owner_rent_exempt_balance())
                 .owner(&spl_token_2022_interface::id())
                 .build(),
         ],
@@ -72,7 +72,7 @@ fn test_create_with_excess_lamports() {
         &spl_token_2022_interface::id(),
     );
 
-    let excess_lamports = test_calculations::token_2022_account_balance() + 1;
+    let excess_lamports = token_2022_immutable_owner_rent_exempt_balance() + 1;
     ctx_ensure_system_account_exists(&harness.ctx, ata_address, excess_lamports);
 
     let instruction = build_create_ata_instruction(

@@ -12,7 +12,6 @@ use {
     solana_pubkey::Pubkey,
     solana_rent::Rent,
     solana_signer::Signer,
-    solana_system_interface::instruction as system_instruction,
     solana_system_interface::program as system_program,
     solana_sysvar as sysvar,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
@@ -191,18 +190,55 @@ pub mod test_util_exports {
     }
 
     impl ATATestHarness {
+        /// Internal: create the mint account owned by the token program with given space
+        fn create_mint_account(
+            &mut self,
+            mint_account: &Keypair,
+            mint_authority: &Keypair,
+            space: usize,
+            mint_program_id: Pubkey,
+        ) {
+            {
+                let mut store = self.ctx.account_store.borrow_mut();
+                store.extend([
+                    (
+                        mint_authority.pubkey(),
+                        account_builder::AccountBuilder::system_account(1_000_000),
+                    ),
+                    (
+                        mint_account.pubkey(),
+                        solana_sdk::account::Account::new(
+                            0,
+                            0,
+                            &solana_system_interface::program::id(),
+                        ),
+                    ),
+                ]);
+            }
+
+            let mint_rent = solana_sdk::rent::Rent::default().minimum_balance(space);
+            let create_mint_ix = solana_system_interface::instruction::create_account(
+                &self.payer.pubkey(),
+                &mint_account.pubkey(),
+                mint_rent,
+                space as u64,
+                &mint_program_id,
+            );
+
+            self.ctx.process_and_validate_instruction(
+                &create_mint_ix,
+                &[mollusk_svm::result::Check::success()],
+            );
+        }
         /// Create a new test harness with the specified token program
         pub fn new(token_program_id: &Pubkey) -> Self {
             let mollusk = setup_mollusk_with_programs(token_program_id);
             let payer = Keypair::new();
-
-            // Initialize base accounts in context
             let base_accounts = create_mollusk_base_accounts(&payer, token_program_id);
             let mut accounts = HashMap::new();
             for (pubkey, account) in base_accounts {
                 accounts.insert(pubkey, account);
             }
-
             let ctx = mollusk.with_context(accounts);
 
             Self {
@@ -224,7 +260,7 @@ pub mod test_util_exports {
             self
         }
 
-        /// Add an additional wallet (for sender/receiver scenarios) - returns harness and the new wallet
+        /// Add an additional wallet (e.g. for sender/receiver scenarios) - returns harness and the new wallet
         pub fn with_additional_wallet(self, lamports: u64) -> (Self, Keypair) {
             let additional_wallet = Keypair::new();
             ctx_ensure_system_accounts_with_lamports(
@@ -239,30 +275,16 @@ pub mod test_util_exports {
             let mint_account = Keypair::new();
             let mint_authority = Keypair::new();
 
-            self.ctx.account_store.borrow_mut().insert(
-                mint_authority.pubkey(),
-                account_builder::AccountBuilder::system_account(1_000_000),
-            );
-
-            let mint_accounts = create_test_mint(
-                &self.ctx.mollusk,
+            self.create_mint_account(
                 &mint_account,
                 &mint_authority,
-                &self.payer,
-                &self.token_program_id,
-                decimals,
+                MINT_ACCOUNT_SIZE,
+                self.token_program_id,
             );
-
-            // Merge the mint-related accounts
-            for (pubkey, account) in mint_accounts {
-                if pubkey == mint_account.pubkey() || pubkey == mint_authority.pubkey() {
-                    self.ctx.account_store.borrow_mut().insert(pubkey, account);
-                }
-            }
 
             self.mint = Some(mint_account.pubkey());
             self.mint_authority = Some(mint_authority);
-            self
+            self.initialize_mint(decimals)
         }
 
         /// Create and initialize a Token-2022 mint with specific extensions
@@ -278,11 +300,6 @@ pub mod test_util_exports {
             let mint_account = Keypair::new();
             let mint_authority = Keypair::new();
 
-            self.ctx.account_store.borrow_mut().insert(
-                mint_authority.pubkey(),
-                account_builder::AccountBuilder::system_account(1_000_000),
-            );
-
             // Calculate space needed for extensions
             let space =
                 spl_token_2022_interface::extension::ExtensionType::try_calculate_account_len::<
@@ -290,24 +307,11 @@ pub mod test_util_exports {
                 >(extensions)
                 .expect("Failed to calculate mint space with extensions");
 
-            // Create mint account with proper space
-            self.ctx.account_store.borrow_mut().insert(
-                mint_account.pubkey(),
-                solana_sdk::account::Account::new(0, 0, &solana_system_interface::program::id()),
-            );
-
-            let mint_rent = solana_sdk::rent::Rent::default().minimum_balance(space);
-            let create_mint_ix = solana_system_interface::instruction::create_account(
-                &self.payer.pubkey(),
-                &mint_account.pubkey(),
-                mint_rent,
-                space as u64,
-                &spl_token_2022_interface::id(),
-            );
-
-            self.ctx.process_and_validate_instruction(
-                &create_mint_ix,
-                &[mollusk_svm::result::Check::success()],
+            self.create_mint_account(
+                &mint_account,
+                &mint_authority,
+                space,
+                spl_token_2022_interface::id(),
             );
 
             self.mint = Some(mint_account.pubkey());
@@ -989,25 +993,6 @@ pub mod test_util_exports {
             .collect()
     }
 
-    /// Helper function to update account data in accounts vector after instruction execution
-    fn update_account_from_result(
-        mollusk: &Mollusk,
-        instruction: &Instruction,
-        accounts: &mut [(Pubkey, Account)],
-        target_pubkey: Pubkey,
-    ) {
-        if let Some((_, acct)) = mollusk
-            .process_instruction(instruction, accounts)
-            .resulting_accounts
-            .into_iter()
-            .find(|(pk, _)| *pk == target_pubkey)
-        {
-            if let Some((_, a)) = accounts.iter_mut().find(|(pk, _)| *pk == target_pubkey) {
-                *a = acct;
-            }
-        }
-    }
-
     /// Ensures a given `address` exists as a system account with the specified `lamports`.
     /// If an account for `address` already exists, it is left unchanged.
     pub fn ensure_system_account_exists(
@@ -1091,85 +1076,6 @@ pub mod test_util_exports {
             .expect("account not found")
             .1
             .clone()
-    }
-
-    /// Creates and initializes a mint account with the given parameters.
-    /// Returns a vector of accounts including the initialized mint and all necessary
-    /// base accounts for testing.
-    pub fn create_test_mint(
-        mollusk: &Mollusk,
-        mint_account: &Keypair,
-        mint_authority: &Keypair,
-        payer: &Keypair,
-        token_program: &Pubkey,
-        decimals: u8,
-    ) -> Vec<(Pubkey, Account)> {
-        let mint_space = MINT_ACCOUNT_SIZE as u64;
-        let rent_lamports = 1_461_600u64;
-
-        let create_mint_ix = system_instruction::create_account(
-            &payer.pubkey(),
-            &mint_account.pubkey(),
-            rent_lamports,
-            mint_space,
-            token_program,
-        );
-
-        let mut accounts = create_mollusk_base_accounts(payer, token_program);
-
-        accounts.push((
-            mint_account.pubkey(),
-            Account::new(0, 0, &system_program::id()),
-        ));
-        accounts.push((
-            mint_authority.pubkey(),
-            Account::new(1_000_000, 0, &system_program::id()),
-        ));
-
-        // Create the mint account on-chain.
-        mollusk.process_and_validate_instruction(
-            &create_mint_ix,
-            &accounts,
-            &[mollusk_svm::result::Check::success()],
-        );
-        let init_mint_ix = if *token_program == spl_token_2022_interface::id() {
-            spl_token_2022_interface::instruction::initialize_mint(
-                token_program,
-                &mint_account.pubkey(),
-                &mint_authority.pubkey(),
-                Some(&mint_authority.pubkey()),
-                decimals,
-            )
-            .unwrap()
-        } else {
-            spl_token_interface::instruction::initialize_mint(
-                token_program,
-                &mint_account.pubkey(),
-                &mint_authority.pubkey(),
-                Some(&mint_authority.pubkey()),
-                decimals,
-            )
-            .unwrap()
-        };
-
-        // Refresh the mint account data after creation.
-        update_account_from_result(
-            mollusk,
-            &create_mint_ix,
-            &mut accounts,
-            mint_account.pubkey(),
-        );
-
-        mollusk.process_and_validate_instruction(
-            &init_mint_ix,
-            &accounts,
-            &[mollusk_svm::result::Check::success()],
-        );
-
-        // Final refresh so callers see the initialized state.
-        update_account_from_result(mollusk, &init_mint_ix, &mut accounts, mint_account.pubkey());
-
-        accounts
     }
 
     pub mod account_builder {

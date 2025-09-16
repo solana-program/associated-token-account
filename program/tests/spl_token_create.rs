@@ -1,19 +1,19 @@
 mod utils;
 
-use crate::utils::test_util_exports::{ContextHarness, CreateAtaInstructionType};
+use crate::utils::test_util_exports::{ATATestHarness, CreateAtaInstructionType};
 
 #[test]
 fn success_create() {
     // Using ContextHarness - compare this concise version with the verbose version below
     let mut harness =
-        ContextHarness::new(&spl_token_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        ATATestHarness::new(&spl_token_interface::id()).with_wallet_and_mint(1_000_000, 6);
     harness.create_ata(CreateAtaInstructionType::default());
 }
 
 #[test]
 fn success_using_deprecated_instruction_creator() {
     let mut harness =
-        ContextHarness::new(&spl_token_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        ATATestHarness::new(&spl_token_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
     harness.create_and_check_ata_with_custom_instruction(
         CreateAtaInstructionType::default(),

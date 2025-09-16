@@ -321,7 +321,7 @@ pub mod test_util_exports {
 
         /// Initialize transfer fee extension on the current mint (requires Token-2022 mint with TransferFeeConfig extension)
         pub fn initialize_transfer_fee(
-            mut self,
+            self,
             transfer_fee_basis_points: u16,
             maximum_fee: u64,
         ) -> Self {
@@ -341,12 +341,15 @@ pub mod test_util_exports {
             )
             .expect("Failed to create initialize_transfer_fee_config instruction");
 
-            self.execute_success(&init_fee_ix);
+            self.ctx.process_and_validate_instruction(
+                &init_fee_ix,
+                &[mollusk_svm::result::Check::success()],
+            );
             self
         }
 
         /// Initialize mint (must be called after extensions are initialized)
-        pub fn initialize_mint(mut self, decimals: u8) -> Self {
+        pub fn initialize_mint(self, decimals: u8) -> Self {
             let mint = self.mint.expect("Mint must be set");
             let mint_authority = self
                 .mint_authority
@@ -373,7 +376,10 @@ pub mod test_util_exports {
                 .expect("Failed to create initialize_mint instruction")
             };
 
-            self.execute_success(&init_mint_ix);
+            self.ctx.process_and_validate_instruction(
+                &init_mint_ix,
+                &[mollusk_svm::result::Check::success()],
+            );
             self
         }
 
@@ -413,7 +419,7 @@ pub mod test_util_exports {
 
         /// Execute an instruction and validate with the given checks
         pub fn execute_and_validate(
-            &mut self,
+            &self,
             instruction: &solana_program::instruction::Instruction,
             checks: &[mollusk_svm::result::Check],
         ) -> mollusk_svm::result::InstructionResult {
@@ -423,7 +429,7 @@ pub mod test_util_exports {
 
         /// Execute an instruction expecting success
         pub fn execute_success(
-            &mut self,
+            &self,
             instruction: &solana_program::instruction::Instruction,
         ) -> mollusk_svm::result::InstructionResult {
             self.execute_and_validate(instruction, &[mollusk_svm::result::Check::success()])
@@ -431,7 +437,7 @@ pub mod test_util_exports {
 
         /// Execute an instruction expecting a specific error
         pub fn execute_error(
-            &mut self,
+            &self,
             instruction: &solana_program::instruction::Instruction,
             expected_error: ProgramError,
         ) -> mollusk_svm::result::InstructionResult {
@@ -610,36 +616,8 @@ pub mod test_util_exports {
                 &self.token_program_id,
             )
         }
-    }
 
-    /// Simple context-based test harness for lightweight testing scenarios
-    pub struct ContextHarness {
-        pub ctx: MolluskContext<HashMap<Pubkey, Account>>,
-        pub token_program_id: Pubkey,
-        pub payer: Keypair,
-        pub wallet: Option<Keypair>,
-        pub mint: Option<Pubkey>,
-        pub ata_address: Option<Pubkey>,
-    }
-
-    impl ContextHarness {
-        /// Create a new context-based harness
-        pub fn new(token_program_id: &Pubkey) -> Self {
-            let mollusk = setup_mollusk_with_programs(token_program_id);
-            let ctx = mollusk.with_context(HashMap::new());
-            let payer = Keypair::new();
-
-            Self {
-                ctx,
-                token_program_id: *token_program_id,
-                payer,
-                wallet: None,
-                mint: None,
-                ata_address: None,
-            }
-        }
-
-        /// Add a wallet and mint, and fund the payer
+        /// Add a wallet and mint, and fund the payer (lightweight setup)
         pub fn with_wallet_and_mint(mut self, wallet_lamports: u64, decimals: u8) -> Self {
             let wallet = Keypair::new();
             let mint = Pubkey::new_unique();
@@ -730,21 +708,6 @@ pub mod test_util_exports {
             ata_address
         }
 
-        /// Execute an instruction expecting an error
-        pub fn execute_error(
-            &self,
-            instruction: &solana_program::instruction::Instruction,
-            expected_error: ProgramError,
-        ) {
-            self.ctx
-                .process_and_validate_instruction(instruction, &[Check::err(expected_error)]);
-        }
-
-        /// Get the current ATA address (if set)
-        pub fn ata_address(&self) -> Option<Pubkey> {
-            self.ata_address
-        }
-
         /// Insert a specific account into the context
         pub fn insert_account(&self, pubkey: Pubkey, account: Account) {
             self.ctx.account_store.borrow_mut().insert(pubkey, account);
@@ -811,7 +774,7 @@ pub mod test_util_exports {
             // Replace the ATA address with the wrong account address
             instruction.accounts[1] = AccountMeta::new(account_keypair.pubkey(), false);
 
-            self.execute_error(&instruction, expected_error);
+            let _ = self.execute_error(&instruction, expected_error);
         }
 
         /// Create ATA instruction with custom modifications (for special cases like legacy empty data)
@@ -872,6 +835,11 @@ pub mod test_util_exports {
 
             self.ata_address = Some(ata_address);
             ata_address
+        }
+
+        /// Get the current ATA address (if set)
+        pub fn ata_address(&self) -> Option<Pubkey> {
+            self.ata_address
         }
     }
 

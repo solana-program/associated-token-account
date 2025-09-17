@@ -13,10 +13,5 @@ pub mod size;
 // Compile-time check to ensure tests/benches use --features std
 #[cfg(all(test, not(feature = "std")))]
 compile_error!("Tests require the 'std' feature. Use: cargo test --features std");
-
-#[cfg(any(test, feature = "std"))]
-pub mod test_helpers;
-#[cfg(any(test, feature = "std"))]
-pub mod test_utils;
 #[cfg(any(test, feature = "std"))]
 extern crate std;

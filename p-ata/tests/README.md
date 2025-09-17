@@ -1,1 +1,1 @@
-Any integration tests which require `mollusk` live here. Unit tests are inline in src/*
+p-ata specific tests are located here; p-ata also runs against the SPL ATA tests in /program/tests.

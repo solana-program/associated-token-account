@@ -4,7 +4,6 @@ use {
     solana_instruction::AccountMeta,
     solana_keypair::Keypair,
     solana_program_error::ProgramError,
-    solana_program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_signer::Signer,
     spl_associated_token_account_interface::{
@@ -55,16 +54,13 @@ fn test_recover_nested_same_mint(program_id: &Pubkey) {
 
     // Validate the recovery worked - tokens should be in the destination ATA (owner_ata)
     let destination_account = harness.get_account(owner_ata);
-    let destination_state = if *program_id == spl_token_2022_interface::id() {
-        let state = StateWithExtensionsOwned::<spl_token_2022_interface::state::Account>::unpack(
+    let destination_state =
+        StateWithExtensionsOwned::<spl_token_2022_interface::state::Account>::unpack(
             destination_account.data,
         )
-        .unwrap();
-        state.base.amount
-    } else {
-        let state = spl_token_interface::state::Account::unpack(&destination_account.data).unwrap();
-        state.amount
-    };
+        .unwrap()
+        .base
+        .amount;
     assert_eq!(destination_state, TEST_MINT_AMOUNT);
 }
 
@@ -125,16 +121,13 @@ fn test_recover_nested_different_mints(program_id: &Pubkey) {
 
     // Validate the recovery worked - tokens should be in the destination ATA
     let destination_account = harness.get_account(destination_ata);
-    let destination_state = if *program_id == spl_token_2022_interface::id() {
-        let state = StateWithExtensionsOwned::<spl_token_2022_interface::state::Account>::unpack(
+    let destination_state =
+        StateWithExtensionsOwned::<spl_token_2022_interface::state::Account>::unpack(
             destination_account.data,
         )
-        .unwrap();
-        state.base.amount
-    } else {
-        let state = spl_token_interface::state::Account::unpack(&destination_account.data).unwrap();
-        state.amount
-    };
+        .unwrap()
+        .base
+        .amount;
     assert_eq!(destination_state, TEST_MINT_AMOUNT);
 }
 

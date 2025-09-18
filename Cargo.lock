@@ -3956,7 +3956,6 @@ dependencies = [
  "solana-keypair",
  "solana-program",
  "solana-program-error",
- "solana-program-pack",
  "solana-pubkey",
  "solana-rent",
  "solana-signer",

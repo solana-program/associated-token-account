@@ -120,13 +120,13 @@ impl Default for CreateAtaInstructionType {
     }
 }
 
-/// Calculate the expected account length for a Token-2022 account with ImmutableOwner extension
+/// Calculate the expected account length for a Token-2022 account with `ImmutableOwner` extension
 pub fn token_2022_immutable_owner_account_len() -> usize {
     ExtensionType::try_calculate_account_len::<Token2022Account>(&[ExtensionType::ImmutableOwner])
         .expect("Failed to calculate Token-2022 account length")
 }
 
-/// Calculate the rent-exempt balance for a Token-2022 account with ImmutableOwner extension
+/// Calculate the rent-exempt balance for a Token-2022 account with `ImmutableOwner` extension
 pub fn token_2022_immutable_owner_rent_exempt_balance() -> u64 {
     Rent::default().minimum_balance(token_2022_immutable_owner_account_len())
 }
@@ -265,7 +265,7 @@ impl AtaTestHarness {
         self
     }
 
-    /// Initialize transfer fee extension on the current mint (requires Token-2022 mint with TransferFeeConfig extension)
+    /// Initialize transfer fee extension on the current mint (requires Token-2022 mint with `TransferFeeConfig` extension)
     pub fn initialize_transfer_fee(self, transfer_fee_basis_points: u16, maximum_fee: u64) -> Self {
         let mint = self.mint.expect("Mint must be set");
         let mint_authority = self
@@ -354,7 +354,7 @@ impl AtaTestHarness {
             .clone()
     }
 
-    /// Mint tokens to the ATA (requires mint_authority and ata_address to be set)
+    /// Mint tokens to the ATA (requires `mint_authority` and `ata_address` to be set)
     pub fn mint_tokens(&mut self, amount: u64) {
         let ata_address = self.ata_address.expect("ATA must be set");
         self.mint_tokens_to(ata_address, amount);
@@ -462,7 +462,7 @@ impl AtaTestHarness {
         ata_address
     }
 
-    /// Build a recover_nested instruction and ensure all required accounts exist
+    /// Build a `recover_nested` instruction and ensure all required accounts exist
     pub fn build_recover_nested_instruction(
         &mut self,
         owner_mint: Pubkey,

@@ -30,11 +30,30 @@ fn test_recover_nested_same_mint(program_id: &Pubkey) {
     let nested_ata = harness.create_nested_ata(owner_ata);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
+    // Capture pre-state for lamports transfer validation
+    let wallet_pubkey = harness.wallet.as_ref().unwrap().pubkey();
+    let pre_wallet_lamports = {
+        let store = harness.ctx.account_store.borrow();
+        store.get(&wallet_pubkey).unwrap().lamports
+    };
+    let nested_lamports = harness.get_account(nested_ata).lamports;
+
     // Build and execute recover instruction
     let recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    harness
-        .ctx
-        .process_and_validate_instruction(&recover_instruction, &[Check::success()]);
+    harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[
+            Check::success(),
+            // Wallet received nested account lamports
+            Check::account(&wallet_pubkey)
+                .lamports(pre_wallet_lamports.checked_add(nested_lamports).unwrap())
+                .build(),
+            // Nested account has no lamports
+            Check::account(&nested_ata).lamports(0).build(),
+            // Nested account is closed
+            Check::account(&nested_ata).closed().build(),
+        ],
+    );
 
     // Validate the recovery worked - tokens should be in the destination ATA (owner_ata)
     let destination_account = harness.get_account(owner_ata);
@@ -81,11 +100,30 @@ fn test_recover_nested_different_mints(program_id: &Pubkey) {
     // Create destination ATA for the nested token
     let destination_ata = harness.create_ata_for_owner(harness.wallet.as_ref().unwrap().pubkey());
 
+    // Capture pre-state for lamports transfer validation
+    let wallet_pubkey = harness.wallet.as_ref().unwrap().pubkey();
+    let pre_wallet_lamports = {
+        let store = harness.ctx.account_store.borrow();
+        store.get(&wallet_pubkey).unwrap().lamports
+    };
+    let nested_lamports = harness.get_account(nested_ata).lamports;
+
     // Build and execute recover instruction
     let recover_instruction = harness.build_recover_nested_instruction(owner_mint, nested_mint);
-    harness
-        .ctx
-        .process_and_validate_instruction(&recover_instruction, &[Check::success()]);
+    harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[
+            Check::success(),
+            // Wallet received nested account lamports
+            Check::account(&wallet_pubkey)
+                .lamports(pre_wallet_lamports.checked_add(nested_lamports).unwrap())
+                .build(),
+            // Nested account has no lamports
+            Check::account(&nested_ata).lamports(0).build(),
+            // Nested account is closed
+            Check::account(&nested_ata).closed().build(),
+        ],
+    );
 
     // Validate the recovery worked - tokens should be in the destination ATA
     let destination_account = harness.get_account(destination_ata);

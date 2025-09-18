@@ -1,7 +1,5 @@
-mod utils;
-
 use {
-    crate::utils::test_util_exports::{AccountBuilder, AtaTestHarness},
+    ata_mollusk_harness::{AccountBuilder, AtaTestHarness},
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
     solana_keypair::Keypair,

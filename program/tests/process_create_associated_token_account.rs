@@ -1,7 +1,5 @@
-mod utils;
-
 use {
-    crate::utils::test_util_exports::{
+    ata_mollusk_harness::{
         build_create_ata_instruction, ctx_ensure_system_account_exists,
         token_2022_immutable_owner_rent_exempt_balance, AtaTestHarness, CreateAtaInstructionType,
     },

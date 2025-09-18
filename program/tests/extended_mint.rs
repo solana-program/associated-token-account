@@ -1,7 +1,5 @@
-mod utils;
-
 use {
-    crate::utils::test_util_exports::AtaTestHarness,
+    ata_mollusk_harness::AtaTestHarness,
     mollusk_svm::result::Check,
     solana_program_error::ProgramError,
     solana_signer::Signer,

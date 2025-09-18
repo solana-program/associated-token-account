@@ -1,6 +1,4 @@
-mod utils;
-
-use crate::utils::test_util_exports::{AtaTestHarness, CreateAtaInstructionType};
+use ata_mollusk_harness::{AtaTestHarness, CreateAtaInstructionType};
 
 #[test]
 fn success_create() {

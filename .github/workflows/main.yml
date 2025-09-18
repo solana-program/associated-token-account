@@ -45,6 +45,25 @@ jobs:
       - name: Lint
         run: pnpm interface:lint
 
+  format_and_lint_test_harness:
+    name: Format & Lint Test Harness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup
+        with:
+          clippy: true
+          rustfmt: true
+
+      - name: Format
+        run: pnpm test-harness:format
+
+      - name: Lint
+        run: pnpm test-harness:lint
+
   audit_rust:
     name: Audit Rust
     runs-on: ubuntu-latest

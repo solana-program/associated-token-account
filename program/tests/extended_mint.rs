@@ -27,7 +27,7 @@ fn test_associated_token_account_with_transfer_fees() {
         harness.wallet.as_ref().unwrap().pubkey(),
         harness.mint.unwrap(),
         harness.ata_address.unwrap(),
-        harness.create_ata_for_owner(receiver_wallet.pubkey()),
+        harness.create_ata_for_owner(receiver_wallet.pubkey(), 1_000_000),
     );
     harness.mint_tokens(50 * maximum_fee);
 

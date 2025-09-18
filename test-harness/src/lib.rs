@@ -410,35 +410,12 @@ impl AtaTestHarness {
         )
     }
 
-    /// Create a nested ATA (ATA owned by another ATA) and return the nested ATA address
-    pub fn create_nested_ata(&mut self, owner_ata: Pubkey) -> Pubkey {
+    /// Create an ATA for any owner. Ensure the owner exists as a system account
+    /// with the given lamports.
+    pub fn create_ata_for_owner(&mut self, owner: Pubkey, owner_lamports: u64) -> Pubkey {
         let mint = self.mint.expect("Mint must be set");
-        let nested_ata_address =
-            get_associated_token_address_with_program_id(&owner_ata, &mint, &self.token_program_id);
 
-        // Ensure system account exists for nested ATA
-        ctx_ensure_system_account_exists(&self.ctx, nested_ata_address, 0);
-
-        let instruction = build_create_ata_instruction(
-            spl_associated_token_account_interface::program::id(),
-            self.payer.pubkey(),
-            nested_ata_address,
-            owner_ata,
-            mint,
-            self.token_program_id,
-            CreateAtaInstructionType::default(),
-        );
-
-        self.ctx
-            .process_and_validate_instruction(&instruction, &[Check::success()]);
-
-        nested_ata_address
-    }
-
-    /// Create an ATA for a different owner (for error testing)
-    pub fn create_ata_for_owner(&mut self, owner: Pubkey) -> Pubkey {
-        let mint = self.mint.expect("Mint must be set");
-        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(owner, 1_000_000)]);
+        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(owner, owner_lamports)]);
 
         let ata_address =
             get_associated_token_address_with_program_id(&owner, &mint, &self.token_program_id);

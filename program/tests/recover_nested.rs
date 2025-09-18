@@ -54,14 +54,14 @@ fn test_recover_nested_same_mint(program_id: &Pubkey) {
 
     // Validate the recovery worked - tokens should be in the destination ATA (owner_ata)
     let destination_account = harness.get_account(owner_ata);
-    let destination_state =
+    let destination_amount =
         StateWithExtensionsOwned::<spl_token_2022_interface::state::Account>::unpack(
             destination_account.data,
         )
         .unwrap()
         .base
         .amount;
-    assert_eq!(destination_state, TEST_MINT_AMOUNT);
+    assert_eq!(destination_amount, TEST_MINT_AMOUNT);
 }
 
 #[test]
@@ -121,14 +121,14 @@ fn test_recover_nested_different_mints(program_id: &Pubkey) {
 
     // Validate the recovery worked - tokens should be in the destination ATA
     let destination_account = harness.get_account(destination_ata);
-    let destination_state =
+    let destination_amount =
         StateWithExtensionsOwned::<spl_token_2022_interface::state::Account>::unpack(
             destination_account.data,
         )
         .unwrap()
         .base
         .amount;
-    assert_eq!(destination_state, TEST_MINT_AMOUNT);
+    assert_eq!(destination_amount, TEST_MINT_AMOUNT);
 }
 
 #[test]

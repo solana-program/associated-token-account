@@ -3,7 +3,7 @@ mod utils;
 use {
     crate::utils::test_util_exports::{
         build_create_ata_instruction, ctx_ensure_system_account_exists,
-        token_2022_immutable_owner_rent_exempt_balance, ATATestHarness, CreateAtaInstructionType,
+        token_2022_immutable_owner_rent_exempt_balance, AtaTestHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
@@ -17,14 +17,14 @@ use {
 #[test]
 fn test_associated_token_address() {
     let mut harness =
-        ATATestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
     harness.create_ata(CreateAtaInstructionType::default());
 }
 
 #[test]
 fn test_create_with_fewer_lamports() {
     let harness =
-        ATATestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
     let wallet = harness.wallet.as_ref().unwrap();
     let mint = harness.mint.unwrap();
@@ -62,7 +62,7 @@ fn test_create_with_fewer_lamports() {
 #[test]
 fn test_create_with_excess_lamports() {
     let harness =
-        ATATestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
     let wallet = harness.wallet.as_ref().unwrap();
     let mint = harness.mint.unwrap();
@@ -100,7 +100,7 @@ fn test_create_with_excess_lamports() {
 #[test]
 fn test_create_account_mismatch() {
     let harness =
-        ATATestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
     let wallet = harness.wallet.as_ref().unwrap();
     let mint = harness.mint.unwrap();
@@ -139,7 +139,7 @@ fn test_create_account_mismatch() {
 #[test]
 fn test_create_associated_token_account_using_legacy_implicit_instruction() {
     let mut harness =
-        ATATestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
     harness.create_and_check_ata_with_custom_instruction(
         CreateAtaInstructionType::default(),

@@ -1,7 +1,7 @@
 mod utils;
 
 use {
-    crate::utils::test_util_exports::ATATestHarness,
+    crate::utils::test_util_exports::AtaTestHarness,
     mollusk_svm::result::Check,
     solana_program_error::ProgramError,
     solana_signer::Signer,
@@ -17,7 +17,7 @@ use {
 fn test_associated_token_account_with_transfer_fees() {
     let maximum_fee = 100;
     let transfer_fee_basis_points = 1_000;
-    let (harness, receiver_wallet) = ATATestHarness::new(&spl_token_2022_interface::id())
+    let (harness, receiver_wallet) = AtaTestHarness::new(&spl_token_2022_interface::id())
         .with_wallet(1_000_000)
         .with_additional_wallet(1_000_000);
     let mut harness = harness

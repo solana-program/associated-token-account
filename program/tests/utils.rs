@@ -45,7 +45,7 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     let ata_program_id = spl_associated_token_account::id();
     let mut mollusk = Mollusk::new(&ata_program_id, "spl_associated_token_account");
 
-    set_out_dirs(&workspace_root.join("programs"));
+    set_out_dirs(&workspace_root.join("program/tests/fixtures"));
     if *token_program_id == spl_token_2022_interface::id() {
         mollusk.add_program(token_program_id, "spl_token_2022", &LOADER_V3);
     } else {
@@ -60,7 +60,7 @@ pub mod test_util_exports {
     #![allow(dead_code)]
     use {
         super::*, mollusk_svm::result::Check, solana_program::instruction::AccountMeta,
-        solana_sdk::program_error::ProgramError,
+        solana_program_error::ProgramError,
     };
 
     /// Ensure a system-owned account exists in the context store with the given lamports
@@ -150,7 +150,7 @@ pub mod test_util_exports {
     }
 
     /// Test harness for ATA testing scenarios
-    pub struct ATATestHarness {
+    pub struct AtaTestHarness {
         pub ctx: MolluskContext<HashMap<Pubkey, Account>>,
         pub token_program_id: Pubkey,
         pub payer: Keypair,
@@ -160,7 +160,7 @@ pub mod test_util_exports {
         pub ata_address: Option<Pubkey>,
     }
 
-    impl ATATestHarness {
+    impl AtaTestHarness {
         /// Internal: create the mint account owned by the token program with given space
         fn create_mint_account(
             &mut self,
@@ -180,7 +180,7 @@ pub mod test_util_exports {
                 ]);
             }
 
-            let mint_rent = solana_sdk::rent::Rent::default().minimum_balance(space);
+            let mint_rent = Rent::default().minimum_balance(space);
             let create_mint_ix = solana_system_interface::instruction::create_account(
                 &self.payer.pubkey(),
                 &mint_account.pubkey(),
@@ -251,10 +251,7 @@ pub mod test_util_exports {
         }
 
         /// Create and initialize a Token-2022 mint with specific extensions
-        pub fn with_mint_with_extensions(
-            mut self,
-            extensions: &[spl_token_2022_interface::extension::ExtensionType],
-        ) -> Self {
+        pub fn with_mint_with_extensions(mut self, extensions: &[ExtensionType]) -> Self {
             if self.token_program_id != spl_token_2022_interface::id() {
                 panic!("with_mint_with_extensions() can only be used with Token-2022 program");
             }
@@ -263,11 +260,10 @@ pub mod test_util_exports {
             let mint_authority = Keypair::new();
 
             // Calculate space needed for extensions
-            let space =
-                spl_token_2022_interface::extension::ExtensionType::try_calculate_account_len::<
-                    spl_token_2022_interface::state::Mint,
-                >(extensions)
-                .expect("Failed to calculate mint space with extensions");
+            let space = ExtensionType::try_calculate_account_len::<
+                spl_token_2022_interface::state::Mint,
+            >(extensions)
+            .expect("Failed to calculate mint space with extensions");
 
             self.create_mint_account(
                 &mint_account,
@@ -316,25 +312,14 @@ pub mod test_util_exports {
                 .as_ref()
                 .expect("Mint authority must be set");
 
-            let init_mint_ix = if self.token_program_id == spl_token_2022_interface::id() {
-                spl_token_2022_interface::instruction::initialize_mint(
-                    &self.token_program_id,
-                    &mint,
-                    &mint_authority.pubkey(),
-                    Some(&mint_authority.pubkey()),
-                    decimals,
-                )
-                .expect("Failed to create initialize_mint instruction")
-            } else {
-                spl_token_interface::instruction::initialize_mint(
-                    &self.token_program_id,
-                    &mint,
-                    &mint_authority.pubkey(),
-                    Some(&mint_authority.pubkey()),
-                    decimals,
-                )
-                .expect("Failed to create initialize_mint instruction")
-            };
+            let init_mint_ix = spl_token_2022_interface::instruction::initialize_mint(
+                &self.token_program_id,
+                &mint,
+                &mint_authority.pubkey(),
+                Some(&mint_authority.pubkey()),
+                decimals,
+            )
+            .expect("Failed to create initialize_mint instruction");
 
             self.ctx
                 .process_and_validate_instruction(&init_mint_ix, &[Check::success()]);
@@ -399,27 +384,15 @@ pub mod test_util_exports {
                 .as_ref()
                 .expect("Mint authority must be set");
 
-            let mint_to_ix = if self.token_program_id == spl_token_2022_interface::id() {
-                spl_token_2022_interface::instruction::mint_to(
-                    &self.token_program_id,
-                    &mint,
-                    &destination,
-                    &mint_authority.pubkey(),
-                    &[],
-                    amount,
-                )
-                .unwrap()
-            } else {
-                spl_token_interface::instruction::mint_to(
-                    &self.token_program_id,
-                    &mint,
-                    &destination,
-                    &mint_authority.pubkey(),
-                    &[],
-                    amount,
-                )
-                .unwrap()
-            };
+            let mint_to_ix = spl_token_2022_interface::instruction::mint_to(
+                &self.token_program_id,
+                &mint,
+                &destination,
+                &mint_authority.pubkey(),
+                &[],
+                amount,
+            )
+            .unwrap();
 
             self.ctx
                 .process_and_validate_instruction(&mint_to_ix, &[Check::success()]);
@@ -665,7 +638,7 @@ pub mod test_util_exports {
         /// Execute an instruction with a modified account address (for testing non-ATA addresses)
         pub fn execute_with_wrong_account_address(
             &self,
-            account_keypair: &Keypair,
+            wrong_account: Pubkey,
             expected_error: ProgramError,
         ) {
             let wallet = self.wallet.as_ref().expect("Wallet must be set");
@@ -673,7 +646,7 @@ pub mod test_util_exports {
 
             // Create a token account at the wrong address
             self.insert_account(
-                account_keypair.pubkey(),
+                wrong_account,
                 AccountBuilder::token_account(&mint, &wallet.pubkey(), 0, &self.token_program_id),
             );
 
@@ -692,7 +665,7 @@ pub mod test_util_exports {
             );
 
             // Replace the ATA address with the wrong account address
-            instruction.accounts[1] = AccountMeta::new(account_keypair.pubkey(), false);
+            instruction.accounts[1] = AccountMeta::new(wrong_account, false);
 
             self.ctx
                 .process_and_validate_instruction(&instruction, &[Check::err(expected_error)]);
@@ -886,7 +859,7 @@ pub mod test_util_exports {
         #[allow(dead_code, reason = "exported for benchmarking consumers")]
         pub fn mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
             let data = create_mollusk_mint_data(decimals);
-            let rent = solana_sdk::rent::Rent::default();
+            let rent = Rent::default();
             Account {
                 lamports: rent.minimum_balance(data.len()),
                 data,
@@ -923,7 +896,7 @@ pub mod test_util_exports {
             mint.base.is_initialized = true.into();
             mint.base.freeze_authority = COption::None.into();
 
-            let rent = solana_sdk::rent::Rent::default();
+            let rent = Rent::default();
             Account {
                 lamports: rent.minimum_balance(data.len()),
                 data,

@@ -3,10 +3,9 @@ mod utils;
 use {
     crate::utils::test_util_exports::{
         build_create_ata_instruction, token_2022_immutable_owner_account_len,
-        token_2022_immutable_owner_rent_exempt_balance, ATATestHarness, CreateAtaInstructionType,
+        token_2022_immutable_owner_rent_exempt_balance, AtaTestHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
-    solana_keypair::Keypair,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
     solana_signer::Signer,
@@ -15,7 +14,7 @@ use {
 #[test]
 fn success_account_exists() {
     let mut harness =
-        ATATestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
     // CreateIdempotent will create the ATA if it doesn't exist
     let ata_address = harness.create_ata(CreateAtaInstructionType::CreateIdempotent { bump: None });
     let associated_account = harness
@@ -67,7 +66,7 @@ fn success_account_exists() {
 #[test]
 fn fail_account_exists_with_wrong_owner() {
     let harness =
-        ATATestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
     let wrong_owner = Pubkey::new_unique();
     let ata_address = harness.insert_wrong_owner_token_account(wrong_owner);
     let instruction = build_create_ata_instruction(
@@ -90,7 +89,7 @@ fn fail_account_exists_with_wrong_owner() {
 #[test]
 fn fail_non_ata() {
     let harness =
-        ATATestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
-    let account = Keypair::new();
-    harness.execute_with_wrong_account_address(&account, ProgramError::InvalidSeeds);
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+    let wrong_account = Pubkey::new_unique();
+    harness.execute_with_wrong_account_address(wrong_account, ProgramError::InvalidSeeds);
 }

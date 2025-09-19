@@ -3,9 +3,10 @@ name = "ata-mollusk-harness"
 version = "1.0.0"
 edition = "2021"
 license = "Apache-2.0"
+publish = false
 
 [lib]
-path = "src/lib.rs"
+crate-type = ["lib"]
 
 [dependencies]
 mollusk-svm = { version = "0.6.0" }
@@ -20,6 +21,6 @@ solana-rent = "3.0"
 solana-signer = "3.0"
 solana-system-interface = { version = "2.0", features = ["bincode"] }
 solana-sysvar = "3.0"
-spl-associated-token-account-interface = { version = "2.0.0", features = ["borsh"] }
-spl-token-interface = "2.0.0"
-spl-token-2022-interface = "2.0.0"
+spl-associated-token-account-interface = "2.0"
+spl-token-interface = "2.0"
+spl-token-2022-interface = "2.0"

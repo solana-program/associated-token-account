@@ -399,8 +399,8 @@ impl AtaTestHarness {
         )
     }
 
-    /// Create an ATA for any owner. Ensure the owner exists as a system account
-    /// with the given lamports.
+    /// Create an ATA for any owner. Ensure the owner exists as a system account,
+    /// creating it with the given lamports if it does not exist.
     pub fn create_ata_for_owner(&mut self, owner: Pubkey, owner_lamports: u64) -> Pubkey {
         let mint = self.mint.expect("Mint must be set");
 

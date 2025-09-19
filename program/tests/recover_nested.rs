@@ -24,7 +24,7 @@ fn test_recover_nested_same_mint(program_id: &Pubkey) {
     let owner_ata = harness.ata_address.unwrap();
 
     // Create nested ATA and mint tokens to it (not to the main, canonical ATA)
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     // Capture pre-state for lamports transfer validation
@@ -88,7 +88,7 @@ fn test_recover_nested_different_mints(program_id: &Pubkey) {
     let nested_mint = harness.mint.unwrap();
 
     // Create nested ATA and mint tokens to it
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     // Create destination ATA for the nested token
@@ -151,7 +151,7 @@ fn fail_missing_wallet_signature_2022() {
 
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
@@ -173,7 +173,7 @@ fn fail_missing_wallet_signature() {
 
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
@@ -195,7 +195,7 @@ fn fail_wrong_signer_2022() {
 
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     // Create wrong wallet and instruction with wrong signer
@@ -224,7 +224,7 @@ fn fail_wrong_signer() {
 
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     // Test-specific logic: create wrong wallet and instruction with wrong signer
@@ -294,7 +294,7 @@ fn fail_wrong_address_derivation_owner_2022() {
 
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
@@ -322,7 +322,7 @@ fn fail_wrong_address_derivation_owner() {
 
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
@@ -382,7 +382,7 @@ fn fail_wrong_spl_token_program() {
 
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     // Use wrong program in instruction
@@ -408,7 +408,7 @@ fn fail_destination_not_wallet_ata() {
 
     let mint = harness.mint.unwrap();
     let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 0);
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     // Create wrong destination ATA

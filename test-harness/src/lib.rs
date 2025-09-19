@@ -756,9 +756,9 @@ pub fn create_token_account_data(mint: &[u8; 32], owner: &[u8; 32], amount: u64)
 /// Create mint account data for mollusk testing
 pub fn create_mollusk_mint_data(decimals: u8) -> Vec<u8> {
     let mut data = vec![0u8; MINT_ACCOUNT_SIZE];
-    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // state = 1 (Initialized)
+    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // mint authority set
     data[44] = decimals;
-    data[45] = 1; // is_initialized = 1
+    data[45] = 1; // is initialized
     data
 }
 pub struct AccountBuilder;

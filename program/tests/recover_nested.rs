@@ -64,6 +64,96 @@ fn test_recover_nested_same_mint(program_id: &Pubkey) {
     assert_eq!(destination_amount, TEST_MINT_AMOUNT);
 }
 
+fn test_fail_missing_wallet_signature(token_program_id: &Pubkey) {
+    let mut harness = AtaTestHarness::new(token_program_id)
+        .with_wallet(1_000_000)
+        .with_mint(0)
+        .with_ata();
+
+    let mint = harness.mint.unwrap();
+    let owner_ata = harness.ata_address.unwrap();
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
+    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
+
+    let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
+    recover_instruction.accounts[5] =
+        AccountMeta::new(harness.wallet.as_ref().unwrap().pubkey(), false);
+
+    harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::MissingRequiredSignature)],
+    );
+}
+
+fn test_fail_wrong_signer(token_program_id: &Pubkey) {
+    let mut harness = AtaTestHarness::new(token_program_id)
+        .with_wallet(1_000_000)
+        .with_mint(0)
+        .with_ata();
+
+    let mint = harness.mint.unwrap();
+    let owner_ata = harness.ata_address.unwrap();
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
+    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
+
+    let wrong_wallet = Keypair::new();
+    harness.create_ata_for_owner(wrong_wallet.pubkey(), 1_000_000);
+
+    let recover_instruction =
+        instruction::recover_nested(&wrong_wallet.pubkey(), &mint, &mint, token_program_id);
+
+    harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::IllegalOwner)],
+    );
+}
+
+fn test_fail_not_nested(token_program_id: &Pubkey) {
+    let mut harness = AtaTestHarness::new(token_program_id)
+        .with_wallet(1_000_000)
+        .with_mint(0)
+        .with_ata();
+
+    let mint = harness.mint.unwrap();
+    let wrong_wallet = Pubkey::new_unique();
+
+    let nested_ata = harness.create_ata_for_owner(wrong_wallet, 0);
+    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
+
+    let recover_instruction = harness.build_recover_nested_instruction(mint, mint);
+    harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::IllegalOwner)],
+    );
+}
+
+fn test_fail_wrong_address_derivation_owner(token_program_id: &Pubkey) {
+    let mut harness = AtaTestHarness::new(token_program_id)
+        .with_wallet(1_000_000)
+        .with_mint(0)
+        .with_ata();
+
+    let mint = harness.mint.unwrap();
+    let owner_ata = harness.ata_address.unwrap();
+    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
+    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
+
+    let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
+    let wrong_owner_address = Pubkey::new_unique();
+    recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false);
+
+    harness
+        .ctx
+        .account_store
+        .borrow_mut()
+        .insert(wrong_owner_address, AccountBuilder::system_account(0));
+
+    harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::InvalidSeeds)],
+    );
+}
+
 #[test]
 fn success_same_mint_2022() {
     test_recover_nested_same_mint(&spl_token_2022_interface::id());
@@ -144,201 +234,41 @@ fn success_different_mints_2022() {
 
 #[test]
 fn fail_missing_wallet_signature_2022() {
-    let mut harness = AtaTestHarness::new(&spl_token_2022_interface::id())
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    recover_instruction.accounts[5] =
-        AccountMeta::new(harness.wallet.as_ref().unwrap().pubkey(), false);
-
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::MissingRequiredSignature)],
-    );
+    test_fail_missing_wallet_signature(&spl_token_2022_interface::id());
 }
 
 #[test]
 fn fail_missing_wallet_signature() {
-    let mut harness = AtaTestHarness::new(&spl_token_interface::id())
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    recover_instruction.accounts[5] =
-        AccountMeta::new(harness.wallet.as_ref().unwrap().pubkey(), false);
-
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::MissingRequiredSignature)],
-    );
+    test_fail_missing_wallet_signature(&spl_token_interface::id());
 }
 
 #[test]
 fn fail_wrong_signer_2022() {
-    let mut harness = AtaTestHarness::new(&spl_token_2022_interface::id())
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    // Create wrong wallet and instruction with wrong signer
-    let wrong_wallet = Keypair::new();
-    harness.create_ata_for_owner(wrong_wallet.pubkey(), 1_000_000);
-
-    let recover_instruction = instruction::recover_nested(
-        &wrong_wallet.pubkey(),
-        &mint,
-        &mint,
-        &spl_token_2022_interface::id(),
-    );
-
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::IllegalOwner)],
-    );
+    test_fail_wrong_signer(&spl_token_2022_interface::id());
 }
 
 #[test]
 fn fail_wrong_signer() {
-    let mut harness = AtaTestHarness::new(&spl_token_interface::id())
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    // Test-specific logic: create wrong wallet and instruction with wrong signer
-    let wrong_wallet = Keypair::new();
-    harness.create_ata_for_owner(wrong_wallet.pubkey(), 1_000_000);
-
-    let recover_instruction = instruction::recover_nested(
-        &wrong_wallet.pubkey(),
-        &mint,
-        &mint,
-        &spl_token_interface::id(),
-    );
-
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::IllegalOwner)],
-    );
+    test_fail_wrong_signer(&spl_token_interface::id());
 }
 
 #[test]
 fn fail_not_nested_2022() {
-    let mut harness = AtaTestHarness::new(&spl_token_2022_interface::id())
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let wrong_wallet = Pubkey::new_unique();
-
-    // Create nested ATA under wrong wallet instead of owner ATA
-    let nested_ata = harness.create_ata_for_owner(wrong_wallet, 0);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    let recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::IllegalOwner)],
-    );
+    test_fail_not_nested(&spl_token_2022_interface::id());
 }
 
 #[test]
 fn fail_not_nested() {
-    let mut harness = AtaTestHarness::new(&spl_token_interface::id())
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let wrong_wallet = Pubkey::new_unique();
-
-    // Create nested ATA under wrong wallet instead of owner ATA
-    let nested_ata = harness.create_ata_for_owner(wrong_wallet, 0);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    let recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::IllegalOwner)],
-    );
+    test_fail_not_nested(&spl_token_interface::id());
 }
 #[test]
 fn fail_wrong_address_derivation_owner_2022() {
-    let mut harness = AtaTestHarness::new(&spl_token_2022_interface::id())
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    let wrong_owner_address = Pubkey::new_unique();
-    recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false);
-
-    harness
-        .ctx
-        .account_store
-        .borrow_mut()
-        .insert(wrong_owner_address, AccountBuilder::system_account(0));
-
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::InvalidSeeds)],
-    );
+    test_fail_wrong_address_derivation_owner(&spl_token_2022_interface::id());
 }
 
 #[test]
 fn fail_wrong_address_derivation_owner() {
-    let mut harness = AtaTestHarness::new(&spl_token_interface::id())
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    let wrong_owner_address = Pubkey::new_unique();
-    recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false);
-
-    harness
-        .ctx
-        .account_store
-        .borrow_mut()
-        .insert(wrong_owner_address, AccountBuilder::system_account(0));
-
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::InvalidSeeds)],
-    );
+    test_fail_wrong_address_derivation_owner(&spl_token_interface::id());
 }
 
 #[test]

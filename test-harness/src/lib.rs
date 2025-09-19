@@ -29,23 +29,12 @@ const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
 
 /// Setup mollusk with ATA and token programs for testing
 pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
-    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("workspace root");
-
-    let set_out_dirs = |path: &Path| {
-        std::env::set_var("SBF_OUT_DIR", path);
-        std::env::set_var("BPF_OUT_DIR", path);
-    };
-    set_out_dirs(&workspace_root.join("target/deploy"));
     let ata_program_id = spl_associated_token_account_interface::program::id();
     let mut mollusk = Mollusk::new(&ata_program_id, "spl_associated_token_account");
 
-    set_out_dirs(&workspace_root.join("program/tests/fixtures"));
     if *token_program_id == spl_token_2022_interface::id() {
         mollusk.add_program(token_program_id, "spl_token_2022", &LOADER_V3);
     } else {
-        // Pinocchio token program
         mollusk.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
     }
 

@@ -3,8 +3,8 @@ use {
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_keypair::Keypair,
-    solana_program_pack::Pack,
     solana_program_error::ProgramError,
+    solana_program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
     solana_signer::Signer,
@@ -63,7 +63,7 @@ pub fn ctx_ensure_system_accounts_with_lamports(
 /// Create standard base accounts needed for mollusk tests
 pub fn create_mollusk_base_accounts(
     payer: &Keypair,
-    token_program_id: &Pubkey,
+    _token_program_id: &Pubkey,
 ) -> Vec<(Pubkey, Account)> {
     [
         (
@@ -75,10 +75,6 @@ pub fn create_mollusk_base_accounts(
             AccountBuilder::executable_program(NATIVE_LOADER_ID),
         ),
         (sysvar::rent::id(), AccountBuilder::rent_sysvar()),
-        (
-            *token_program_id,
-            mollusk_svm::program::create_program_account_loader_v3(token_program_id),
-        ),
     ]
     .into()
 }

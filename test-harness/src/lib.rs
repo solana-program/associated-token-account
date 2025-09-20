@@ -16,12 +16,6 @@ use {
     std::{collections::HashMap, vec::Vec},
 };
 
-// Native loader program ID
-const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
-    5, 135, 132, 191, 20, 139, 164, 40, 47, 176, 18, 87, 72, 136, 169, 241, 83, 160, 125, 173, 247,
-    101, 192, 69, 92, 154, 151, 3, 128, 0, 0, 0,
-]);
-
 /// Setup mollusk with ATA and token programs for testing
 pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     let ata_program_id = spl_associated_token_account_interface::program::id();
@@ -61,18 +55,11 @@ pub fn ctx_ensure_system_accounts_with_lamports(
 }
 
 /// Create standard base accounts needed for mollusk tests
-pub fn create_mollusk_base_accounts(
-    payer: &Keypair,
-    _token_program_id: &Pubkey,
-) -> Vec<(Pubkey, Account)> {
+pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(Pubkey, Account)> {
     [
         (
             payer.pubkey(),
             AccountBuilder::system_account(10_000_000_000),
-        ),
-        (
-            system_program::id(),
-            AccountBuilder::executable_program(NATIVE_LOADER_ID),
         ),
         (sysvar::rent::id(), AccountBuilder::rent_sysvar()),
     ]
@@ -164,7 +151,7 @@ impl AtaTestHarness {
     pub fn new(token_program_id: &Pubkey) -> Self {
         let mollusk = setup_mollusk_with_programs(token_program_id);
         let payer = Keypair::new();
-        let base_accounts = create_mollusk_base_accounts(&payer, token_program_id);
+        let base_accounts = create_mollusk_base_accounts(&payer);
         let mut accounts = HashMap::new();
         for (pubkey, account) in base_accounts {
             accounts.insert(pubkey, account);

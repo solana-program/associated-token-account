@@ -375,6 +375,7 @@ name = "ata-mollusk-harness"
 version = "1.0.0"
 dependencies = [
  "mollusk-svm",
+ "mollusk-svm-programs-token",
  "solana-account",
  "solana-instruction",
  "solana-keypair",
@@ -1813,6 +1814,21 @@ dependencies = [
  "solana-instruction",
  "solana-pubkey",
  "solana-transaction-context",
+]
+
+[[package]]
+name = "mollusk-svm-programs-token"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcbe947e72c0050431388baa49a752b470843ee9e9d49695169d65ce2a51a3bd"
+dependencies = [
+ "mollusk-svm",
+ "solana-account",
+ "solana-program-pack",
+ "solana-pubkey",
+ "solana-rent",
+ "spl-associated-token-account-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-token-interface",
 ]
 
 [[package]]

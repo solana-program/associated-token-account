@@ -4,7 +4,6 @@ use {
     solana_instruction::{AccountMeta, Instruction},
     solana_keypair::Keypair,
     solana_program_error::ProgramError,
-    solana_program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
     solana_signer::Signer,
@@ -122,7 +121,7 @@ pub fn token_2022_immutable_owner_rent_exempt_balance() -> u64 {
 
 /// Calculate the rent-exempt balance for a standard SPL token account
 pub fn token_account_rent_exempt_balance() -> u64 {
-    Rent::default().minimum_balance(TokenAccount::LEN)
+    Rent::default().minimum_balance(TOKEN_ACCOUNT_SIZE)
 }
 
 /// Test harness for ATA testing scenarios
@@ -529,7 +528,7 @@ impl AtaTestHarness {
         let expected_len = if self.token_program_id == spl_token_2022_interface::id() {
             token_2022_immutable_owner_account_len()
         } else {
-            TokenAccount::LEN
+            TOKEN_ACCOUNT_SIZE
         };
 
         let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
@@ -650,7 +649,7 @@ impl AtaTestHarness {
         let expected_len = if self.token_program_id == spl_token_2022_interface::id() {
             token_2022_immutable_owner_account_len()
         } else {
-            TokenAccount::LEN
+            TOKEN_ACCOUNT_SIZE
         };
 
         let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
@@ -729,38 +728,6 @@ pub fn build_create_ata_instruction(
     }
 }
 
-/// Create token account data for mollusk testing
-pub fn create_token_account_data(mint: &[u8; 32], owner: &[u8; 32], amount: u64) -> Vec<u8> {
-    let mut data = vec![0u8; TOKEN_ACCOUNT_SIZE];
-
-    // mint
-    data[0..32].copy_from_slice(mint);
-    // owner
-    data[32..64].copy_from_slice(owner);
-    // amount
-    data[64..72].copy_from_slice(&amount.to_le_bytes());
-    // delegate option = 0 (none)
-    data[72] = 0;
-    // state = 1 (initialized)
-    data[108] = 1;
-    // is_native option = 0 (none)
-    data[109] = 0;
-    // delegated_amount = 0
-    data[110..118].copy_from_slice(&0u64.to_le_bytes());
-    // close_authority option = 0 (none)
-    data[118] = 0;
-
-    data
-}
-
-/// Create mint account data for mollusk testing
-pub fn create_mollusk_mint_data(decimals: u8) -> Vec<u8> {
-    let mut data = vec![0u8; MINT_ACCOUNT_SIZE];
-    data[0..4].copy_from_slice(&1u32.to_le_bytes()); // mint authority set
-    data[44] = decimals;
-    data[45] = 1; // is initialized
-    data
-}
 pub struct AccountBuilder;
 
 impl AccountBuilder {
@@ -800,15 +767,15 @@ impl AccountBuilder {
 
     #[allow(dead_code, reason = "exported for benchmarking consumers")]
     pub fn mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
-        let data = create_mollusk_mint_data(decimals);
-        let rent = Rent::default();
-        Account {
-            lamports: rent.minimum_balance(data.len()),
-            data,
-            owner: spl_token_interface::id(),
-            executable: false,
-            rent_epoch: 0,
-        }
+        use solana_program_option::COption;
+        let mint_data = spl_token_interface::state::Mint {
+            mint_authority: COption::None,
+            supply: 0,
+            decimals,
+            is_initialized: true,
+            freeze_authority: COption::None,
+        };
+        mollusk_svm_programs_token::token::create_account_for_mint(mint_data)
     }
 
     #[allow(dead_code, reason = "exported for benchmarking consumers")]
@@ -853,14 +820,22 @@ impl AccountBuilder {
         amount: u64,
         token_program: &Pubkey,
     ) -> Account {
-        let data = create_token_account_data(&mint.to_bytes(), &owner.to_bytes(), amount);
-        let rent = solana_rent::Rent::default();
-        Account {
-            lamports: rent.minimum_balance(data.len()),
-            data,
-            owner: *token_program,
-            executable: false,
-            rent_epoch: 0,
+        use solana_program_option::COption;
+        let account_data = TokenAccount {
+            mint: *mint,
+            owner: *owner,
+            amount,
+            delegate: COption::None,
+            state: spl_token_interface::state::AccountState::Initialized,
+            is_native: COption::None,
+            delegated_amount: 0,
+            close_authority: COption::None,
+        };
+
+        if *token_program == spl_token_2022_interface::id() {
+            mollusk_svm_programs_token::token2022::create_account_for_token_account(account_data)
+        } else {
+            mollusk_svm_programs_token::token::create_account_for_token_account(account_data)
         }
     }
 }

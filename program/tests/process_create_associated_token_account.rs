@@ -1,6 +1,6 @@
 use {
     ata_mollusk_harness::{
-        build_create_ata_instruction, ctx_ensure_system_account_exists,
+        build_create_ata_instruction, ctx_ensure_account_exists_with_lamports,
         token_2022_immutable_owner_rent_exempt_balance, AtaTestHarness, CreateAtaInstructionType,
     },
     mollusk_svm::result::Check,
@@ -33,7 +33,7 @@ fn test_create_with_fewer_lamports() {
     );
 
     let insufficient_lamports = 890880;
-    ctx_ensure_system_account_exists(&harness.ctx, ata_address, insufficient_lamports);
+    ctx_ensure_account_exists_with_lamports(&harness.ctx, ata_address, insufficient_lamports);
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
@@ -71,7 +71,7 @@ fn test_create_with_excess_lamports() {
     );
 
     let excess_lamports = token_2022_immutable_owner_rent_exempt_balance() + 1;
-    ctx_ensure_system_account_exists(&harness.ctx, ata_address, excess_lamports);
+    ctx_ensure_account_exists_with_lamports(&harness.ctx, ata_address, excess_lamports);
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
@@ -108,7 +108,7 @@ fn test_create_account_mismatch() {
         &spl_token_2022_interface::id(),
     );
 
-    ctx_ensure_system_account_exists(&harness.ctx, ata_address, 0);
+    ctx_ensure_account_exists_with_lamports(&harness.ctx, ata_address, 0);
 
     for account_idx in [1, 2, 3] {
         let mut instruction = build_create_ata_instruction(

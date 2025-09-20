@@ -30,17 +30,22 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     mollusk
 }
 
-/// Ensure a system-owned account exists in the context store with the given lamports
-pub fn ctx_ensure_system_account_exists(
+/// Ensure an account exists in the context store with the given lamports.
+/// If the account does not exist, it will be created as a system account.
+/// However, this can be called with a non-system account (to be used for
+/// example when testing accidental nested owners).
+pub fn ctx_ensure_account_exists_with_lamports(
     context: &MolluskContext<HashMap<Pubkey, Account>>,
     address: Pubkey,
     lamports: u64,
 ) {
-    if context.account_store.borrow().get(&address).is_none() {
-        context
-            .account_store
-            .borrow_mut()
-            .insert(address, AccountBuilder::system_account(lamports));
+    let mut store = context.account_store.borrow_mut();
+    if let Some(existing) = store.get_mut(&address) {
+        if existing.lamports < lamports {
+            existing.lamports = lamports;
+        }
+    } else {
+        store.insert(address, AccountBuilder::system_account(lamports));
     }
 }
 
@@ -50,7 +55,7 @@ pub fn ctx_ensure_system_accounts_with_lamports(
     entries: &[(Pubkey, u64)],
 ) {
     for (address, lamports) in entries.iter().copied() {
-        ctx_ensure_system_account_exists(context, address, lamports);
+        ctx_ensure_account_exists_with_lamports(context, address, lamports);
     }
 }
 
@@ -291,9 +296,6 @@ impl AtaTestHarness {
             &self.token_program_id,
         );
 
-        // Ensure system account exists for ATA
-        ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
-
         let instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
             self.payer.pubkey(),
@@ -362,8 +364,6 @@ impl AtaTestHarness {
             &self.token_program_id,
         );
 
-        // Ensure ATA address exists as system account
-        ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
         self.ata_address = Some(ata_address);
 
         build_create_ata_instruction(
@@ -381,14 +381,15 @@ impl AtaTestHarness {
     /// creating it with the given lamports if it does not exist.
     pub fn create_ata_for_owner(&mut self, owner: Pubkey, owner_lamports: u64) -> Pubkey {
         let mint = self.mint.expect("Mint must be set");
-
-        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(owner, owner_lamports)]);
+        {
+            let mut store = self.ctx.account_store.borrow_mut();
+            if store.get(&owner).is_none() {
+                store.insert(owner, AccountBuilder::system_account(owner_lamports));
+            }
+        }
 
         let ata_address =
             get_associated_token_address_with_program_id(&owner, &mint, &self.token_program_id);
-
-        // Ensure system account exists for ATA
-        ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
 
         let instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
@@ -413,28 +414,6 @@ impl AtaTestHarness {
         nested_mint: Pubkey,
     ) -> solana_instruction::Instruction {
         let wallet = self.wallet.as_ref().expect("Wallet must be set");
-
-        // Calculate all derived ATA addresses
-        let owner_ata = get_associated_token_address_with_program_id(
-            &wallet.pubkey(),
-            &owner_mint,
-            &self.token_program_id,
-        );
-        let destination_ata = get_associated_token_address_with_program_id(
-            &wallet.pubkey(),
-            &nested_mint,
-            &self.token_program_id,
-        );
-        let nested_ata = get_associated_token_address_with_program_id(
-            &owner_ata,
-            &nested_mint,
-            &self.token_program_id,
-        );
-
-        // Ensure all ATAs exist as system accounts
-        for ata in [owner_ata, destination_ata, nested_ata] {
-            ctx_ensure_system_account_exists(&self.ctx, ata, 0);
-        }
 
         spl_associated_token_account_interface::instruction::recover_nested(
             &wallet.pubkey(),
@@ -491,8 +470,6 @@ impl AtaTestHarness {
             &mint,
             &self.token_program_id,
         );
-
-        ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
 
         let instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
@@ -552,7 +529,12 @@ impl AtaTestHarness {
             AccountBuilder::token_account(&mint, &wrong_owner, 0, &self.token_program_id);
 
         self.insert_account(ata_address, wrong_account);
-        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wrong_owner, 1_000_000)]);
+        {
+            let mut store = self.ctx.account_store.borrow_mut();
+            if store.get(&wrong_owner).is_none() {
+                store.insert(wrong_owner, AccountBuilder::system_account(1_000_000));
+            }
+        }
 
         ata_address
     }
@@ -609,8 +591,6 @@ impl AtaTestHarness {
             &mint,
             &self.token_program_id,
         );
-
-        ctx_ensure_system_account_exists(&self.ctx, ata_address, 0);
 
         let mut instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),

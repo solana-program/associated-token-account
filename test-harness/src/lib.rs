@@ -3,6 +3,7 @@ use {
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_keypair::Keypair,
+    solana_program_pack::Pack,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
@@ -14,11 +15,6 @@ use {
     spl_token_interface::state::Account as TokenAccount,
     std::{collections::HashMap, vec::Vec},
 };
-
-// Standard SPL token account size (fixed for all SPL token accounts)
-const TOKEN_ACCOUNT_SIZE: usize = 165;
-// Standard mint account size (base size without extensions)
-const MINT_ACCOUNT_SIZE: usize = 82;
 
 // Native loader program ID
 const NATIVE_LOADER_ID: Pubkey = Pubkey::new_from_array([
@@ -121,7 +117,7 @@ pub fn token_2022_immutable_owner_rent_exempt_balance() -> u64 {
 
 /// Calculate the rent-exempt balance for a standard SPL token account
 pub fn token_account_rent_exempt_balance() -> u64 {
-    Rent::default().minimum_balance(TOKEN_ACCOUNT_SIZE)
+    Rent::default().minimum_balance(TokenAccount::LEN)
 }
 
 /// Test harness for ATA testing scenarios
@@ -216,7 +212,7 @@ impl AtaTestHarness {
         self.create_mint_account(
             &mint_account,
             &mint_authority,
-            MINT_ACCOUNT_SIZE,
+            spl_token_interface::state::Mint::LEN,
             self.token_program_id,
         );
 
@@ -528,7 +524,7 @@ impl AtaTestHarness {
         let expected_len = if self.token_program_id == spl_token_2022_interface::id() {
             token_2022_immutable_owner_account_len()
         } else {
-            TOKEN_ACCOUNT_SIZE
+            TokenAccount::LEN
         };
 
         let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
@@ -649,7 +645,7 @@ impl AtaTestHarness {
         let expected_len = if self.token_program_id == spl_token_2022_interface::id() {
             token_2022_immutable_owner_account_len()
         } else {
-            TOKEN_ACCOUNT_SIZE
+            TokenAccount::LEN
         };
 
         let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {

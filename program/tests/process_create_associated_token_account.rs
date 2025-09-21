@@ -7,7 +7,6 @@ use {
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
-    solana_signer::Signer,
     solana_sysvar as sysvar,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
 };
@@ -24,10 +23,10 @@ fn test_create_with_fewer_lamports() {
     let harness =
         AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
-    let wallet = harness.wallet.as_ref().unwrap();
+    let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
     let ata_address = get_associated_token_address_with_program_id(
-        &wallet.pubkey(),
+        &wallet,
         &mint,
         &spl_token_2022_interface::id(),
     );
@@ -37,9 +36,9 @@ fn test_create_with_fewer_lamports() {
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
-        harness.payer.pubkey(),
+        harness.payer,
         ata_address,
-        wallet.pubkey(),
+        wallet,
         mint,
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::default(),
@@ -62,10 +61,10 @@ fn test_create_with_excess_lamports() {
     let harness =
         AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
-    let wallet = harness.wallet.as_ref().unwrap();
+    let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
     let ata_address = get_associated_token_address_with_program_id(
-        &wallet.pubkey(),
+        &wallet,
         &mint,
         &spl_token_2022_interface::id(),
     );
@@ -75,9 +74,9 @@ fn test_create_with_excess_lamports() {
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
-        harness.payer.pubkey(),
+        harness.payer,
         ata_address,
-        wallet.pubkey(),
+        wallet,
         mint,
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::default(),
@@ -100,10 +99,10 @@ fn test_create_account_mismatch() {
     let harness =
         AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
 
-    let wallet = harness.wallet.as_ref().unwrap();
+    let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
     let ata_address = get_associated_token_address_with_program_id(
-        &wallet.pubkey(),
+        &wallet,
         &mint,
         &spl_token_2022_interface::id(),
     );
@@ -113,9 +112,9 @@ fn test_create_account_mismatch() {
     for account_idx in [1, 2, 3] {
         let mut instruction = build_create_ata_instruction(
             spl_associated_token_account::id(),
-            harness.payer.pubkey(),
+            harness.payer,
             ata_address,
-            wallet.pubkey(),
+            wallet,
             mint,
             spl_token_2022_interface::id(),
             CreateAtaInstructionType::default(),

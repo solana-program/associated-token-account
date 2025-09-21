@@ -2,7 +2,6 @@ use {
     ata_mollusk_harness::AtaTestHarness,
     mollusk_svm::result::Check,
     solana_program_error::ProgramError,
-    solana_signer::Signer,
     spl_token_2022_interface::{
         extension::{
             transfer_fee, BaseStateWithExtensions, ExtensionType, StateWithExtensionsOwned,
@@ -24,10 +23,10 @@ fn test_associated_token_account_with_transfer_fees() {
         .initialize_mint(0)
         .with_ata();
     let (sender_pubkey, mint, sender_ata, receiver_ata) = (
-        harness.wallet.as_ref().unwrap().pubkey(),
+        harness.wallet.unwrap(),
         harness.mint.unwrap(),
         harness.ata_address.unwrap(),
-        harness.create_ata_for_owner(receiver_wallet.pubkey(), 1_000_000),
+        harness.create_ata_for_owner(receiver_wallet, 1_000_000),
     );
     harness.mint_tokens(50 * maximum_fee);
 

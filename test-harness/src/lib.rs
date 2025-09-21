@@ -2,12 +2,10 @@ use {
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk, MolluskContext},
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
-    solana_keypair::Keypair,
     solana_program_error::ProgramError,
     solana_program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
-    solana_signer::Signer,
     solana_system_interface::program as system_program,
     solana_sysvar::{self as sysvar, rent},
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
@@ -60,12 +58,9 @@ pub fn ctx_ensure_system_accounts_with_lamports(
 }
 
 /// Create standard base accounts needed for mollusk tests
-pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(Pubkey, Account)> {
+pub fn create_mollusk_base_accounts(payer: Pubkey) -> Vec<(Pubkey, Account)> {
     [
-        (
-            payer.pubkey(),
-            AccountBuilder::system_account(10_000_000_000),
-        ),
+        (payer, AccountBuilder::system_account(10_000_000_000)),
         (sysvar::rent::id(), AccountBuilder::rent_sysvar()),
     ]
     .into()
@@ -112,10 +107,10 @@ pub fn token_account_rent_exempt_balance() -> u64 {
 pub struct AtaTestHarness {
     pub ctx: MolluskContext<HashMap<Pubkey, Account>>,
     pub token_program_id: Pubkey,
-    pub payer: Keypair,
-    pub wallet: Option<Keypair>,
+    pub payer: Pubkey,
+    pub wallet: Option<Pubkey>,
     pub mint: Option<Pubkey>,
-    pub mint_authority: Option<Keypair>,
+    pub mint_authority: Option<Pubkey>,
     pub ata_address: Option<Pubkey>,
 }
 
@@ -123,26 +118,23 @@ impl AtaTestHarness {
     /// Internal: create the mint account owned by the token program with given space
     fn create_mint_account(
         &mut self,
-        mint_account: &Keypair,
-        mint_authority: &Keypair,
+        mint_account: Pubkey,
+        mint_authority: Pubkey,
         space: usize,
         mint_program_id: Pubkey,
     ) {
         {
             let mut store = self.ctx.account_store.borrow_mut();
             store.extend([
-                (
-                    mint_authority.pubkey(),
-                    AccountBuilder::system_account(1_000_000),
-                ),
-                (mint_account.pubkey(), AccountBuilder::system_account(0)),
+                (mint_authority, AccountBuilder::system_account(1_000_000)),
+                (mint_account, AccountBuilder::system_account(0)),
             ]);
         }
 
         let mint_rent = Rent::default().minimum_balance(space);
         let create_mint_ix = solana_system_interface::instruction::create_account(
-            &self.payer.pubkey(),
-            &mint_account.pubkey(),
+            &self.payer,
+            &mint_account,
             mint_rent,
             space as u64,
             &mint_program_id,
@@ -155,8 +147,8 @@ impl AtaTestHarness {
     /// Create a new test harness with the specified token program
     pub fn new(token_program_id: &Pubkey) -> Self {
         let mollusk = setup_mollusk_with_programs(token_program_id);
-        let payer = Keypair::new();
-        let base_accounts = create_mollusk_base_accounts(&payer);
+        let payer = Pubkey::new_unique();
+        let base_accounts = create_mollusk_base_accounts(payer);
         let mut accounts = HashMap::new();
         for (pubkey, account) in base_accounts {
             accounts.insert(pubkey, account);
@@ -176,35 +168,32 @@ impl AtaTestHarness {
 
     /// Add a wallet with the specified lamports
     pub fn with_wallet(mut self, lamports: u64) -> Self {
-        let wallet = Keypair::new();
-        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wallet.pubkey(), lamports)]);
+        let wallet = Pubkey::new_unique();
+        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wallet, lamports)]);
         self.wallet = Some(wallet);
         self
     }
 
     /// Add an additional wallet (e.g. for sender/receiver scenarios) - returns harness and the new wallet
-    pub fn with_additional_wallet(self, lamports: u64) -> (Self, Keypair) {
-        let additional_wallet = Keypair::new();
-        ctx_ensure_system_accounts_with_lamports(
-            &self.ctx,
-            &[(additional_wallet.pubkey(), lamports)],
-        );
+    pub fn with_additional_wallet(self, lamports: u64) -> (Self, Pubkey) {
+        let additional_wallet = Pubkey::new_unique();
+        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(additional_wallet, lamports)]);
         (self, additional_wallet)
     }
 
     /// Create and initialize a mint with the specified decimals
     pub fn with_mint(mut self, decimals: u8) -> Self {
-        let mint_account = Keypair::new();
-        let mint_authority = Keypair::new();
+        let mint_account = Pubkey::new_unique();
+        let mint_authority = Pubkey::new_unique();
 
         self.create_mint_account(
-            &mint_account,
-            &mint_authority,
+            mint_account,
+            mint_authority,
             spl_token_interface::state::Mint::LEN,
             self.token_program_id,
         );
 
-        self.mint = Some(mint_account.pubkey());
+        self.mint = Some(mint_account);
         self.mint_authority = Some(mint_authority);
         self.initialize_mint(decimals)
     }
@@ -215,8 +204,8 @@ impl AtaTestHarness {
             panic!("with_mint_with_extensions() can only be used with Token-2022 program");
         }
 
-        let mint_account = Keypair::new();
-        let mint_authority = Keypair::new();
+        let mint_account = Pubkey::new_unique();
+        let mint_authority = Pubkey::new_unique();
 
         // Calculate space needed for extensions
         let space =
@@ -226,13 +215,13 @@ impl AtaTestHarness {
             .expect("Failed to calculate mint space with extensions");
 
         self.create_mint_account(
-            &mint_account,
-            &mint_authority,
+            mint_account,
+            mint_authority,
             space,
             spl_token_2022_interface::id(),
         );
 
-        self.mint = Some(mint_account.pubkey());
+        self.mint = Some(mint_account);
         self.mint_authority = Some(mint_authority);
         self
     }
@@ -240,16 +229,13 @@ impl AtaTestHarness {
     /// Initialize transfer fee extension on the current mint (requires Token-2022 mint with `TransferFeeConfig` extension)
     pub fn initialize_transfer_fee(self, transfer_fee_basis_points: u16, maximum_fee: u64) -> Self {
         let mint = self.mint.expect("Mint must be set");
-        let mint_authority = self
-            .mint_authority
-            .as_ref()
-            .expect("Mint authority must be set");
+        let mint_authority = self.mint_authority.expect("Mint authority must be set");
 
         let init_fee_ix = spl_token_2022_interface::extension::transfer_fee::instruction::initialize_transfer_fee_config(
             &spl_token_2022_interface::id(),
             &mint,
-            Some(&mint_authority.pubkey()),
-            Some(&mint_authority.pubkey()),
+            Some(&mint_authority),
+            Some(&mint_authority),
             transfer_fee_basis_points,
             maximum_fee,
         )
@@ -263,16 +249,13 @@ impl AtaTestHarness {
     /// Initialize mint (must be called after extensions are initialized)
     pub fn initialize_mint(self, decimals: u8) -> Self {
         let mint = self.mint.expect("Mint must be set");
-        let mint_authority = self
-            .mint_authority
-            .as_ref()
-            .expect("Mint authority must be set");
+        let mint_authority = self.mint_authority.expect("Mint authority must be set");
 
         let init_mint_ix = spl_token_2022_interface::instruction::initialize_mint(
             &self.token_program_id,
             &mint,
-            &mint_authority.pubkey(),
-            Some(&mint_authority.pubkey()),
+            &mint_authority,
+            Some(&mint_authority),
             decimals,
         )
         .expect("Failed to create initialize_mint instruction");
@@ -284,23 +267,17 @@ impl AtaTestHarness {
 
     /// Create an ATA for the wallet and mint (requires wallet and mint to be set)
     pub fn with_ata(mut self) -> Self {
-        let wallet = self
-            .wallet
-            .as_ref()
-            .expect("Wallet must be set before creating ATA");
+        let wallet = self.wallet.expect("Wallet must be set before creating ATA");
         let mint = self.mint.expect("Mint must be set before creating ATA");
 
-        let ata_address = get_associated_token_address_with_program_id(
-            &wallet.pubkey(),
-            &mint,
-            &self.token_program_id,
-        );
+        let ata_address =
+            get_associated_token_address_with_program_id(&wallet, &mint, &self.token_program_id);
 
         let instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
-            self.payer.pubkey(),
+            self.payer,
             ata_address,
-            wallet.pubkey(),
+            wallet,
             mint,
             self.token_program_id,
             CreateAtaInstructionType::default(),
@@ -341,7 +318,7 @@ impl AtaTestHarness {
             &self.token_program_id,
             &mint,
             &destination,
-            &mint_authority.pubkey(),
+            mint_authority,
             &[],
             amount,
         )
@@ -356,21 +333,18 @@ impl AtaTestHarness {
         &mut self,
         instruction_type: CreateAtaInstructionType,
     ) -> solana_instruction::Instruction {
-        let wallet = self.wallet.as_ref().expect("Wallet must be set");
+        let wallet = self.wallet.expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
-        let ata_address = get_associated_token_address_with_program_id(
-            &wallet.pubkey(),
-            &mint,
-            &self.token_program_id,
-        );
+        let ata_address =
+            get_associated_token_address_with_program_id(&wallet, &mint, &self.token_program_id);
 
         self.ata_address = Some(ata_address);
 
         build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
-            self.payer.pubkey(),
+            self.payer,
             ata_address,
-            wallet.pubkey(),
+            wallet,
             mint,
             self.token_program_id,
             instruction_type,
@@ -393,7 +367,7 @@ impl AtaTestHarness {
 
         let instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
-            self.payer.pubkey(),
+            self.payer,
             ata_address,
             owner,
             mint,
@@ -416,7 +390,7 @@ impl AtaTestHarness {
         let wallet = self.wallet.as_ref().expect("Wallet must be set");
 
         spl_associated_token_account_interface::instruction::recover_nested(
-            &wallet.pubkey(),
+            wallet,
             &owner_mint,
             &nested_mint,
             &self.token_program_id,
@@ -425,7 +399,7 @@ impl AtaTestHarness {
 
     /// Add a wallet and mint, and fund the payer (lightweight setup)
     pub fn with_wallet_and_mint(mut self, wallet_lamports: u64, decimals: u8) -> Self {
-        let wallet = Keypair::new();
+        let wallet = Pubkey::new_unique();
         let mint = Pubkey::new_unique();
 
         // Fund payer
@@ -435,26 +409,26 @@ impl AtaTestHarness {
             token_account_rent_exempt_balance()
         };
 
-        self.ctx.account_store.borrow_mut().insert(
-            self.payer.pubkey(),
-            AccountBuilder::system_account(expected_balance),
-        );
+        self.ctx
+            .account_store
+            .borrow_mut()
+            .insert(self.payer, AccountBuilder::system_account(expected_balance));
 
         // Add mint
         if self.token_program_id == spl_token_2022_interface::id() {
-            self.ctx.account_store.borrow_mut().insert(
-                mint,
-                AccountBuilder::extended_mint(decimals, &self.payer.pubkey()),
-            );
+            self.ctx
+                .account_store
+                .borrow_mut()
+                .insert(mint, AccountBuilder::extended_mint(decimals, &self.payer));
         } else {
             self.ctx
                 .account_store
                 .borrow_mut()
-                .insert(mint, AccountBuilder::mint(decimals, &self.payer.pubkey()));
+                .insert(mint, AccountBuilder::mint(decimals, &self.payer));
         }
 
         // Add wallet
-        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wallet.pubkey(), wallet_lamports)]);
+        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wallet, wallet_lamports)]);
 
         self.wallet = Some(wallet);
         self.mint = Some(mint);
@@ -463,19 +437,16 @@ impl AtaTestHarness {
 
     /// Build and execute a create ATA instruction
     pub fn create_ata(&mut self, instruction_type: CreateAtaInstructionType) -> Pubkey {
-        let wallet = self.wallet.as_ref().expect("Wallet must be set");
+        let wallet = self.wallet.expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
-        let ata_address = get_associated_token_address_with_program_id(
-            &wallet.pubkey(),
-            &mint,
-            &self.token_program_id,
-        );
+        let ata_address =
+            get_associated_token_address_with_program_id(&wallet, &mint, &self.token_program_id);
 
         let instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
-            self.payer.pubkey(),
+            self.payer,
             ata_address,
-            wallet.pubkey(),
+            wallet,
             mint,
             self.token_program_id,
             instruction_type,
@@ -518,11 +489,8 @@ impl AtaTestHarness {
     pub fn insert_wrong_owner_token_account(&self, wrong_owner: Pubkey) -> Pubkey {
         let wallet = self.wallet.as_ref().expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
-        let ata_address = get_associated_token_address_with_program_id(
-            &wallet.pubkey(),
-            &mint,
-            &self.token_program_id,
-        );
+        let ata_address =
+            get_associated_token_address_with_program_id(wallet, &mint, &self.token_program_id);
 
         // Create token account with wrong owner
         let wrong_account =
@@ -545,24 +513,20 @@ impl AtaTestHarness {
         wrong_account: Pubkey,
         expected_error: ProgramError,
     ) {
-        let wallet = self.wallet.as_ref().expect("Wallet must be set");
+        let wallet = self.wallet.expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
 
         // Create a token account at the wrong address
         self.insert_account(
             wrong_account,
-            AccountBuilder::token_account(&mint, &wallet.pubkey(), 0, &self.token_program_id),
+            AccountBuilder::token_account(&mint, &wallet, 0, &self.token_program_id),
         );
 
         let mut instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
-            self.payer.pubkey(),
-            get_associated_token_address_with_program_id(
-                &wallet.pubkey(),
-                &mint,
-                &self.token_program_id,
-            ),
-            wallet.pubkey(),
+            self.payer,
+            get_associated_token_address_with_program_id(&wallet, &mint, &self.token_program_id),
+            wallet,
             mint,
             self.token_program_id,
             CreateAtaInstructionType::CreateIdempotent { bump: None },
@@ -584,19 +548,16 @@ impl AtaTestHarness {
     where
         F: FnOnce(&mut solana_instruction::Instruction),
     {
-        let wallet = self.wallet.as_ref().expect("Wallet must be set");
+        let wallet = self.wallet.expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
-        let ata_address = get_associated_token_address_with_program_id(
-            &wallet.pubkey(),
-            &mint,
-            &self.token_program_id,
-        );
+        let ata_address =
+            get_associated_token_address_with_program_id(&wallet, &mint, &self.token_program_id);
 
         let mut instruction = build_create_ata_instruction(
             spl_associated_token_account_interface::program::id(),
-            self.payer.pubkey(),
+            self.payer,
             ata_address,
-            wallet.pubkey(),
+            wallet,
             mint,
             self.token_program_id,
             instruction_type,

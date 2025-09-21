@@ -6,7 +6,6 @@ use {
     mollusk_svm::result::Check,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
-    solana_signer::Signer,
 };
 
 #[test]
@@ -27,9 +26,9 @@ fn success_account_exists() {
     harness.insert_account(ata_address, associated_account.clone());
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
-        harness.payer.pubkey(),
+        harness.payer,
         ata_address,
-        harness.wallet.as_ref().unwrap().pubkey(),
+        harness.wallet.unwrap(),
         harness.mint.unwrap(),
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::default(),
@@ -41,9 +40,9 @@ fn success_account_exists() {
     // But CreateIdempotent should succeed when account exists
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
-        harness.payer.pubkey(),
+        harness.payer,
         ata_address,
-        harness.wallet.as_ref().unwrap().pubkey(),
+        harness.wallet.unwrap(),
         harness.mint.unwrap(),
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },
@@ -69,9 +68,9 @@ fn fail_account_exists_with_wrong_owner() {
     let ata_address = harness.insert_wrong_owner_token_account(wrong_owner);
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
-        harness.payer.pubkey(),
+        harness.payer,
         ata_address,
-        harness.wallet.as_ref().unwrap().pubkey(),
+        harness.wallet.unwrap(),
         harness.mint.unwrap(),
         spl_token_2022_interface::id(),
         CreateAtaInstructionType::CreateIdempotent { bump: None },

@@ -28,7 +28,7 @@ fn test_recover_nested_same_mint(program_id: &Pubkey) {
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     // Capture pre-state for lamports transfer validation
-    let wallet_pubkey = harness.wallet.as_ref().unwrap().pubkey();
+    let wallet_pubkey = harness.wallet.unwrap();
     let pre_wallet_lamports = {
         let store = harness.ctx.account_store.borrow();
         store.get(&wallet_pubkey).unwrap().lamports
@@ -76,8 +76,7 @@ fn test_fail_missing_wallet_signature(token_program_id: &Pubkey) {
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     let mut recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    recover_instruction.accounts[5] =
-        AccountMeta::new(harness.wallet.as_ref().unwrap().pubkey(), false);
+    recover_instruction.accounts[5] = AccountMeta::new(harness.wallet.unwrap(), false);
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
@@ -182,11 +181,10 @@ fn test_recover_nested_different_mints(program_id: &Pubkey) {
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
     // Create destination ATA for the nested token
-    let destination_ata =
-        harness.create_ata_for_owner(harness.wallet.as_ref().unwrap().pubkey(), 1_000_000);
+    let destination_ata = harness.create_ata_for_owner(harness.wallet.unwrap(), 1_000_000);
 
     // Capture pre-state for lamports transfer validation
-    let wallet_pubkey = harness.wallet.as_ref().unwrap().pubkey();
+    let wallet_pubkey = harness.wallet.unwrap();
     let pre_wallet_lamports = {
         let store = harness.ctx.account_store.borrow();
         store.get(&wallet_pubkey).unwrap().lamports
@@ -279,7 +277,7 @@ fn fail_owner_account_does_not_exist() {
     // Note: deliberately NOT calling .with_ata() - owner ATA should not exist
 
     let mint = harness.mint.unwrap();
-    let wallet_pubkey = harness.wallet.as_ref().unwrap().pubkey();
+    let wallet_pubkey = harness.wallet.unwrap();
     let owner_ata_address = get_associated_token_address_with_program_id(
         &wallet_pubkey,
         &mint,
@@ -317,7 +315,7 @@ fn fail_wrong_spl_token_program() {
 
     // Use wrong program in instruction
     let recover_instruction = instruction::recover_nested(
-        &harness.wallet.as_ref().unwrap().pubkey(),
+        &harness.wallet.unwrap(),
         &mint,
         &mint,
         &spl_token_interface::id(), // Wrong program ID

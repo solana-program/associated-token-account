@@ -28,35 +28,6 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     mollusk
 }
 
-/// Ensure an account exists in the context store with the given lamports.
-/// If the account does not exist, it will be created as a system account.
-/// However, this can be called with a non-system account (to be used for
-/// example when testing accidental nested owners).
-pub fn ctx_ensure_account_exists_with_lamports(
-    context: &MolluskContext<HashMap<Pubkey, Account>>,
-    address: Pubkey,
-    lamports: u64,
-) {
-    let mut store = context.account_store.borrow_mut();
-    if let Some(existing) = store.get_mut(&address) {
-        if existing.lamports < lamports {
-            existing.lamports = lamports;
-        }
-    } else {
-        store.insert(address, AccountBuilder::system_account(lamports));
-    }
-}
-
-/// Ensure multiple system accounts exist in the context store with the provided lamports
-pub fn ctx_ensure_system_accounts_with_lamports(
-    context: &MolluskContext<HashMap<Pubkey, Account>>,
-    entries: &[(Pubkey, u64)],
-) {
-    for (address, lamports) in entries.iter().copied() {
-        ctx_ensure_account_exists_with_lamports(context, address, lamports);
-    }
-}
-
 /// Create standard base accounts needed for mollusk tests
 pub fn create_mollusk_base_accounts(payer: Pubkey) -> Vec<(Pubkey, Account)> {
     [(payer, AccountBuilder::system_account(10_000_000_000))].into()
@@ -111,22 +82,30 @@ pub struct AtaTestHarness {
 }
 
 impl AtaTestHarness {
-    /// Internal: create the mint account owned by the token program with given space
-    fn create_mint_account(
-        &mut self,
-        mint_account: Pubkey,
-        mint_authority: Pubkey,
-        space: usize,
-        mint_program_id: Pubkey,
-    ) {
-        {
-            let mut store = self.ctx.account_store.borrow_mut();
-            store.extend([
-                (mint_authority, AccountBuilder::system_account(1_000_000)),
-                (mint_account, AccountBuilder::system_account(0)),
-            ]);
+    /// Ensure an account exists in the context store with the given lamports.
+    /// If the account does not exist, it will be created as a system account.
+    /// However, this can be called with a non-system account (to be used for
+    /// example when testing accidental nested owners).
+    pub fn ensure_account_exists_with_lamports(&self, address: Pubkey, lamports: u64) {
+        let mut store = self.ctx.account_store.borrow_mut();
+        if let Some(existing) = store.get_mut(&address) {
+            if existing.lamports < lamports {
+                existing.lamports = lamports;
+            }
+        } else {
+            store.insert(address, AccountBuilder::system_account(lamports));
         }
+    }
 
+    /// Ensure multiple system accounts exist in the context store with the provided lamports
+    pub fn ensure_system_accounts_with_lamports(&self, entries: &[(Pubkey, u64)]) {
+        for (address, lamports) in entries.iter().copied() {
+            self.ensure_account_exists_with_lamports(address, lamports);
+        }
+    }
+
+    /// Internal: create the mint account owned by the token program with given space
+    fn create_mint_account(&mut self, mint_account: Pubkey, space: usize, mint_program_id: Pubkey) {
         let mint_rent = Rent::default().minimum_balance(space);
         let create_mint_ix = solana_system_interface::instruction::create_account(
             &self.payer,
@@ -165,7 +144,7 @@ impl AtaTestHarness {
     /// Add a wallet with the specified lamports
     pub fn with_wallet(mut self, lamports: u64) -> Self {
         let wallet = Pubkey::new_unique();
-        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wallet, lamports)]);
+        self.ensure_system_accounts_with_lamports(&[(wallet, lamports)]);
         self.wallet = Some(wallet);
         self
     }
@@ -173,18 +152,16 @@ impl AtaTestHarness {
     /// Add an additional wallet (e.g. for sender/receiver scenarios) - returns harness and the new wallet
     pub fn with_additional_wallet(self, lamports: u64) -> (Self, Pubkey) {
         let additional_wallet = Pubkey::new_unique();
-        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(additional_wallet, lamports)]);
+        self.ensure_system_accounts_with_lamports(&[(additional_wallet, lamports)]);
         (self, additional_wallet)
     }
 
     /// Create and initialize a mint with the specified decimals
     pub fn with_mint(mut self, decimals: u8) -> Self {
-        let mint_account = Pubkey::new_unique();
-        let mint_authority = Pubkey::new_unique();
+        let [mint_authority, mint_account] = [Pubkey::new_unique(); 2];
 
         self.create_mint_account(
             mint_account,
-            mint_authority,
             spl_token_interface::state::Mint::LEN,
             self.token_program_id,
         );
@@ -200,8 +177,7 @@ impl AtaTestHarness {
             panic!("with_mint_with_extensions() can only be used with Token-2022 program");
         }
 
-        let mint_account = Pubkey::new_unique();
-        let mint_authority = Pubkey::new_unique();
+        let [mint_authority, mint_account] = [Pubkey::new_unique(); 2];
 
         // Calculate space needed for extensions
         let space =
@@ -210,12 +186,7 @@ impl AtaTestHarness {
             )
             .expect("Failed to calculate mint space with extensions");
 
-        self.create_mint_account(
-            mint_account,
-            mint_authority,
-            space,
-            spl_token_2022_interface::id(),
-        );
+        self.create_mint_account(mint_account, space, spl_token_2022_interface::id());
 
         self.mint = Some(mint_account);
         self.mint_authority = Some(mint_authority);
@@ -351,12 +322,7 @@ impl AtaTestHarness {
     /// creating it with the given lamports if it does not exist.
     pub fn create_ata_for_owner(&mut self, owner: Pubkey, owner_lamports: u64) -> Pubkey {
         let mint = self.mint.expect("Mint must be set");
-        {
-            let mut store = self.ctx.account_store.borrow_mut();
-            if store.get(&owner).is_none() {
-                store.insert(owner, AccountBuilder::system_account(owner_lamports));
-            }
-        }
+        self.ensure_system_accounts_with_lamports(&[(owner, owner_lamports)]);
 
         let ata_address =
             get_associated_token_address_with_program_id(&owner, &mint, &self.token_program_id);
@@ -395,8 +361,7 @@ impl AtaTestHarness {
 
     /// Add a wallet and mint, and fund the payer (lightweight setup)
     pub fn with_wallet_and_mint(mut self, wallet_lamports: u64, decimals: u8) -> Self {
-        let wallet = Pubkey::new_unique();
-        let mint = Pubkey::new_unique();
+        let [wallet, mint] = [Pubkey::new_unique(); 2];
 
         // Fund payer
         let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
@@ -404,13 +369,8 @@ impl AtaTestHarness {
         } else {
             token_account_rent_exempt_balance()
         };
+        self.ensure_system_accounts_with_lamports(&[(self.payer, expected_balance)]);
 
-        self.ctx
-            .account_store
-            .borrow_mut()
-            .insert(self.payer, AccountBuilder::system_account(expected_balance));
-
-        // Add mint
         if self.token_program_id == spl_token_2022_interface::id() {
             self.ctx
                 .account_store
@@ -424,7 +384,7 @@ impl AtaTestHarness {
         }
 
         // Add wallet
-        ctx_ensure_system_accounts_with_lamports(&self.ctx, &[(wallet, wallet_lamports)]);
+        self.ensure_system_accounts_with_lamports(&[(wallet, wallet_lamports)]);
 
         self.wallet = Some(wallet);
         self.mint = Some(mint);
@@ -485,20 +445,13 @@ impl AtaTestHarness {
     pub fn insert_wrong_owner_token_account(&self, wrong_owner: Pubkey) -> Pubkey {
         let wallet = self.wallet.as_ref().expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
+        self.ensure_system_accounts_with_lamports(&[(wrong_owner, 1_000_000)]);
         let ata_address =
             get_associated_token_address_with_program_id(wallet, &mint, &self.token_program_id);
-
-        // Create token account with wrong owner
+        // Create token account with wrong owner at the ATA address
         let wrong_account =
             AccountBuilder::token_account(&mint, &wrong_owner, 0, &self.token_program_id);
-
         self.insert_account(ata_address, wrong_account);
-        {
-            let mut store = self.ctx.account_store.borrow_mut();
-            if store.get(&wrong_owner).is_none() {
-                store.insert(wrong_owner, AccountBuilder::system_account(1_000_000));
-            }
-        }
 
         ata_address
     }

@@ -1,5 +1,5 @@
 use {
-    ata_mollusk_harness::{AccountBuilder, AtaTestHarness},
+    ata_mollusk_harness::AtaTestHarness,
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
     solana_keypair::Keypair,
@@ -141,11 +141,7 @@ fn test_fail_wrong_address_derivation_owner(token_program_id: &Pubkey) {
     let wrong_owner_address = Pubkey::new_unique();
     recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false);
 
-    harness
-        .ctx
-        .account_store
-        .borrow_mut()
-        .insert(wrong_owner_address, AccountBuilder::system_account(0));
+    harness.ensure_system_accounts_with_lamports(&[(wrong_owner_address, 1_000_000)]);
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,

@@ -9,7 +9,7 @@ use {
     solana_rent::Rent,
     solana_signer::Signer,
     solana_system_interface::program as system_program,
-    solana_sysvar::{self as sysvar},
+    solana_sysvar::{self as sysvar, rent},
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account as Token2022Account},
     spl_token_interface::state::Account as TokenAccount,
@@ -61,10 +61,13 @@ pub fn ctx_ensure_system_accounts_with_lamports(
 
 /// Create standard base accounts needed for mollusk tests
 pub fn create_mollusk_base_accounts(payer: &Keypair) -> Vec<(Pubkey, Account)> {
-    [(
-        payer.pubkey(),
-        AccountBuilder::system_account(10_000_000_000),
-    )]
+    [
+        (
+            payer.pubkey(),
+            AccountBuilder::system_account(10_000_000_000),
+        ),
+        (sysvar::rent::id(), AccountBuilder::rent_sysvar()),
+    ]
     .into()
 }
 
@@ -687,6 +690,18 @@ pub fn build_create_ata_instruction(
 pub struct AccountBuilder;
 
 impl AccountBuilder {
+    pub fn rent_sysvar() -> Account {
+        let mollusk = Mollusk::default();
+        let (_, mollusk_rent_account) = mollusk.sysvars.keyed_account_for_rent_sysvar();
+
+        Account {
+            lamports: mollusk_rent_account.lamports,
+            data: mollusk_rent_account.data,
+            owner: rent::id(),
+            executable: false,
+            rent_epoch: 0,
+        }
+    }
     #[allow(dead_code, reason = "exported for benchmarking consumers")]
     pub fn system_account(lamports: u64) -> Account {
         Account {
@@ -725,37 +740,14 @@ impl AccountBuilder {
     #[allow(dead_code, reason = "exported for benchmarking consumers")]
     pub fn extended_mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
         use solana_program_option::COption;
-        use spl_token_2022_interface::{
-            extension::{ExtensionType, PodStateWithExtensionsMut},
-            pod::PodMint,
+        let mint_data = spl_token_interface::state::Mint {
+            mint_authority: COption::None,
+            supply: 0,
+            decimals,
+            is_initialized: true,
+            freeze_authority: COption::None,
         };
-
-        // Calculate the minimum size for a Token-2022 mint without extensions
-        let required_size =
-            ExtensionType::try_calculate_account_len::<spl_token_2022_interface::state::Mint>(&[])
-                .expect("Failed to calculate Token-2022 mint size");
-
-        let mut data = vec![0u8; required_size];
-
-        // Use Token-2022's proper unpacking to initialize the mint
-        let mint = PodStateWithExtensionsMut::<PodMint>::unpack_uninitialized(&mut data)
-            .expect("Failed to unpack Token-2022 mint");
-
-        // Initialize base mint fields
-        mint.base.mint_authority = COption::None.into();
-        mint.base.supply = 0u64.into();
-        mint.base.decimals = decimals;
-        mint.base.is_initialized = true.into();
-        mint.base.freeze_authority = COption::None.into();
-
-        let rent = Rent::default();
-        Account {
-            lamports: rent.minimum_balance(data.len()),
-            data,
-            owner: spl_token_2022_interface::id(),
-            executable: false,
-            rent_epoch: 0,
-        }
+        mollusk_svm_programs_token::token2022::create_account_for_mint(mint_data)
     }
 
     pub fn token_account(

@@ -35,7 +35,7 @@ fn test_create_with_fewer_lamports() {
     ctx_ensure_account_exists_with_lamports(&harness.ctx, ata_address, insufficient_lamports);
 
     let instruction = build_create_ata_instruction(
-        spl_associated_token_account::id(),
+        spl_associated_token_account_interface::program::id(),
         harness.payer,
         ata_address,
         wallet,
@@ -73,7 +73,7 @@ fn test_create_with_excess_lamports() {
     ctx_ensure_account_exists_with_lamports(&harness.ctx, ata_address, excess_lamports);
 
     let instruction = build_create_ata_instruction(
-        spl_associated_token_account::id(),
+        spl_associated_token_account_interface::program::id(),
         harness.payer,
         ata_address,
         wallet,
@@ -111,7 +111,7 @@ fn test_create_account_mismatch() {
 
     for account_idx in [1, 2, 3] {
         let mut instruction = build_create_ata_instruction(
-            spl_associated_token_account::id(),
+            spl_associated_token_account_interface::program::id(),
             harness.payer,
             ata_address,
             wallet,

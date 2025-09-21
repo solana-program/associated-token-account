@@ -59,10 +59,7 @@ pub fn ctx_ensure_system_accounts_with_lamports(
 
 /// Create standard base accounts needed for mollusk tests
 pub fn create_mollusk_base_accounts(payer: Pubkey) -> Vec<(Pubkey, Account)> {
-    [
-        (payer, AccountBuilder::system_account(10_000_000_000)),
-    ]
-    .into()
+    [(payer, AccountBuilder::system_account(10_000_000_000))].into()
 }
 
 /// The type of ATA creation instruction to build.

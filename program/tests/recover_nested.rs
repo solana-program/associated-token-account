@@ -2,7 +2,6 @@ use {
     ata_mollusk_harness::AtaTestHarness,
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
-    solana_keypair::Keypair,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
     solana_signer::Signer,
@@ -95,11 +94,11 @@ fn test_fail_wrong_signer(token_program_id: &Pubkey) {
     let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
     harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
 
-    let wrong_wallet = Keypair::new();
-    harness.create_ata_for_owner(wrong_wallet.pubkey(), 1_000_000);
+    let wrong_wallet = Pubkey::new_unique();
+    harness.create_ata_for_owner(wrong_wallet, 1_000_000);
 
     let recover_instruction =
-        instruction::recover_nested(&wrong_wallet.pubkey(), &mint, &mint, token_program_id);
+        instruction::recover_nested(&wrong_wallet, &mint, &mint, token_program_id);
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,

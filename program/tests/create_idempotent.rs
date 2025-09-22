@@ -23,7 +23,11 @@ fn success_account_exists() {
         .unwrap();
 
     // Failure case: try to Create when ATA already exists as token account
-    harness.insert_account(ata_address, associated_account.clone());
+    harness
+        .ctx
+        .account_store
+        .borrow_mut()
+        .insert(ata_address, associated_account.clone());
     let instruction = build_create_ata_instruction(
         spl_associated_token_account::id(),
         harness.payer,

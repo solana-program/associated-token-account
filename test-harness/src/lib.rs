@@ -401,11 +401,6 @@ impl AtaTestHarness {
         ata_address
     }
 
-    /// Insert a specific account into the context
-    pub fn insert_account(&self, pubkey: Pubkey, account: Account) {
-        self.ctx.account_store.borrow_mut().insert(pubkey, account);
-    }
-
     /// Create a token account with wrong owner at the ATA address (for error testing)
     pub fn insert_wrong_owner_token_account(&self, wrong_owner: Pubkey) -> Pubkey {
         let wallet = self.wallet.as_ref().expect("Wallet must be set");
@@ -416,8 +411,10 @@ impl AtaTestHarness {
         // Create token account with wrong owner at the ATA address
         let wrong_account =
             AccountBuilder::token_account(&mint, &wrong_owner, 0, &self.token_program_id);
-        self.insert_account(ata_address, wrong_account);
-
+        self.ctx
+            .account_store
+            .borrow_mut()
+            .insert(ata_address, wrong_account);
         ata_address
     }
 
@@ -431,7 +428,7 @@ impl AtaTestHarness {
         let mint = self.mint.expect("Mint must be set");
 
         // Create a token account at the wrong address
-        self.insert_account(
+        self.ctx.account_store.borrow_mut().insert(
             wrong_account,
             AccountBuilder::token_account(&mint, &wallet, 0, &self.token_program_id),
         );
@@ -507,11 +504,6 @@ impl AtaTestHarness {
         self.ata_address = Some(ata_address);
         ata_address
     }
-
-    /// Get the current ATA address (if set)
-    pub fn ata_address(&self) -> Option<Pubkey> {
-        self.ata_address
-    }
 }
 
 /// Encodes the instruction data payload for ATA creation-related instructions.
@@ -565,7 +557,6 @@ pub fn build_create_ata_instruction(
 pub struct AccountBuilder;
 
 impl AccountBuilder {
-    #[allow(dead_code, reason = "exported for benchmarking consumers")]
     pub fn system_account(lamports: u64) -> Account {
         Account {
             lamports,
@@ -574,43 +565,6 @@ impl AccountBuilder {
             executable: false,
             rent_epoch: 0,
         }
-    }
-
-    #[allow(dead_code, reason = "exported for benchmarking consumers")]
-    pub fn executable_program(loader: Pubkey) -> Account {
-        Account {
-            lamports: 0,
-            data: Vec::new(),
-            owner: loader,
-            executable: true,
-            rent_epoch: 0,
-        }
-    }
-
-    #[allow(dead_code, reason = "exported for benchmarking consumers")]
-    pub fn mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
-        use solana_program_option::COption;
-        let mint_data = spl_token_interface::state::Mint {
-            mint_authority: COption::None,
-            supply: 0,
-            decimals,
-            is_initialized: true,
-            freeze_authority: COption::None,
-        };
-        mollusk_svm_programs_token::token::create_account_for_mint(mint_data)
-    }
-
-    #[allow(dead_code, reason = "exported for benchmarking consumers")]
-    pub fn extended_mint(decimals: u8, _mint_authority: &Pubkey) -> Account {
-        use solana_program_option::COption;
-        let mint_data = spl_token_interface::state::Mint {
-            mint_authority: COption::None,
-            supply: 0,
-            decimals,
-            is_initialized: true,
-            freeze_authority: COption::None,
-        };
-        mollusk_svm_programs_token::token2022::create_account_for_mint(mint_data)
     }
 
     pub fn token_account(

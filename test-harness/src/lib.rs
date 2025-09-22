@@ -10,11 +10,7 @@ use {
     solana_sysvar::rent,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account as Token2022Account},
-    spl_token_interface::{
-        state::Account as TokenAccount,
-        state::AccountState,
-        state::Mint,
-    },
+    spl_token_interface::{state::Account as TokenAccount, state::AccountState, state::Mint},
     std::{collections::HashMap, vec::Vec},
 };
 
@@ -156,11 +152,7 @@ impl AtaTestHarness {
     pub fn with_mint(mut self, decimals: u8) -> Self {
         let [mint_authority, mint_account] = [Pubkey::new_unique(); 2];
 
-        self.create_mint_account(
-            mint_account,
-            Mint::LEN,
-            self.token_program_id,
-        );
+        self.create_mint_account(mint_account, Mint::LEN, self.token_program_id);
 
         self.mint = Some(mint_account);
         self.mint_authority = Some(mint_authority);

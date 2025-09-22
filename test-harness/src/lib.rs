@@ -7,14 +7,14 @@ use {
     solana_pubkey::Pubkey,
     solana_rent::Rent,
     solana_system_interface::program as system_program,
-    solana_sysvar as sysvar,
+    solana_sysvar::rent,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account as Token2022Account},
     spl_token_interface::state::Account as TokenAccount,
     std::{collections::HashMap, vec::Vec},
 };
 
-/// Setup mollusk with ATA and token programs for testing
+/// Setup mollusk with local ATA and token programs
 pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     let ata_program_id = spl_associated_token_account_interface::program::id();
     let mut mollusk = Mollusk::new(&ata_program_id, "spl_associated_token_account");
@@ -26,11 +26,6 @@ pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     }
 
     mollusk
-}
-
-/// Create standard base accounts needed for mollusk tests
-pub fn create_mollusk_base_accounts(payer: Pubkey) -> Vec<(Pubkey, Account)> {
-    [(payer, AccountBuilder::system_account(10_000_000_000))].into()
 }
 
 /// The type of ATA creation instruction to build.
@@ -84,7 +79,7 @@ pub struct AtaTestHarness {
 impl AtaTestHarness {
     /// Ensure an account exists in the context store with the given lamports.
     /// If the account does not exist, it will be created as a system account.
-    /// However, this can be called with a non-system account (to be used for
+    /// However, this can be called on a non-system account (to be used for
     /// example when testing accidental nested owners).
     pub fn ensure_account_exists_with_lamports(&self, address: Pubkey, lamports: u64) {
         let mut store = self.ctx.account_store.borrow_mut();
@@ -123,14 +118,9 @@ impl AtaTestHarness {
     pub fn new(token_program_id: &Pubkey) -> Self {
         let mollusk = setup_mollusk_with_programs(token_program_id);
         let payer = Pubkey::new_unique();
-        let base_accounts = create_mollusk_base_accounts(payer);
-        let mut accounts = HashMap::new();
-        for (pubkey, account) in base_accounts {
-            accounts.insert(pubkey, account);
-        }
-        let ctx = mollusk.with_context(accounts);
+        let ctx = mollusk.with_context(HashMap::new());
 
-        Self {
+        let harness = Self {
             ctx,
             token_program_id: *token_program_id,
             payer,
@@ -138,7 +128,9 @@ impl AtaTestHarness {
             mint: None,
             mint_authority: None,
             ata_address: None,
-        }
+        };
+        harness.ensure_account_exists_with_lamports(payer, 10_000_000_000);
+        harness
     }
 
     /// Add a wallet with the specified lamports
@@ -591,7 +583,7 @@ pub fn build_create_ata_instruction(
             AccountMeta::new_readonly(mint, false),
             AccountMeta::new_readonly(system_program::id(), false),
             AccountMeta::new_readonly(token_program, false),
-            AccountMeta::new_readonly(sysvar::rent::id(), false),
+            AccountMeta::new_readonly(rent::id(), false),
         ],
         data: encode_create_ata_instruction_data(&instruction_type),
     }

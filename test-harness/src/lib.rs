@@ -347,7 +347,7 @@ impl AtaTestHarness {
         )
     }
 
-    /// Add a wallet and mint, and fund the payer (lightweight setup)
+    /// Add a wallet and mint (convenience method)
     pub fn with_wallet_and_mint(self, wallet_lamports: u64, decimals: u8) -> Self {
         self.with_wallet(wallet_lamports).with_mint(decimals)
     }

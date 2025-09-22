@@ -259,7 +259,7 @@ impl AtaTestHarness {
             .clone()
     }
 
-    /// Mint tokens to the ATA (requires `mint_authority` and `ata_address` to be set)
+    /// Mint tokens to the ATA (requires `mint`, `mint_authority` and `ata_address` to be set)
     pub fn mint_tokens(&mut self, amount: u64) {
         let ata_address = self.ata_address.expect("ATA must be set");
         self.mint_tokens_to(ata_address, amount);
@@ -352,35 +352,8 @@ impl AtaTestHarness {
     }
 
     /// Add a wallet and mint, and fund the payer (lightweight setup)
-    pub fn with_wallet_and_mint(mut self, wallet_lamports: u64, decimals: u8) -> Self {
-        let [wallet, mint] = [Pubkey::new_unique(); 2];
-
-        // Fund payer
-        let expected_balance = if self.token_program_id == spl_token_2022_interface::id() {
-            token_2022_immutable_owner_rent_exempt_balance()
-        } else {
-            token_account_rent_exempt_balance()
-        };
-        self.ensure_system_accounts_with_lamports(&[(self.payer, expected_balance)]);
-
-        if self.token_program_id == spl_token_2022_interface::id() {
-            self.ctx
-                .account_store
-                .borrow_mut()
-                .insert(mint, AccountBuilder::extended_mint(decimals, &self.payer));
-        } else {
-            self.ctx
-                .account_store
-                .borrow_mut()
-                .insert(mint, AccountBuilder::mint(decimals, &self.payer));
-        }
-
-        // Add wallet
-        self.ensure_system_accounts_with_lamports(&[(wallet, wallet_lamports)]);
-
-        self.wallet = Some(wallet);
-        self.mint = Some(mint);
-        self
+    pub fn with_wallet_and_mint(self, wallet_lamports: u64, decimals: u8) -> Self {
+        self.with_wallet(wallet_lamports).with_mint(decimals)
     }
 
     /// Build and execute a create ATA instruction

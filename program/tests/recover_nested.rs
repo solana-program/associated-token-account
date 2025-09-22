@@ -4,7 +4,6 @@ use {
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
-    solana_signer::Signer,
     spl_associated_token_account_interface::{
         address::get_associated_token_address_with_program_id, instruction,
     },

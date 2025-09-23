@@ -18,14 +18,14 @@ use solana_program::{
 };
 #[deprecated(
     since = "4.1.0",
-    note = "Use `spl-associated-token-account-client` crate instead."
+    note = "Use `spl-associated-token-account-interface` crate instead."
 )]
-pub use spl_associated_token_account_client::address::{
+pub use spl_associated_token_account_interface::address::{
     get_associated_token_address, get_associated_token_address_with_program_id,
 };
 // Export current SDK types for downstream users building with a different SDK
 // version
-pub use spl_associated_token_account_client::program::{check_id, id, ID};
+pub use spl_associated_token_account_interface::program::{check_id, id, ID};
 
 /// Create an associated token account for the given wallet address and token
 /// mint
@@ -57,8 +57,8 @@ pub fn create_associated_token_account(
             AccountMeta::new(associated_account_address, false),
             AccountMeta::new_readonly(*wallet_address, false),
             AccountMeta::new_readonly(*token_mint_address, false),
-            AccountMeta::new_readonly(solana_program::system_program::id(), false),
-            AccountMeta::new_readonly(spl_token::id(), false),
+            AccountMeta::new_readonly(solana_system_interface::program::id(), false),
+            AccountMeta::new_readonly(spl_token_interface::id(), false),
             AccountMeta::new_readonly(sysvar::rent::id(), false),
         ],
         data: vec![],

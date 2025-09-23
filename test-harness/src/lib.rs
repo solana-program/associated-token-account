@@ -3,6 +3,7 @@ use {
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
+    solana_program_option::COption,
     solana_program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
@@ -569,7 +570,6 @@ impl AccountBuilder {
         amount: u64,
         token_program: &Pubkey,
     ) -> Account {
-        use solana_program_option::COption;
         let account_data = TokenAccount {
             mint: *mint,
             owner: *owner,

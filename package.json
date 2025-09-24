@@ -12,7 +12,10 @@
     "rust:spellcheck": "cargo spellcheck --code 1",
     "rust:audit": "zx ./scripts/rust/audit.mjs",
     "rust:publish": "zx ./scripts/rust/publish.mjs",
-    "rust:semver": "cargo semver-checks"
+    "rust:semver": "cargo semver-checks",
+    "test-harness:format": "zx ./scripts/rust/format.mjs test-harness",
+    "test-harness:lint": "zx ./scripts/rust/lint.mjs test-harness",
+    "test-harness:test": "zx ./scripts/rust/test.mjs test-harness"
   },
   "devDependencies": {
     "@iarna/toml": "^2.2.5",

@@ -1,215 +1,93 @@
-mod program_test;
-
 use {
-    program_test::program_test_2022,
-    solana_program::{instruction::*, pubkey::Pubkey},
-    solana_program_test::*,
-    solana_sdk::{
-        signature::Signer,
-        signer::keypair::Keypair,
-        transaction::{Transaction, TransactionError},
-    },
-    solana_system_interface::instruction as system_instruction,
-    spl_associated_token_account_interface::{
-        address::get_associated_token_address_with_program_id,
-        instruction::create_associated_token_account,
-    },
+    ata_mollusk_harness::AtaTestHarness,
+    mollusk_svm::result::Check,
+    solana_program_error::ProgramError,
     spl_token_2022_interface::{
-        error::TokenError,
         extension::{
             transfer_fee, BaseStateWithExtensions, ExtensionType, StateWithExtensionsOwned,
         },
-        state::{Account, Mint},
+        state::Account,
     },
 };
 
-#[tokio::test]
-async fn test_associated_token_account_with_transfer_fees() {
-    let wallet_sender = Keypair::new();
-    let wallet_address_sender = wallet_sender.pubkey();
-    let wallet_address_receiver = Pubkey::new_unique();
-    let (mut banks_client, payer, recent_blockhash) =
-        program_test_2022(Pubkey::new_unique()).start().await;
-    let rent = banks_client.get_rent().await.unwrap();
-
-    // create extended mint
-    // ... in the future, a mint can be pre-loaded in program_test.rs like the
-    // regular mint
-    let mint_account = Keypair::new();
-    let token_mint_address = mint_account.pubkey();
-    let mint_authority = Keypair::new();
-    let space =
-        ExtensionType::try_calculate_account_len::<Mint>(&[ExtensionType::TransferFeeConfig])
-            .unwrap();
+#[test]
+fn test_associated_token_account_with_transfer_fees() {
     let maximum_fee = 100;
-    let mut transaction = Transaction::new_with_payer(
-        &[
-            system_instruction::create_account(
-                &payer.pubkey(),
-                &mint_account.pubkey(),
-                rent.minimum_balance(space),
-                space as u64,
-                &spl_token_2022_interface::id(),
-            ),
-            transfer_fee::instruction::initialize_transfer_fee_config(
-                &spl_token_2022_interface::id(),
-                &token_mint_address,
-                Some(&mint_authority.pubkey()),
-                Some(&mint_authority.pubkey()),
-                1_000,
-                maximum_fee,
-            )
-            .unwrap(),
-            spl_token_2022_interface::instruction::initialize_mint(
-                &spl_token_2022_interface::id(),
-                &token_mint_address,
-                &mint_authority.pubkey(),
-                Some(&mint_authority.pubkey()),
-                0,
-            )
-            .unwrap(),
-        ],
-        Some(&payer.pubkey()),
+    let transfer_fee_basis_points = 1_000;
+    let (harness, receiver_wallet) = AtaTestHarness::new(&spl_token_2022_interface::id())
+        .with_wallet(1_000_000)
+        .with_additional_wallet(1_000_000);
+    let mut harness = harness
+        .with_mint_with_extensions(&[ExtensionType::TransferFeeConfig])
+        .initialize_transfer_fee(transfer_fee_basis_points, maximum_fee)
+        .initialize_mint(0)
+        .with_ata();
+    let (sender_pubkey, mint, sender_ata, receiver_ata) = (
+        harness.wallet.unwrap(),
+        harness.mint.unwrap(),
+        harness.ata_address.unwrap(),
+        harness.create_ata_for_owner(receiver_wallet, 1_000_000),
     );
-    transaction.sign(&[&payer, &mint_account], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
+    harness.mint_tokens(50 * maximum_fee);
 
-    // create extended ATAs
-    let mut transaction = Transaction::new_with_payer(
-        &[create_associated_token_account(
-            &payer.pubkey(),
-            &wallet_address_sender,
-            &token_mint_address,
+    // Insufficient funds transfer
+    harness.ctx.process_and_validate_instruction(
+        &transfer_fee::instruction::transfer_checked_with_fee(
             &spl_token_2022_interface::id(),
-        )],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    let recent_blockhash = banks_client
-        .get_new_latest_blockhash(&recent_blockhash)
-        .await
-        .unwrap();
-
-    let mut transaction = Transaction::new_with_payer(
-        &[create_associated_token_account(
-            &payer.pubkey(),
-            &wallet_address_receiver,
-            &token_mint_address,
-            &spl_token_2022_interface::id(),
-        )],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    let associated_token_address_sender = get_associated_token_address_with_program_id(
-        &wallet_address_sender,
-        &token_mint_address,
-        &spl_token_2022_interface::id(),
-    );
-    let associated_token_address_receiver = get_associated_token_address_with_program_id(
-        &wallet_address_receiver,
-        &token_mint_address,
-        &spl_token_2022_interface::id(),
-    );
-
-    // mint tokens
-    let sender_amount = 50 * maximum_fee;
-    let mut transaction = Transaction::new_with_payer(
-        &[spl_token_2022_interface::instruction::mint_to(
-            &spl_token_2022_interface::id(),
-            &token_mint_address,
-            &associated_token_address_sender,
-            &mint_authority.pubkey(),
-            &[],
-            sender_amount,
-        )
-        .unwrap()],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer, &mint_authority], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    // not enough tokens
-    let mut transaction = Transaction::new_with_payer(
-        &[transfer_fee::instruction::transfer_checked_with_fee(
-            &spl_token_2022_interface::id(),
-            &associated_token_address_sender,
-            &token_mint_address,
-            &associated_token_address_receiver,
-            &wallet_address_sender,
+            &sender_ata,
+            &mint,
+            &receiver_ata,
+            &sender_pubkey,
             &[],
             10_001,
             0,
             maximum_fee,
         )
-        .unwrap()],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer, &wallet_sender], recent_blockhash);
-    let err = banks_client
-        .process_transaction(transaction)
-        .await
-        .unwrap_err()
-        .unwrap();
-    assert_eq!(
-        err,
-        TransactionError::InstructionError(
-            0,
-            InstructionError::Custom(TokenError::InsufficientFunds as u32)
-        )
+        .unwrap(),
+        &[Check::err(ProgramError::Custom(
+            spl_token_2022_interface::error::TokenError::InsufficientFunds as u32,
+        ))],
     );
 
-    let recent_blockhash = banks_client
-        .get_new_latest_blockhash(&recent_blockhash)
-        .await
-        .unwrap();
-
-    // success
-    let transfer_amount = 500;
-    let fee = 50;
-    let mut transaction = Transaction::new_with_payer(
-        &[transfer_fee::instruction::transfer_checked_with_fee(
+    // Successful transfer
+    let (transfer_amount, fee) = (500, 50);
+    harness.ctx.process_and_validate_instruction(
+        &transfer_fee::instruction::transfer_checked_with_fee(
             &spl_token_2022_interface::id(),
-            &associated_token_address_sender,
-            &token_mint_address,
-            &associated_token_address_receiver,
-            &wallet_address_sender,
+            &sender_ata,
+            &mint,
+            &receiver_ata,
+            &sender_pubkey,
             &[],
             transfer_amount,
             0,
             fee,
         )
-        .unwrap()],
-        Some(&payer.pubkey()),
+        .unwrap(),
+        &[Check::success()],
     );
-    transaction.sign(&[&payer, &wallet_sender], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
 
-    let sender_account = banks_client
-        .get_account(associated_token_address_sender)
-        .await
-        .unwrap()
-        .unwrap();
-    let sender_state = StateWithExtensionsOwned::<Account>::unpack(sender_account.data).unwrap();
-    assert_eq!(sender_state.base.amount, sender_amount - transfer_amount);
-    let extension = sender_state
-        .get_extension::<transfer_fee::TransferFeeAmount>()
-        .unwrap();
-    assert_eq!(extension.withheld_amount, 0.into());
+    // Verify final account states
+    let sender_state =
+        StateWithExtensionsOwned::<Account>::unpack(harness.get_account(sender_ata).data).unwrap();
+    assert_eq!(sender_state.base.amount, 50 * maximum_fee - transfer_amount);
+    assert_eq!(
+        sender_state
+            .get_extension::<transfer_fee::TransferFeeAmount>()
+            .unwrap()
+            .withheld_amount,
+        0.into()
+    );
 
-    let receiver_account = banks_client
-        .get_account(associated_token_address_receiver)
-        .await
-        .unwrap()
-        .unwrap();
     let receiver_state =
-        StateWithExtensionsOwned::<Account>::unpack(receiver_account.data).unwrap();
+        StateWithExtensionsOwned::<Account>::unpack(harness.get_account(receiver_ata).data)
+            .unwrap();
     assert_eq!(receiver_state.base.amount, transfer_amount - fee);
-    let extension = receiver_state
-        .get_extension::<transfer_fee::TransferFeeAmount>()
-        .unwrap();
-    assert_eq!(extension.withheld_amount, fee.into());
+    assert_eq!(
+        receiver_state
+            .get_extension::<transfer_fee::TransferFeeAmount>()
+            .unwrap()
+            .withheld_amount,
+        fee.into()
+    );
 }

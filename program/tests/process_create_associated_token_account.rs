@@ -1,317 +1,148 @@
-mod program_test;
-
 use {
-    program_test::program_test_2022,
-    solana_program::{instruction::*, pubkey::Pubkey, sysvar},
-    solana_program_test::*,
-    solana_sdk::{
-        signature::Signer,
-        transaction::{Transaction, TransactionError},
+    ata_mollusk_harness::{
+        build_create_ata_instruction, token_2022_immutable_owner_rent_exempt_balance,
+        AtaTestHarness, CreateAtaInstructionType,
     },
-    solana_system_interface::instruction as system_instruction,
-    spl_associated_token_account_interface::{
-        address::get_associated_token_address_with_program_id,
-        instruction::create_associated_token_account,
-    },
-    spl_token_2022_interface::{extension::ExtensionType, state::Account},
+    mollusk_svm::result::Check,
+    solana_instruction::AccountMeta,
+    solana_program_error::ProgramError,
+    solana_pubkey::Pubkey,
+    solana_sysvar as sysvar,
+    spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
 };
 
-#[tokio::test]
-async fn test_associated_token_address() {
-    let wallet_address = Pubkey::new_unique();
-    let token_mint_address = Pubkey::new_unique();
-    let associated_token_address = get_associated_token_address_with_program_id(
-        &wallet_address,
-        &token_mint_address,
-        &spl_token_2022_interface::id(),
-    );
-
-    let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address).start().await;
-    let rent = banks_client.get_rent().await.unwrap();
-
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance = rent.minimum_balance(expected_token_account_len);
-
-    // Associated account does not exist
-    assert_eq!(
-        banks_client
-            .get_account(associated_token_address)
-            .await
-            .expect("get_account"),
-        None,
-    );
-
-    let mut transaction = Transaction::new_with_payer(
-        &[create_associated_token_account(
-            &payer.pubkey(),
-            &wallet_address,
-            &token_mint_address,
-            &spl_token_2022_interface::id(),
-        )],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    // Associated account now exists
-    let associated_account = banks_client
-        .get_account(associated_token_address)
-        .await
-        .expect("get_account")
-        .expect("associated_account not none");
-    assert_eq!(associated_account.data.len(), expected_token_account_len,);
-    assert_eq!(associated_account.owner, spl_token_2022_interface::id());
-    assert_eq!(associated_account.lamports, expected_token_account_balance);
+#[test]
+fn test_associated_token_address() {
+    let mut harness =
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+    harness.create_ata(CreateAtaInstructionType::default());
 }
 
-#[tokio::test]
-async fn test_create_with_fewer_lamports() {
-    let wallet_address = Pubkey::new_unique();
-    let token_mint_address = Pubkey::new_unique();
-    let associated_token_address = get_associated_token_address_with_program_id(
-        &wallet_address,
-        &token_mint_address,
+#[test]
+fn test_create_with_fewer_lamports() {
+    let harness =
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+
+    let wallet = harness.wallet.unwrap();
+    let mint = harness.mint.unwrap();
+    let ata_address = get_associated_token_address_with_program_id(
+        &wallet,
+        &mint,
         &spl_token_2022_interface::id(),
     );
 
-    let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address).start().await;
-    let rent = banks_client.get_rent().await.unwrap();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance = rent.minimum_balance(expected_token_account_len);
+    let insufficient_lamports = 890880;
+    harness.ensure_account_exists_with_lamports(ata_address, insufficient_lamports);
 
-    // Transfer lamports into `associated_token_address` before creating it - enough
-    // to be rent-exempt for 0 data, but not for an initialized token account
-    let mut transaction = Transaction::new_with_payer(
-        &[system_instruction::transfer(
-            &payer.pubkey(),
-            &associated_token_address,
-            rent.minimum_balance(0),
-        )],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    assert_eq!(
-        banks_client
-            .get_balance(associated_token_address)
-            .await
-            .unwrap(),
-        rent.minimum_balance(0)
+    let instruction = build_create_ata_instruction(
+        spl_associated_token_account_interface::program::id(),
+        harness.payer,
+        ata_address,
+        wallet,
+        mint,
+        spl_token_2022_interface::id(),
+        CreateAtaInstructionType::default(),
     );
 
-    // Check that the program adds the extra lamports
-    let mut transaction = Transaction::new_with_payer(
-        &[create_associated_token_account(
-            &payer.pubkey(),
-            &wallet_address,
-            &token_mint_address,
-            &spl_token_2022_interface::id(),
-        )],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    assert_eq!(
-        banks_client
-            .get_balance(associated_token_address)
-            .await
-            .unwrap(),
-        expected_token_account_balance,
+    harness.ctx.process_and_validate_instruction(
+        &instruction,
+        &[
+            Check::success(),
+            Check::account(&ata_address)
+                .lamports(token_2022_immutable_owner_rent_exempt_balance())
+                .owner(&spl_token_2022_interface::id())
+                .build(),
+        ],
     );
 }
 
-#[tokio::test]
-async fn test_create_with_excess_lamports() {
-    let wallet_address = Pubkey::new_unique();
-    let token_mint_address = Pubkey::new_unique();
-    let associated_token_address = get_associated_token_address_with_program_id(
-        &wallet_address,
-        &token_mint_address,
+#[test]
+fn test_create_with_excess_lamports() {
+    let harness =
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+
+    let wallet = harness.wallet.unwrap();
+    let mint = harness.mint.unwrap();
+    let ata_address = get_associated_token_address_with_program_id(
+        &wallet,
+        &mint,
         &spl_token_2022_interface::id(),
     );
 
-    let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address).start().await;
-    let rent = banks_client.get_rent().await.unwrap();
+    let excess_lamports = token_2022_immutable_owner_rent_exempt_balance() + 1;
+    harness.ensure_account_exists_with_lamports(ata_address, excess_lamports);
 
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance = rent.minimum_balance(expected_token_account_len);
-
-    // Transfer 1 lamport into `associated_token_address` before creating it
-    let mut transaction = Transaction::new_with_payer(
-        &[system_instruction::transfer(
-            &payer.pubkey(),
-            &associated_token_address,
-            expected_token_account_balance + 1,
-        )],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    assert_eq!(
-        banks_client
-            .get_balance(associated_token_address)
-            .await
-            .unwrap(),
-        expected_token_account_balance + 1
+    let instruction = build_create_ata_instruction(
+        spl_associated_token_account_interface::program::id(),
+        harness.payer,
+        ata_address,
+        wallet,
+        mint,
+        spl_token_2022_interface::id(),
+        CreateAtaInstructionType::default(),
     );
 
-    // Check that the program doesn't add any lamports
-    let mut transaction = Transaction::new_with_payer(
-        &[create_associated_token_account(
-            &payer.pubkey(),
-            &wallet_address,
-            &token_mint_address,
-            &spl_token_2022_interface::id(),
-        )],
-        Some(&payer.pubkey()),
-    );
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    assert_eq!(
-        banks_client
-            .get_balance(associated_token_address)
-            .await
-            .unwrap(),
-        expected_token_account_balance + 1
+    harness.ctx.process_and_validate_instruction(
+        &instruction,
+        &[
+            Check::success(),
+            Check::account(&ata_address)
+                .lamports(excess_lamports)
+                .owner(&spl_token_2022_interface::id())
+                .build(),
+        ],
     );
 }
 
-#[tokio::test]
-async fn test_create_account_mismatch() {
-    let wallet_address = Pubkey::new_unique();
-    let token_mint_address = Pubkey::new_unique();
-    let _associated_token_address = get_associated_token_address_with_program_id(
-        &wallet_address,
-        &token_mint_address,
+#[test]
+fn test_create_account_mismatch() {
+    let harness =
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+
+    let wallet = harness.wallet.unwrap();
+    let mint = harness.mint.unwrap();
+    let ata_address = get_associated_token_address_with_program_id(
+        &wallet,
+        &mint,
         &spl_token_2022_interface::id(),
     );
 
-    let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address).start().await;
+    for account_idx in [1, 2, 3] {
+        let mut instruction = build_create_ata_instruction(
+            spl_associated_token_account_interface::program::id(),
+            harness.payer,
+            ata_address,
+            wallet,
+            mint,
+            spl_token_2022_interface::id(),
+            CreateAtaInstructionType::default(),
+        );
 
-    let mut instruction = create_associated_token_account(
-        &payer.pubkey(),
-        &wallet_address,
-        &token_mint_address,
-        &spl_token_2022_interface::id(),
-    );
-    instruction.accounts[1] = AccountMeta::new(Pubkey::default(), false); // <-- Invalid associated_account_address
+        instruction.accounts[account_idx] = if account_idx == 1 {
+            AccountMeta::new(Pubkey::default(), false)
+        } else {
+            AccountMeta::new_readonly(Pubkey::default(), false)
+        };
 
-    let mut transaction = Transaction::new_with_payer(&[instruction], Some(&payer.pubkey()));
-    transaction.sign(&[&payer], recent_blockhash);
-    assert_eq!(
-        banks_client
-            .process_transaction(transaction)
-            .await
-            .unwrap_err()
-            .unwrap(),
-        TransactionError::InstructionError(0, InstructionError::InvalidSeeds)
-    );
-
-    let mut instruction = create_associated_token_account(
-        &payer.pubkey(),
-        &wallet_address,
-        &token_mint_address,
-        &spl_token_2022_interface::id(),
-    );
-    instruction.accounts[2] = AccountMeta::new(Pubkey::default(), false); // <-- Invalid wallet_address
-
-    let mut transaction = Transaction::new_with_payer(&[instruction], Some(&payer.pubkey()));
-    transaction.sign(&[&payer], recent_blockhash);
-    assert_eq!(
-        banks_client
-            .process_transaction(transaction)
-            .await
-            .unwrap_err()
-            .unwrap(),
-        TransactionError::InstructionError(0, InstructionError::InvalidSeeds)
-    );
-
-    let mut instruction = create_associated_token_account(
-        &payer.pubkey(),
-        &wallet_address,
-        &token_mint_address,
-        &spl_token_2022_interface::id(),
-    );
-    instruction.accounts[3] = AccountMeta::new(Pubkey::default(), false); // <-- Invalid token_mint_address
-
-    let mut transaction = Transaction::new_with_payer(&[instruction], Some(&payer.pubkey()));
-    transaction.sign(&[&payer], recent_blockhash);
-    assert_eq!(
-        banks_client
-            .process_transaction(transaction)
-            .await
-            .unwrap_err()
-            .unwrap(),
-        TransactionError::InstructionError(0, InstructionError::InvalidSeeds)
-    );
+        harness.ctx.process_and_validate_instruction(
+            &instruction,
+            &[Check::err(ProgramError::InvalidSeeds)],
+        );
+    }
 }
 
-#[tokio::test]
-async fn test_create_associated_token_account_using_legacy_implicit_instruction() {
-    let wallet_address = Pubkey::new_unique();
-    let token_mint_address = Pubkey::new_unique();
-    let associated_token_address = get_associated_token_address_with_program_id(
-        &wallet_address,
-        &token_mint_address,
-        &spl_token_2022_interface::id(),
+#[test]
+fn test_create_associated_token_account_using_legacy_implicit_instruction() {
+    let mut harness =
+        AtaTestHarness::new(&spl_token_2022_interface::id()).with_wallet_and_mint(1_000_000, 6);
+
+    harness.create_and_check_ata_with_custom_instruction(
+        CreateAtaInstructionType::default(),
+        |instruction| {
+            instruction.data = vec![];
+            instruction
+                .accounts
+                .push(AccountMeta::new_readonly(sysvar::rent::id(), false));
+        },
     );
-
-    let (banks_client, payer, recent_blockhash) =
-        program_test_2022(token_mint_address).start().await;
-    let rent = banks_client.get_rent().await.unwrap();
-    let expected_token_account_len =
-        ExtensionType::try_calculate_account_len::<Account>(&[ExtensionType::ImmutableOwner])
-            .unwrap();
-    let expected_token_account_balance = rent.minimum_balance(expected_token_account_len);
-
-    // Associated account does not exist
-    assert_eq!(
-        banks_client
-            .get_account(associated_token_address)
-            .await
-            .expect("get_account"),
-        None,
-    );
-
-    let mut create_associated_token_account_ix = create_associated_token_account(
-        &payer.pubkey(),
-        &wallet_address,
-        &token_mint_address,
-        &spl_token_2022_interface::id(),
-    );
-
-    // Use implicit  instruction and rent account to replicate the legacy invocation
-    create_associated_token_account_ix.data = vec![];
-    create_associated_token_account_ix
-        .accounts
-        .push(AccountMeta::new_readonly(sysvar::rent::id(), false));
-
-    let mut transaction =
-        Transaction::new_with_payer(&[create_associated_token_account_ix], Some(&payer.pubkey()));
-    transaction.sign(&[&payer], recent_blockhash);
-    banks_client.process_transaction(transaction).await.unwrap();
-
-    // Associated account now exists
-    let associated_account = banks_client
-        .get_account(associated_token_address)
-        .await
-        .expect("get_account")
-        .expect("associated_account not none");
-    assert_eq!(associated_account.data.len(), expected_token_account_len);
-    assert_eq!(associated_account.owner, spl_token_2022_interface::id());
-    assert_eq!(associated_account.lamports, expected_token_account_balance);
 }

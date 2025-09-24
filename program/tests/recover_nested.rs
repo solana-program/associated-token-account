@@ -139,7 +139,7 @@ fn test_fail_wrong_address_derivation_owner(token_program_id: &Pubkey) {
     let wrong_owner_address = Pubkey::new_unique();
     recover_instruction.accounts[3] = AccountMeta::new_readonly(wrong_owner_address, false);
 
-    harness.ensure_system_accounts_with_lamports(&[(wrong_owner_address, 1_000_000)]);
+    harness.ensure_accounts_with_lamports(&[(wrong_owner_address, 1_000_000)]);
 
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,

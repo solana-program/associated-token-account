@@ -93,8 +93,8 @@ impl AtaTestHarness {
         }
     }
 
-    /// Ensure multiple system accounts exist in the context store with the provided lamports
-    pub fn ensure_system_accounts_with_lamports(&self, entries: &[(Pubkey, u64)]) {
+    /// Ensure multiple accounts exist in the context store with the provided lamports
+    pub fn ensure_accounts_with_lamports(&self, entries: &[(Pubkey, u64)]) {
         for (address, lamports) in entries.iter().copied() {
             self.ensure_account_exists_with_lamports(address, lamports);
         }
@@ -137,7 +137,7 @@ impl AtaTestHarness {
     /// Add a wallet with the specified lamports
     pub fn with_wallet(mut self, lamports: u64) -> Self {
         let wallet = Pubkey::new_unique();
-        self.ensure_system_accounts_with_lamports(&[(wallet, lamports)]);
+        self.ensure_accounts_with_lamports(&[(wallet, lamports)]);
         self.wallet = Some(wallet);
         self
     }
@@ -145,7 +145,7 @@ impl AtaTestHarness {
     /// Add an additional wallet (e.g. for sender/receiver scenarios) - returns harness and the new wallet
     pub fn with_additional_wallet(self, lamports: u64) -> (Self, Pubkey) {
         let additional_wallet = Pubkey::new_unique();
-        self.ensure_system_accounts_with_lamports(&[(additional_wallet, lamports)]);
+        self.ensure_accounts_with_lamports(&[(additional_wallet, lamports)]);
         (self, additional_wallet)
     }
 
@@ -311,7 +311,7 @@ impl AtaTestHarness {
     /// creating it with the given lamports if it does not exist.
     pub fn create_ata_for_owner(&mut self, owner: Pubkey, owner_lamports: u64) -> Pubkey {
         let mint = self.mint.expect("Mint must be set");
-        self.ensure_system_accounts_with_lamports(&[(owner, owner_lamports)]);
+        self.ensure_accounts_with_lamports(&[(owner, owner_lamports)]);
 
         let ata_address =
             get_associated_token_address_with_program_id(&owner, &mint, &self.token_program_id);
@@ -402,7 +402,7 @@ impl AtaTestHarness {
     pub fn insert_wrong_owner_token_account(&self, wrong_owner: Pubkey) -> Pubkey {
         let wallet = self.wallet.as_ref().expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
-        self.ensure_system_accounts_with_lamports(&[(wrong_owner, 1_000_000)]);
+        self.ensure_accounts_with_lamports(&[(wrong_owner, 1_000_000)]);
         let ata_address =
             get_associated_token_address_with_program_id(wallet, &mint, &self.token_program_id);
         // Create token account with wrong owner at the ATA address

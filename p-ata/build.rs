@@ -4,11 +4,8 @@
 //! If feature `build-programs` is enabled, it also updates submodules and builds
 //! module and submodule programs.
 
-use std::env;
-use std::fs;
-use std::path::Path;
 #[cfg(feature = "build-programs")]
-use std::process::Command;
+use std::{fs, path::Path, process::Command};
 
 #[cfg(feature = "build-programs")]
 use solana_pubkey::Pubkey;

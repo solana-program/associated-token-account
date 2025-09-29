@@ -1,6 +1,6 @@
 #![cfg_attr(feature = "std", allow(dead_code, unused_imports))]
 
-use pinocchio_ata_program::{
+use ata_mollusk_harness::{
     processor::is_off_curve, test_helpers::address_gen::derive_address_with_bump,
 };
 #[cfg(any(test, feature = "std"))]

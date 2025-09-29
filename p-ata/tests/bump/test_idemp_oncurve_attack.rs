@@ -3,7 +3,7 @@ use {
         find_wallet_with_on_curve_attack_opportunity, setup_mollusk_for_bump_tests,
     },
     mollusk_svm::{program::loader_keys::LOADER_V3, result::Check},
-    pinocchio_ata_program::test_utils::{
+    ata_mollusk_harness::{
         account_builder::AccountBuilder, build_create_ata_instruction, CreateAtaInstructionType,
         NATIVE_LOADER_ID,
     },

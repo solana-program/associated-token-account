@@ -606,7 +606,7 @@ pub(crate) fn process_create_associated_token_account(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::validate_token_account_structure;
+    use ata_mollusk_harness::validate_token_account_structure;
     use core::ptr;
     use std::vec::Vec;
     use {

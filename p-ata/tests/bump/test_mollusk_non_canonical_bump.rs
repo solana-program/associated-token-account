@@ -1,7 +1,7 @@
 use {
     super::test_bump_utils::setup_mollusk_for_bump_tests,
     mollusk_svm::result::Check,
-    pinocchio_ata_program::test_utils::{
+    ata_mollusk_harness::{
         build_create_ata_instruction, create_ata_test_accounts, CreateAtaInstructionType,
     },
     solana_pubkey::Pubkey,

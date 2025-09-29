@@ -18,12 +18,12 @@ use pinocchio::{
     pubkey::Pubkey,
 };
 use pinocchio_log::log;
-use pinocchio_token::state::TokenAccount;
 
 use crate::processor::is_spl_token_program;
 
 pub const GET_ACCOUNT_DATA_SIZE_DISCRIMINATOR: u8 = 21;
 pub const MINT_BASE_SIZE: usize = 82;
+pub const TOKEN_ACCOUNT_SIZE: usize = 165;
 
 // These constants are taken from the Token-2022 ExtensionType enum.
 // Tests verify the constants are in sync without pulling in spl-token-2022
@@ -50,8 +50,8 @@ pub(crate) fn is_spl_token_2022_program(program_id: &Pubkey) -> bool {
 /// - `None` - Unknown extension found, caller should fall back to CPI
 #[inline(always)]
 pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> Option<usize> {
-    const ACCOUNT_TYPE_OFFSET: usize = TokenAccount::LEN;
-    const BASE_TOKEN_2022_ACCOUNT_SIZE: usize = TokenAccount::LEN + 5;
+    const ACCOUNT_TYPE_OFFSET: usize = TOKEN_ACCOUNT_SIZE;
+    const BASE_TOKEN_2022_ACCOUNT_SIZE: usize = TOKEN_ACCOUNT_SIZE + 5;
 
     // Invalid/failed mint creation
     if mint_data.is_empty() {
@@ -130,13 +130,13 @@ pub(crate) fn get_token_account_size(
     token_program: &AccountInfo,
 ) -> Result<usize, ProgramError> {
     if is_spl_token_program(token_program.key()) {
-        return Ok(TokenAccount::LEN);
+        return Ok(TOKEN_ACCOUNT_SIZE);
     }
 
     // Token mint has no extensions other than ImmutableOwner
     // Note: This assumes future token programs include ImmutableOwner extension.
     if !token_mint_has_extensions(mint_account) {
-        return Ok(TokenAccount::LEN + 5);
+        return Ok(TOKEN_ACCOUNT_SIZE + 5);
     }
 
     if is_spl_token_2022_program(token_program.key()) {

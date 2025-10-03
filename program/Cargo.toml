@@ -27,7 +27,7 @@ thiserror = "2.0"
 
 [dev-dependencies]
 ata-mollusk-harness = { version = "1.0.0", path = "../test-harness" }
-mollusk-svm = { version = "0.6.1" }
+mollusk-svm = { version = "0.6.2" }
 solana-instruction = "3.0"
 solana-keypair = "3.0"
 solana-program-error = "3.0"

@@ -18,7 +18,7 @@ use solana_program::{
 };
 #[deprecated(
     since = "4.1.0",
-    note = "Use `spl-associated-token-account-interface` crate instead."
+    note = "Use `spl_associated_token_account_interface::address` instead and remove `spl_associated_token_account` as a dependency"
 )]
 pub use spl_associated_token_account_interface::address::{
     get_associated_token_address, get_associated_token_address_with_program_id,

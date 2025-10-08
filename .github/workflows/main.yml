@@ -8,7 +8,7 @@ on:
 
 env:
   SBPF_PROGRAM_PACKAGES: "['program']"
-  RUST_PACKAGES: "['interface', 'program', 'test-harness']"
+  RUST_PACKAGES: "['interface', 'program', 'test_harness']"
 
 jobs:
   set_env:

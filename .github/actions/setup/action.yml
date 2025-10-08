@@ -23,42 +23,42 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Setup pnpm
-      uses: pnpm/action-setup@v3
-
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 20
-        cache: 'pnpm'
-
-    - name: Install Dependencies
-      run: pnpm install --frozen-lockfile
+    - name: Install Protobuf Compiler (Temporary Workaround for Solana 2.0)
+      if: ${{ inputs.solana == 'true' || inputs.rustfmt == 'true' || inputs.clippy == 'true' }}
       shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler
 
-    - name: Set Environment Variables
+    - name: Get Rust Toolchain Nightly
+      id: rust-toolchain
       shell: bash
-      run: pnpm zx ./scripts/ci/set-env.mjs
+      run: echo "nightly=$(make rust-toolchain-nightly)" >> $GITHUB_OUTPUT
+
+    - name: Get Solana CLI Version
+      id: solana-version
+      shell: bash
+      run: echo "version=$(make solana-cli-version)" >> $GITHUB_OUTPUT
 
     - name: Install Rustfmt
       if: ${{ inputs.rustfmt == 'true' }}
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: ${{ env.TOOLCHAIN_FORMAT }}
+        toolchain: ${{ steps.rust-toolchain.outputs.nightly }}
         components: rustfmt
 
     - name: Install Clippy
       if: ${{ inputs.clippy == 'true' }}
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: ${{ env.TOOLCHAIN_LINT }}
+        toolchain: ${{ steps.rust-toolchain.outputs.nightly }}
         components: clippy
 
     - name: Install Solana
       if: ${{ inputs.solana == 'true' }}
       uses: solana-program/actions/install-solana@v1
       with:
-        version: ${{ env.SOLANA_VERSION }}
+        version: ${{ steps.solana-version.outputs.version }}
         cache: true
 
     - name: Cache Cargo Dependencies

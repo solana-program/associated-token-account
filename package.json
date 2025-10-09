@@ -1,0 +1,5 @@
+{
+  "name": "spl-associated-token-account",
+  "private": true,
+  "packageManager": "pnpm@9.15.4"
+}

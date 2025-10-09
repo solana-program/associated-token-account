@@ -20,6 +20,9 @@ solana-cli-version:
 cargo-nightly:
 	cargo $(nightly) $(ARGS)
 
+generate-clients:
+	@echo "No JavaScript clients to generate"
+
 audit:
 	cargo audit \
 			--ignore RUSTSEC-2022-0093 \

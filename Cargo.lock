@@ -349,28 +349,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ata-mollusk-harness"
-version = "1.0.0"
-dependencies = [
- "mollusk-svm",
- "mollusk-svm-programs-token",
- "solana-account",
- "solana-instruction",
- "solana-keypair",
- "solana-program-error",
- "solana-program-option",
- "solana-program-pack",
- "solana-pubkey",
- "solana-rent",
- "solana-signer",
- "solana-system-interface",
- "solana-sysvar",
- "spl-associated-token-account-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "spl-token-2022-interface",
- "spl-token-interface",
-]
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3624,7 +3602,6 @@ dependencies = [
 name = "spl-associated-token-account"
 version = "7.0.0"
 dependencies = [
- "ata-mollusk-harness",
  "borsh",
  "mollusk-svm",
  "num-derive",
@@ -3643,6 +3620,7 @@ dependencies = [
  "solana-system-interface",
  "solana-sysvar",
  "spl-associated-token-account-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-associated-token-account-mollusk-harness",
  "spl-token-2022-interface",
  "spl-token-interface",
  "thiserror 2.0.17",
@@ -3667,6 +3645,28 @@ dependencies = [
  "borsh",
  "solana-instruction",
  "solana-pubkey",
+]
+
+[[package]]
+name = "spl-associated-token-account-mollusk-harness"
+version = "1.0.0"
+dependencies = [
+ "mollusk-svm",
+ "mollusk-svm-programs-token",
+ "solana-account",
+ "solana-instruction",
+ "solana-keypair",
+ "solana-program-error",
+ "solana-program-option",
+ "solana-program-pack",
+ "solana-pubkey",
+ "solana-rent",
+ "solana-signer",
+ "solana-system-interface",
+ "solana-sysvar",
+ "spl-associated-token-account-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-token-2022-interface",
+ "spl-token-interface",
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ on:
 
 env:
   SBPF_PROGRAM_PACKAGES: "['program']"
-  RUST_PACKAGES: "['interface', 'program', 'test_harness']"
+  RUST_PACKAGES: "['interface', 'program', 'mollusk_harness']"
   WASM_PACKAGES: "['interface', 'program']"
 
 jobs:
@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           echo "SBPF_PROGRAM_PACKAGES=${{ env.SBPF_PROGRAM_PACKAGES }}" >> $GITHUB_OUTPUT
-          echo "RUST_PACKAGES=${{ env.RUST_PACKAGES }}" >> $GITHUB_OUTPUT 
+          echo "RUST_PACKAGES=${{ env.RUST_PACKAGES }}" >> $GITHUB_OUTPUT
           echo "WASM_PACKAGES=${{ env.WASM_PACKAGES }}" >> $GITHUB_OUTPUT
           echo "RUST_TOOLCHAIN_NIGHTLY=$(make rust-toolchain-nightly)" >> "$GITHUB_OUTPUT"
           echo "SOLANA_CLI_VERSION=$(make solana-cli-version)" >> "$GITHUB_OUTPUT"

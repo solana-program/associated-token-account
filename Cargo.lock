@@ -3600,7 +3600,7 @@ dependencies = [
 
 [[package]]
 name = "spl-associated-token-account"
-version = "7.0.0"
+version = "8.0.0"
 dependencies = [
  "borsh",
  "mollusk-svm",

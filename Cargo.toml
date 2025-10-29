@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["interface", "program", "test_harness"]
+members = ["interface", "program", "mollusk_harness"]
 
 [workspace.metadata.cli]
 solana = "3.0.0"

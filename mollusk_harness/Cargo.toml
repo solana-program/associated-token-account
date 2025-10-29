@@ -1,8 +1,11 @@
 [package]
 name = "spl-associated-token-account-mollusk-harness"
 version = "1.0.0"
-edition = "2021"
+description = "SPL Associated Token Account Mollusk Testing Harness"
+authors = ["Anza Maintainers <maintainers@anza.xyz>"]
+repository = "https://github.com/solana-program/associated-token-account"
 license = "Apache-2.0"
+edition = "2021"
 
 [lib]
 crate-type = ["lib"]

@@ -1,7 +1,7 @@
 use {
-    ata_mollusk_harness::AtaTestHarness,
     mollusk_svm::result::Check,
     solana_program_error::ProgramError,
+    spl_associated_token_account_mollusk_harness::AtaTestHarness,
     spl_token_2022_interface::{
         extension::{
             transfer_fee, BaseStateWithExtensions, ExtensionType, StateWithExtensionsOwned,

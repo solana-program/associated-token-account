@@ -1,4 +1,4 @@
-use ata_mollusk_harness::{AtaTestHarness, CreateAtaInstructionType};
+use spl_associated_token_account_mollusk_harness::{AtaTestHarness, CreateAtaInstructionType};
 
 #[test]
 fn success_create() {

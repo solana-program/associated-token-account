@@ -8,20 +8,16 @@ pub mod instruction;
 pub mod processor;
 pub mod tools;
 
-// Export current SDK types for downstream users building with a different SDK
-// version
-pub use solana_program;
-use solana_program::{
-    instruction::{AccountMeta, Instruction},
-    pubkey::Pubkey,
-    sysvar,
-};
 #[deprecated(
     since = "4.1.0",
-    note = "Use `spl-associated-token-account-interface` crate instead."
+    note = "Use `spl_associated_token_account_interface::address` instead and remove `spl_associated_token_account` as a dependency"
 )]
 pub use spl_associated_token_account_interface::address::{
     get_associated_token_address, get_associated_token_address_with_program_id,
+};
+use {
+    solana_instruction::{AccountMeta, Instruction},
+    solana_pubkey::Pubkey,
 };
 // Export current SDK types for downstream users building with a different SDK
 // version
@@ -59,7 +55,7 @@ pub fn create_associated_token_account(
             AccountMeta::new_readonly(*token_mint_address, false),
             AccountMeta::new_readonly(solana_system_interface::program::id(), false),
             AccountMeta::new_readonly(spl_token_interface::id(), false),
-            AccountMeta::new_readonly(sysvar::rent::id(), false),
+            AccountMeta::new_readonly(solana_sdk_ids::sysvar::rent::id(), false),
         ],
         data: vec![],
     }

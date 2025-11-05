@@ -1,14 +1,11 @@
 //! Account utility functions
 
 use {
-    solana_program::{
-        account_info::AccountInfo,
-        entrypoint::ProgramResult,
-        program::{get_return_data, invoke, invoke_signed},
-        program_error::ProgramError,
-        pubkey::Pubkey,
-        rent::Rent,
-    },
+    solana_account_info::AccountInfo,
+    solana_cpi::{get_return_data, invoke, invoke_signed},
+    solana_program_error::{ProgramError, ProgramResult},
+    solana_pubkey::Pubkey,
+    solana_rent::Rent,
     solana_system_interface::instruction as system_instruction,
     spl_token_2022_interface::extension::ExtensionType,
     std::convert::TryInto,

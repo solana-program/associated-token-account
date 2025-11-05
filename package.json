@@ -1,29 +1,5 @@
 {
+  "name": "spl-associated-token-account",
   "private": true,
-  "scripts": {
-    "programs:build": "zx ./scripts/rust/build-sbf.mjs program",
-    "programs:test": "zx ./scripts/rust/test.mjs program",
-    "programs:format": "zx ./scripts/rust/format.mjs program",
-    "programs:lint": "zx ./scripts/rust/lint.mjs program",
-    "interface:test": "zx ./scripts/rust/test.mjs interface",
-    "interface:format": "zx ./scripts/rust/format.mjs interface",
-    "interface:lint": "zx ./scripts/rust/lint.mjs interface",
-    "template:upgrade": "zx ./scripts/upgrade-template.mjs",
-    "rust:spellcheck": "cargo spellcheck --code 1",
-    "rust:audit": "zx ./scripts/rust/audit.mjs",
-    "rust:publish": "zx ./scripts/rust/publish.mjs",
-    "rust:semver": "cargo semver-checks",
-    "test-harness:format": "zx ./scripts/rust/format.mjs test-harness",
-    "test-harness:lint": "zx ./scripts/rust/lint.mjs test-harness",
-    "test-harness:test": "zx ./scripts/rust/test.mjs test-harness"
-  },
-  "devDependencies": {
-    "@iarna/toml": "^2.2.5",
-    "typescript": "^5.9.2",
-    "zx": "^8.8.4"
-  },
-  "engines": {
-    "node": ">=v20.0.0"
-  },
-  "packageManager": "pnpm@9.1.0"
+  "packageManager": "pnpm@9.15.4"
 }

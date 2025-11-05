@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["interface", "program", "test-harness"]
+members = ["interface", "program", "mollusk_harness"]
 
 [workspace.metadata.cli]
 solana = "3.0.0"
@@ -13,3 +13,8 @@ lint = "nightly-2025-02-16"
 
 [workspace.metadata.spellcheck]
 config = "scripts/spellcheck.toml"
+
+[workspace.metadata.release]
+pre-release-commit-message = "Publish {{crate_name}} v{{version}}"
+tag-message = "Publish {{crate_name}} v{{version}}"
+consolidate-commits = false

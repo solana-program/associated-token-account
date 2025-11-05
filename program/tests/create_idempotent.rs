@@ -1,11 +1,11 @@
 use {
-    ata_mollusk_harness::{
-        build_create_ata_instruction, token_2022_immutable_owner_account_len,
-        token_2022_immutable_owner_rent_exempt_balance, AtaTestHarness, CreateAtaInstructionType,
-    },
     mollusk_svm::result::Check,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
+    spl_associated_token_account_mollusk_harness::{
+        build_create_ata_instruction, token_2022_immutable_owner_account_len,
+        token_2022_immutable_owner_rent_exempt_balance, AtaTestHarness, CreateAtaInstructionType,
+    },
 };
 
 #[test]

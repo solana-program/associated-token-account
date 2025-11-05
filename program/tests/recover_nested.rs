@@ -1,5 +1,4 @@
 use {
-    ata_mollusk_harness::AtaTestHarness,
     mollusk_svm::result::Check,
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
@@ -7,6 +6,7 @@ use {
     spl_associated_token_account_interface::{
         address::get_associated_token_address_with_program_id, instruction,
     },
+    spl_associated_token_account_mollusk_harness::AtaTestHarness,
     spl_token_2022_interface::extension::StateWithExtensionsOwned,
 };
 

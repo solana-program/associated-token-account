@@ -23,7 +23,7 @@ solana-pubkey = "4.0"
 solana-rent = "3.0"
 solana-signer = "3.0"
 solana-system-interface = { version = "3.0", features = ["bincode"] }
-solana-sysvar = "3.0"
+solana-sysvar = "3.1"
 spl-associated-token-account-interface = { version = "2.0", path = "../interface" }
 spl-token-interface = "2.0"
 spl-token-2022-interface = "2.1"

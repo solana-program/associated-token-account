@@ -1,0 +1,1 @@
+p-ata specific tests are located here; p-ata also runs against the SPL ATA tests in /program/tests.

@@ -1,11 +1,13 @@
 use {
     mollusk_svm::result::Check,
-    ata_mollusk_harness::{
-        build_create_ata_instruction, create_ata_test_accounts, setup_mollusk_with_programs,
+    solana_keypair::Keypair,
+    solana_pubkey::Pubkey,
+    solana_sdk::program_error::ProgramError,
+    solana_signer::Signer,
+    spl_associated_token_account_mollusk_harness::{
+        build_create_ata_instruction, create_ata_test_accounts, setup_mollusk_with_p_ata_programs,
         CreateAtaInstructionType,
     },
-    solana_pubkey::Pubkey,
-    solana_sdk::{program_error::ProgramError, signature::Keypair, signer::Signer},
     std::vec,
 };
 
@@ -22,7 +24,7 @@ fn test_account_length_too_small_cases() {
         (169, "just under Token-2022 minimum"),
     ];
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let mollusk = setup_mollusk_with_p_ata_programs(&spl_token_2022::id());
     let program_id = spl_associated_token_account::id();
 
     let wallet = Pubkey::new_unique();
@@ -73,7 +75,7 @@ fn test_account_length_boundary_values() {
         (65535, "max over limit"),
     ];
 
-    let mollusk = setup_mollusk_with_programs(&spl_token_2022::id());
+    let mollusk = setup_mollusk_with_p_ata_programs(&spl_token_2022::id());
     let program_id = spl_associated_token_account::id();
 
     let wallet = Pubkey::new_unique();

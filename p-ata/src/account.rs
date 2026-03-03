@@ -3,17 +3,16 @@
 //! This is the only code that uses the `CreatePrefundedAccount` instruction.
 use {
     pinocchio::{
-        account_info::AccountInfo,
-        instruction::{Seed, Signer},
-        pubkey::Pubkey,
+        cpi::{Seed, Signer},
+        error::ProgramError,
         sysvars::rent::Rent,
-        ProgramResult,
+        AccountView, Address, ProgramResult,
     },
     pinocchio_system::instructions::CreateAccount,
 };
 
 #[cfg(feature = "create-prefunded-account")]
-use pinocchio_system::instructions::CreatePrefundedAccount;
+use pinocchio_system::instructions::CreateAccountAllowPrefund;
 
 #[cfg(not(feature = "create-prefunded-account"))]
 use pinocchio_system::instructions::{Allocate, Assign, Transfer};
@@ -40,28 +39,32 @@ use pinocchio_system::instructions::{Allocate, Assign, Transfer};
 /// by this function will fail.
 #[inline(always)]
 pub(crate) fn create_pda_account(
-    payer: &AccountInfo,
+    payer: &AccountView,
     rent: &Rent,
     space: usize,
-    target_program_owner: &Pubkey,
-    pda: &AccountInfo,
+    target_program_owner: &Address,
+    pda: &AccountView,
     pda_signer_seeds: &[Seed; 4],
 ) -> ProgramResult {
     let current_lamports = pda.lamports();
 
     let signer = Signer::from(pda_signer_seeds);
 
-    let required_lamports = rent.minimum_balance(space);
+    let required_lamports = rent
+        .try_minimum_balance(space)
+        .map_err(|_| ProgramError::InvalidInstructionData)?;
 
     if current_lamports > 0 {
         #[cfg(feature = "create-prefunded-account")]
         {
-            CreatePrefundedAccount {
-                from: payer,
+            CreateAccountAllowPrefund {
                 to: pda,
-                lamports: required_lamports.saturating_sub(current_lamports),
                 space: space as u64,
                 owner: target_program_owner,
+                payer_and_lamports: Some((
+                    payer,
+                    required_lamports.saturating_sub(current_lamports),
+                )),
             }
             .invoke_signed(&[signer])
         }

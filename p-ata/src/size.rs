@@ -11,11 +11,10 @@
 //!    the account data length in instruction data to avoid excess compute.
 
 use pinocchio::{
-    account_info::AccountInfo,
     cpi,
-    instruction::{AccountMeta, Instruction},
-    program_error::ProgramError,
-    pubkey::Pubkey,
+    error::ProgramError,
+    instruction::{InstructionAccount, InstructionView},
+    AccountView, Address,
 };
 use pinocchio_log::log;
 
@@ -36,9 +35,9 @@ pub const EXTENSION_PLANNED_ZERO_ACCOUNT_DATA_LENGTH_EXTENSION: u16 = 28;
 
 /// Check if the given program ID is Token-2022
 #[inline(always)]
-pub(crate) fn is_spl_token_2022_program(program_id: &Pubkey) -> bool {
-    const TOKEN_2022_PROGRAM_ID: Pubkey =
-        pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+pub(crate) fn is_spl_token_2022_program(program_id: &Address) -> bool {
+    const TOKEN_2022_PROGRAM_ID: Address =
+        Address::from_str_const("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
     *program_id == TOKEN_2022_PROGRAM_ID
 }
 
@@ -68,7 +67,7 @@ pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> O
     // Start cursor after the account-type discriminator byte
     let mut cursor = ACCOUNT_TYPE_OFFSET + 1;
 
-    while cursor + 4 <= data_len {
+    while data_len.saturating_sub(cursor) >= 4 {
         // Read 4-byte TLV header (little-endian: [type: u16 | length: u16])
         // Avoiding u32::from_le_bytes() here saves about 6 compute units in the
         // `create_extended` bench.
@@ -89,19 +88,19 @@ pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> O
         match extension_type_raw {
             EXTENSION_TRANSFER_FEE_CONFIG => {
                 // TransferFeeConfig → needs TransferFeeAmount (8 bytes data + 4 TLV)
-                account_extensions_size += 4 + 8;
+                account_extensions_size = account_extensions_size.checked_add(12)?;
             }
             EXTENSION_NON_TRANSFERABLE => {
                 // NonTransferable → NonTransferableAccount (0 bytes data + 4 TLV)
-                account_extensions_size += 4;
+                account_extensions_size = account_extensions_size.checked_add(4)?;
             }
             EXTENSION_TRANSFER_HOOK => {
                 // TransferHook → TransferHookAccount (1 byte data + 4 TLV)
-                account_extensions_size += 4 + 1;
+                account_extensions_size = account_extensions_size.checked_add(5)?;
             }
             EXTENSION_PAUSABLE => {
                 // Pausable → PausableAccount (0 bytes data + 4 TLV)
-                account_extensions_size += 4;
+                account_extensions_size = account_extensions_size.checked_add(4)?;
             }
             // All other known extensions
             discriminant
@@ -115,10 +114,10 @@ pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> O
             }
         }
 
-        cursor += 4 + length as usize;
+        cursor = cursor.checked_add(4usize.checked_add(length as usize)?)?;
     }
 
-    Some(BASE_TOKEN_2022_ACCOUNT_SIZE + account_extensions_size)
+    BASE_TOKEN_2022_ACCOUNT_SIZE.checked_add(account_extensions_size)
 }
 
 /// Get the required account size for a mint using inline parsing first,
@@ -126,10 +125,10 @@ pub(crate) fn calculate_account_size_from_mint_extensions(mint_data: &[u8]) -> O
 /// Returns the account size in bytes.
 #[inline(always)]
 pub(crate) fn get_token_account_size(
-    mint_account: &AccountInfo,
-    token_program: &AccountInfo,
+    mint_account: &AccountView,
+    token_program: &AccountView,
 ) -> Result<usize, ProgramError> {
-    if is_spl_token_program(token_program.key()) {
+    if is_spl_token_program(token_program.address()) {
         return Ok(TOKEN_ACCOUNT_SIZE);
     }
 
@@ -139,7 +138,7 @@ pub(crate) fn get_token_account_size(
         return Ok(TOKEN_ACCOUNT_SIZE + 5);
     }
 
-    if is_spl_token_2022_program(token_program.key()) {
+    if is_spl_token_2022_program(token_program.address()) {
         // The mint_data is not verified to be mint data here; the authoritative check
         // is the token program's mint validation during initialization, invoked in
         // `create_and_initialize_ata()`.
@@ -147,7 +146,7 @@ pub(crate) fn get_token_account_size(
         // SAFETY: This is the only place in this function that borrows mint_account data,
         // and the borrow is released when mint_data goes out of scope before any other
         // operations.
-        let mint_data = unsafe { mint_account.borrow_data_unchecked() };
+        let mint_data = unsafe { mint_account.borrow_unchecked() };
         if let Some(size) = calculate_account_size_from_mint_extensions(mint_data) {
             return Ok(size);
         }
@@ -157,14 +156,10 @@ pub(crate) fn get_token_account_size(
     // ImmutableOwner extension is required for Token-2022 Associated Token Accounts
     const INSTRUCTION_DATA: [u8; 3] = [GET_ACCOUNT_DATA_SIZE_DISCRIMINATOR, 7u8, 0u8]; // [7, 0] = ImmutableOwner as u16
 
-    let get_size_metas = &[AccountMeta {
-        pubkey: mint_account.key(),
-        is_writable: false,
-        is_signer: false,
-    }];
+    let get_size_metas = &[InstructionAccount::readonly(mint_account.address())];
 
-    let get_size_ix = Instruction {
-        program_id: token_program.key(),
+    let get_size_ix = InstructionView {
+        program_id: token_program.address(),
         accounts: get_size_metas,
         data: &INSTRUCTION_DATA,
     };
@@ -173,8 +168,8 @@ pub(crate) fn get_token_account_size(
     let return_data = cpi::get_return_data().ok_or_else(|| {
         log!(
             "Error: Token program {} did not return account size data for mint {}",
-            token_program.key(),
-            mint_account.key()
+            token_program.address().as_ref(),
+            mint_account.address().as_ref()
         );
         ProgramError::InvalidAccountData
     })?;
@@ -188,7 +183,7 @@ pub(crate) fn get_token_account_size(
             .map_err(|_| {
                 log!(
                     "Error: Token program {} returned invalid account size data. Expected 8 bytes, got {} bytes",
-                    token_program.key(),
+                    token_program.address().as_ref(),
                     return_data.as_slice().len()
                 );
                 ProgramError::InvalidAccountData
@@ -198,12 +193,17 @@ pub(crate) fn get_token_account_size(
 
 /// Check if a Token-2022 mint has extensions by examining its data length
 #[inline(always)]
-pub(crate) fn token_mint_has_extensions(mint_account: &AccountInfo) -> bool {
+pub(crate) fn token_mint_has_extensions(mint_account: &AccountView) -> bool {
     // If mint data is larger than base, it has extensions
     mint_account.data_len() > MINT_BASE_SIZE
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::arithmetic_side_effects,
+    clippy::default_trait_access,
+    clippy::useless_vec
+)]
 mod tests {
     use super::*;
     use spl_token_2022::extension::ExtensionType;

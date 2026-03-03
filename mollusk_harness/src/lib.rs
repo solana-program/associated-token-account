@@ -1,12 +1,14 @@
 use {
-    mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk, MolluskContext},
+    mollusk_svm::{result::Check, Mollusk, MolluskContext},
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
+    solana_keypair::Keypair,
     solana_program_error::ProgramError,
     solana_program_option::COption,
     solana_program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
+    solana_signer::Signer,
     solana_system_interface::program as system_program,
     solana_sysvar::rent,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
@@ -15,18 +17,27 @@ use {
     std::{collections::HashMap, vec::Vec},
 };
 
-/// Setup mollusk with local ATA and token programs
-pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
+fn setup_mollusk_with_program_name(token_program_id: &Pubkey, program_name: &str) -> Mollusk {
     let ata_program_id = spl_associated_token_account_interface::program::id();
-    let mut mollusk = Mollusk::new(&ata_program_id, "spl_associated_token_account");
+    let mut mollusk = Mollusk::new(&ata_program_id, program_name);
 
     if *token_program_id == spl_token_2022_interface::id() {
-        mollusk.add_program(token_program_id, "spl_token_2022", &LOADER_V3);
+        mollusk_svm_programs_token::token2022::add_program(&mut mollusk);
     } else {
-        mollusk.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
+        mollusk_svm_programs_token::token::add_program(&mut mollusk);
     }
 
     mollusk
+}
+
+/// Setup mollusk with the SPL ATA program and token programs.
+pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
+    setup_mollusk_with_program_name(token_program_id, "spl_associated_token_account")
+}
+
+/// Setup mollusk with the local p-ata program and token programs.
+pub fn setup_mollusk_with_p_ata_programs(token_program_id: &Pubkey) -> Mollusk {
+    setup_mollusk_with_program_name(token_program_id, "pinocchio_ata_program")
 }
 
 /// The type of ATA creation instruction to build.
@@ -585,6 +596,129 @@ impl AccountBuilder {
             mollusk_svm_programs_token::token2022::create_account_for_token_account(account_data)
         } else {
             mollusk_svm_programs_token::token::create_account_for_token_account(account_data)
+        }
+    }
+
+    pub fn mint(decimals: u8, token_program: &Pubkey) -> Account {
+        let mint_data = Mint {
+            mint_authority: COption::None,
+            supply: 0,
+            decimals,
+            is_initialized: true,
+            freeze_authority: COption::None,
+        };
+
+        if *token_program == spl_token_2022_interface::id() {
+            mollusk_svm_programs_token::token2022::create_account_for_mint(mint_data)
+        } else {
+            mollusk_svm_programs_token::token::create_account_for_mint(mint_data)
+        }
+    }
+}
+
+pub mod account_builder {
+    pub use crate::AccountBuilder;
+}
+
+pub const NATIVE_LOADER_ID: Pubkey = mollusk_svm::program::loader_keys::NATIVE_LOADER;
+
+pub fn create_ata_test_accounts(
+    payer: &Keypair,
+    ata_address: Pubkey,
+    wallet: Pubkey,
+    mint: Pubkey,
+    token_program: Pubkey,
+) -> Vec<(Pubkey, Account)> {
+    let token_program_loader = if token_program == spl_token_2022_interface::id() {
+        mollusk_svm::program::loader_keys::LOADER_V3
+    } else {
+        mollusk_svm::program::loader_keys::LOADER_V2
+    };
+
+    let rent = Rent::default();
+    let rent_data = unsafe {
+        core::slice::from_raw_parts(
+            (&rent as *const Rent).cast::<u8>(),
+            core::mem::size_of::<Rent>(),
+        )
+        .to_vec()
+    };
+
+    vec![
+        (
+            payer.pubkey(),
+            Account::new(10_000_000_000, 0, &system_program::id()),
+        ),
+        (ata_address, Account::new(0, 0, &system_program::id())),
+        (
+            wallet,
+            Account::new(1_000_000_000, 0, &system_program::id()),
+        ),
+        (mint, AccountBuilder::mint(6, &token_program)),
+        (
+            system_program::id(),
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: NATIVE_LOADER_ID,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        (
+            token_program,
+            Account {
+                lamports: 0,
+                data: Vec::new(),
+                owner: token_program_loader,
+                executable: true,
+                rent_epoch: 0,
+            },
+        ),
+        (
+            rent::id(),
+            Account {
+                lamports: 1_009_200,
+                data: rent_data,
+                owner: solana_pubkey::pubkey!("Sysvar1111111111111111111111111111111111111"),
+                executable: false,
+                rent_epoch: 0,
+            },
+        ),
+    ]
+}
+
+pub fn validate_token_account_structure(data: &[u8], mint: &Pubkey, owner: &Pubkey) -> bool {
+    if data.len() < TokenAccount::LEN {
+        return false;
+    }
+    let Ok(account) = TokenAccount::unpack(data) else {
+        return false;
+    };
+
+    account.mint == *mint && account.owner == *owner && account.state == AccountState::Initialized
+}
+
+pub mod test_helpers {
+    pub mod address_gen {
+        use solana_pubkey::Pubkey;
+
+        pub fn derive_address_with_bump(
+            seeds: &[&[u8]; 3],
+            bump: u8,
+            program_id: &Pubkey,
+        ) -> Pubkey {
+            const PDA_MARKER: &[u8] = b"ProgramDerivedAddress";
+            let bump_seed = [bump];
+            let hash = solana_sha256_hasher::hashv(&[
+                seeds[0],
+                seeds[1],
+                seeds[2],
+                &bump_seed,
+                program_id.as_ref(),
+                PDA_MARKER,
+            ]);
+            Pubkey::new_from_array(hash.to_bytes())
         }
     }
 }

@@ -9,10 +9,12 @@ use {
         recover::process_recover_nested,
     },
     pinocchio::{
-        account_info::AccountInfo, no_allocator, nostd_panic_handler, program_entrypoint,
-        program_error::ProgramError, pubkey::Pubkey, ProgramResult,
+        error::ProgramError, no_allocator, program_entrypoint, AccountView, Address, ProgramResult,
     },
 };
+
+#[cfg(not(target_os = "solana"))]
+use pinocchio::nostd_panic_handler;
 
 /// Maximum allowed account `known_account_data_length` to prevent creation
 /// of accounts that are expensive to work with. This mitigates potential
@@ -25,6 +27,7 @@ pub const MAX_SANE_ACCOUNT_LENGTH: u16 = 1024;
 
 program_entrypoint!(process_instruction);
 no_allocator!();
+#[cfg(not(target_os = "solana"))]
 nostd_panic_handler!();
 
 /// Main instruction processor for the p-ATA program.
@@ -67,8 +70,8 @@ nostd_panic_handler!();
 /// - `token_account_len` is bounded by `MAX_SANE_ACCOUNT_LENGTH`
 #[inline(always)]
 pub fn process_instruction(
-    program_id: &Pubkey,
-    accounts: &[AccountInfo],
+    program_id: &Address,
+    accounts: &[AccountView],
     data: &[u8],
 ) -> ProgramResult {
     match data {
@@ -84,10 +87,10 @@ pub fn process_instruction(
                 2 => {
                     return match instruction_data {
                         [] => process_recover_nested(program_id, accounts),
-                        _ => Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
+                        _ => Err(pinocchio::error::ProgramError::InvalidInstructionData),
                     }
                 }
-                _ => return Err(pinocchio::program_error::ProgramError::InvalidInstructionData),
+                _ => return Err(pinocchio::error::ProgramError::InvalidInstructionData),
             };
 
             let create_accounts = parse_create_accounts(accounts)?;

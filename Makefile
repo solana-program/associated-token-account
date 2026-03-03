@@ -9,7 +9,10 @@ nightly = +${RUST_TOOLCHAIN_NIGHTLY}
 # in the case where there is no subdirectory.
 pattern-dir = $(firstword $(subst -, ,$1))
 find-pattern-dir = $(findstring $(call pattern-dir,$1)-,$1)
-make-path = $(subst $(call find-pattern-dir,$1),$(subst -,/,$(call find-pattern-dir,$1)),$1)
+make-path = $(if $(filter p-ata,$1),p-ata,$(subst $(call find-pattern-dir,$1),$(subst -,/,$(call find-pattern-dir,$1)),$1))
+test-features = $(if $(filter p-ata,$1),--features std,)
+test-pre = $(if $(filter p-ata,$1),[ -f $(PWD)/p-ata/target/deploy/pinocchio_ata_program.so ] || cargo build-sbf --manifest-path $(call make-path,$1)/Cargo.toml &&,$(if $(filter program,$1),[ -f $(PWD)/target/deploy/spl_associated_token_account.so ] || cargo build-sbf --manifest-path $(call make-path,$1)/Cargo.toml &&,))
+test-sbf-out-dir = $(if $(filter p-ata,$1),$(PWD)/p-ata/target/deploy,$(PWD)/target/deploy)
 
 rust-toolchain-nightly:
 	@echo ${RUST_TOOLCHAIN_NIGHTLY}
@@ -80,7 +83,7 @@ test-doc-%:
 	cargo $(nightly) test --doc --all-features --manifest-path $(call make-path,$*)/Cargo.toml $(ARGS)
 
 test-%:
-	SBF_OUT_DIR=$(PWD)/target/deploy cargo $(nightly) test --manifest-path $(call make-path,$*)/Cargo.toml $(ARGS)
+	$(call test-pre,$*) SBF_OUT_DIR=$(call test-sbf-out-dir,$*) cargo $(nightly) test --manifest-path $(call make-path,$*)/Cargo.toml $(call test-features,$*) $(ARGS)
 
 # Helpers for publishing
 tag-name = $(lastword $(subst /, ,$(call make-path,$1)))

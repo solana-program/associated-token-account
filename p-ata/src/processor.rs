@@ -16,19 +16,16 @@ use {
     crate::{account::create_pda_account, size::get_token_account_size},
     core::mem::MaybeUninit,
     pinocchio::{
-        account_info::AccountInfo,
-        cpi,
-        instruction::{AccountMeta, Instruction},
-        program_error::ProgramError,
-        pubkey::{find_program_address, Pubkey},
+        cpi::{self, Seed},
+        error::ProgramError,
+        instruction::{InstructionAccount, InstructionView},
         sysvars::{rent::Rent, Sysvar},
-        ProgramResult,
+        AccountView, Address, ProgramResult,
     },
     pinocchio_log::log,
-    pinocchio_pubkey::derive_address,
-    spl_token_interface::state::{
-        account::Account as TokenAccount, mint::Mint, multisig::Multisig, Transmutable,
-    },
+    solana_program_pack::Pack,
+    solana_sha256_hasher::hashv,
+    spl_token_interface::state::{Account as TokenAccount, Mint, Multisig},
 };
 
 #[cfg(target_os = "solana")]
@@ -40,8 +37,19 @@ pub const TRANSFER_CHECKED_DISCRIMINATOR: u8 = 12;
 
 // Token-2022 AccountType::Account discriminator value
 const ACCOUNTTYPE_ACCOUNT: u8 = 2;
+const TOKEN_ACCOUNT_MINT_OFFSET: usize = 0;
+const TOKEN_ACCOUNT_OWNER_OFFSET: usize = 32;
+const TOKEN_ACCOUNT_AMOUNT_OFFSET: usize = 64;
+const MINT_DECIMALS_OFFSET: usize = 44;
 
 pub const INITIALIZE_IMMUTABLE_OWNER_DATA: [u8; 1] = [INITIALIZE_IMMUTABLE_OWNER_DISCRIMINATOR];
+
+#[derive(Clone, Copy)]
+pub(crate) struct ParsedTokenAccount {
+    pub mint: [u8; 32],
+    pub owner: [u8; 32],
+    pub amount: u64,
+}
 
 // Compile-time verifications
 const _: () = assert!(
@@ -52,13 +60,13 @@ const _: () = assert!(Multisig::LEN == 355, "Multisig size changed unexpectedly"
 
 /// Parsed ATA accounts for create operations
 pub struct CreateAccounts<'a> {
-    pub payer: &'a AccountInfo,
-    pub associated_token_account_to_create: &'a AccountInfo,
-    pub wallet: &'a AccountInfo,
-    pub mint: &'a AccountInfo,
-    pub system_program: &'a AccountInfo,
-    pub token_program: &'a AccountInfo,
-    pub rent_sysvar: Option<&'a AccountInfo>,
+    pub payer: &'a AccountView,
+    pub associated_token_account_to_create: &'a AccountView,
+    pub wallet: &'a AccountView,
+    pub mint: &'a AccountView,
+    pub system_program: &'a AccountView,
+    pub token_program: &'a AccountView,
+    pub rent_sysvar: Option<&'a AccountView>,
 }
 
 /// Derive canonical ATA PDA from wallet, token program, and mint.
@@ -76,23 +84,69 @@ pub struct CreateAccounts<'a> {
 /// `(address, bump)` - The canonical PDA address and its bump seed
 #[inline(always)]
 pub(crate) fn derive_canonical_ata_pda(
-    wallet: &Pubkey,
-    token_program: &Pubkey,
-    mint: &Pubkey,
-    program_id: &Pubkey,
-) -> (Pubkey, u8) {
-    find_program_address(
-        &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()],
-        program_id,
-    )
+    wallet: &Address,
+    token_program: &Address,
+    mint: &Address,
+    program_id: &Address,
+) -> (Address, u8) {
+    let seeds = &[wallet.as_ref(), token_program.as_ref(), mint.as_ref()];
+    let mut bump = u8::MAX;
+    loop {
+        let address = derive_address_unchecked(seeds, Some(bump), program_id);
+        if is_off_curve(&address) {
+            return (address, bump);
+        }
+
+        if bump == 0 {
+            panic!("Unable to derive off-curve ATA PDA");
+        }
+        bump = bump.checked_sub(1).expect("bump underflow");
+    }
+}
+
+#[inline(always)]
+fn derive_address_with_bump(
+    seeds: &[&[u8]; 3],
+    bump: u8,
+    program_id: &Address,
+) -> Result<Address, ProgramError> {
+    let address = derive_address_unchecked(seeds, Some(bump), program_id);
+    if !is_off_curve(&address) {
+        return Err(ProgramError::InvalidSeeds);
+    }
+    Ok(address)
+}
+
+#[inline(always)]
+fn derive_address_unchecked(seeds: &[&[u8]; 3], bump: Option<u8>, program_id: &Address) -> Address {
+    const PDA_MARKER: &[u8] = b"ProgramDerivedAddress";
+    let hash = match bump {
+        Some(bump_seed) => {
+            let bump_seed = [bump_seed];
+            hashv(&[
+                seeds[0],
+                seeds[1],
+                seeds[2],
+                &bump_seed,
+                program_id.as_ref(),
+                PDA_MARKER,
+            ])
+        }
+        None => hashv(&[
+            seeds[0],
+            seeds[1],
+            seeds[2],
+            program_id.as_ref(),
+            PDA_MARKER,
+        ]),
+    };
+    Address::from(hash.to_bytes())
 }
 
 /// Check if the given program ID is SPL Token (not Token-2022)
 #[inline(always)]
-pub(crate) fn is_spl_token_program(program_id: &Pubkey) -> bool {
-    const SPL_TOKEN_PROGRAM_ID: Pubkey =
-        pinocchio_pubkey::pubkey!("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
-    *program_id == SPL_TOKEN_PROGRAM_ID
+pub(crate) fn is_spl_token_program(program_id: &Address) -> bool {
+    program_id.as_ref() == spl_token_interface::id().as_ref()
 }
 
 /// Check if account data represents an initialized token account.
@@ -136,61 +190,79 @@ pub(crate) fn valid_token_account_data(account_data: &[u8]) -> bool {
 
 /// Get mint reference from account info
 #[inline(always)]
-pub(crate) fn get_decimals_from_mint(account: &AccountInfo) -> Result<u8, ProgramError> {
-    let mint_data_slice = account.try_borrow_data()?;
-    match unsafe { spl_token_interface::state::load_unchecked::<Mint>(&mint_data_slice) } {
-        Ok(mint) => Ok(mint.decimals),
-        Err(err) => {
-            const MINT_BASE_SIZE: usize = core::mem::size_of::<Mint>();
-            log!(
-                "Error: Mint account data too small. Expected at least {} bytes, found {} bytes",
-                MINT_BASE_SIZE,
-                mint_data_slice.len()
-            );
-            Err(err)
-        }
+pub(crate) fn get_decimals_from_mint(account: &AccountView) -> Result<u8, ProgramError> {
+    let mint_data_slice = account.try_borrow()?;
+    const MINT_BASE_SIZE: usize = core::mem::size_of::<Mint>();
+    if mint_data_slice.len() < MINT_BASE_SIZE {
+        log!(
+            "Error: Mint account data too small. Expected at least {} bytes, found {} bytes",
+            MINT_BASE_SIZE,
+            mint_data_slice.len()
+        );
+        return Err(ProgramError::InvalidAccountData);
     }
+    Ok(mint_data_slice[MINT_DECIMALS_OFFSET])
 }
 
 /// Get token account reference with validation. Fails if a mutable borrow
 /// of the account has occurred.
 #[inline(always)]
-pub(crate) fn load_token_account(account: &AccountInfo) -> Result<&TokenAccount, ProgramError> {
-    let account_data = account.try_borrow_data()?;
+pub(crate) fn load_token_account(
+    account: &AccountView,
+) -> Result<ParsedTokenAccount, ProgramError> {
+    let account_data = account.try_borrow()?;
     if !valid_token_account_data(&account_data) {
         return Err(ProgramError::InvalidAccountData);
     }
-    // SAFETY: We've validated the account data structure above
-    unsafe { Ok(&*(account_data.as_ptr() as *const TokenAccount)) }
+    Ok(parse_token_account(account_data.as_ref()))
 }
 
 /// Get token account reference with validation.
 /// SAFETY: Caller must ensure no mutable borrows of `account`.
 #[inline(always)]
 pub(crate) unsafe fn load_token_account_unchecked(
-    account: &AccountInfo,
-) -> Result<&TokenAccount, ProgramError> {
-    let account_data = unsafe { account.borrow_data_unchecked() };
+    account: &AccountView,
+) -> Result<ParsedTokenAccount, ProgramError> {
+    let account_data = unsafe { account.borrow_unchecked() };
 
     if !valid_token_account_data(account_data) {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // SAFETY: We've validated the account data structure above
-    unsafe { Ok(&*(account_data.as_ptr() as *const TokenAccount)) }
+    Ok(parse_token_account(account_data))
+}
+
+#[inline(always)]
+fn parse_token_account(account_data: &[u8]) -> ParsedTokenAccount {
+    let mut mint = [0u8; 32];
+    mint.copy_from_slice(&account_data[TOKEN_ACCOUNT_MINT_OFFSET..TOKEN_ACCOUNT_MINT_OFFSET + 32]);
+    let mut owner = [0u8; 32];
+    owner.copy_from_slice(
+        &account_data[TOKEN_ACCOUNT_OWNER_OFFSET..TOKEN_ACCOUNT_OWNER_OFFSET + 32],
+    );
+    let mut amount_le = [0u8; 8];
+    amount_le.copy_from_slice(
+        &account_data[TOKEN_ACCOUNT_AMOUNT_OFFSET..TOKEN_ACCOUNT_AMOUNT_OFFSET + 8],
+    );
+
+    ParsedTokenAccount {
+        mint,
+        owner,
+        amount: u64::from_le_bytes(amount_le),
+    }
 }
 
 /// Validate token account owner matches expected owner
 #[inline(always)]
 pub(crate) fn validate_token_account_owner(
-    account: &TokenAccount,
-    expected_owner: &Pubkey,
+    account: &ParsedTokenAccount,
+    expected_owner: &Address,
 ) -> Result<(), ProgramError> {
-    if account.owner != *expected_owner {
+    if account.owner.as_ref() != expected_owner.as_ref() {
         log!(
             "Error: Token account owner mismatch. Expected: {}, Found: {}",
-            expected_owner,
-            &account.owner
+            expected_owner.as_ref(),
+            account.owner.as_ref()
         );
         return Err(ProgramError::IllegalOwner);
     }
@@ -200,14 +272,14 @@ pub(crate) fn validate_token_account_owner(
 /// Validate token account mint matches expected mint
 #[inline(always)]
 pub(crate) fn validate_token_account_mint(
-    account: &TokenAccount,
-    expected_mint: &Pubkey,
+    account: &ParsedTokenAccount,
+    expected_mint: &Address,
 ) -> Result<(), ProgramError> {
-    if account.mint != *expected_mint {
+    if account.mint.as_ref() != expected_mint.as_ref() {
         log!(
             "Error: Token account mint mismatch. Expected: {}, Found: {}",
-            expected_mint,
-            &account.mint
+            expected_mint.as_ref(),
+            account.mint.as_ref()
         );
         return Err(ProgramError::InvalidAccountData);
     }
@@ -216,7 +288,7 @@ pub(crate) fn validate_token_account_mint(
 
 /// Build InitializeAccount3 instruction data
 #[inline(always)]
-pub(crate) fn build_initialize_account3_data(owner: &Pubkey) -> [u8; 33] {
+pub(crate) fn build_initialize_account3_data(owner: &Address) -> [u8; 33] {
     let mut data = MaybeUninit::<[u8; 33]>::uninit();
     let data_ptr = data.as_mut_ptr() as *mut u8;
     // SAFETY: We initialize all 33 bytes before calling assume_init()
@@ -244,8 +316,8 @@ pub(crate) fn build_transfer_checked_data(amount: u64, decimals: u8) -> [u8; 10]
 /// Parse and validate the standard Create account layout.
 #[inline(always)]
 pub(crate) fn parse_create_accounts(
-    accounts: &[AccountInfo],
-) -> Result<CreateAccounts, ProgramError> {
+    accounts: &[AccountView],
+) -> Result<CreateAccounts<'_>, ProgramError> {
     let [payer, associated_token_account_to_create, wallet, mint, system_program, token_program, maybe_rent_sysvar @ ..] =
         accounts
     else {
@@ -280,68 +352,56 @@ pub(crate) fn parse_create_accounts(
 /// SAFETY: Caller must ensure no mutable borrows of `associated_token_account` have occurred.
 #[inline(always)]
 pub(crate) unsafe fn check_idempotent_account(
-    associated_token_account: &AccountInfo,
-    wallet: &AccountInfo,
-    mint_account: &AccountInfo,
-    token_program: &AccountInfo,
-    program_id: &Pubkey,
+    associated_token_account: &AccountView,
+    wallet: &AccountView,
+    mint_account: &AccountView,
+    token_program: &AccountView,
+    program_id: &Address,
     expected_bump: Option<u8>,
 ) -> Result<bool, ProgramError> {
-    if associated_token_account.is_owned_by(token_program.key()) {
+    if associated_token_account.owned_by(token_program.address()) {
         // SAFETY: no mutable borrows of the associated_token_account have occurred in this
         // function. Caller ensures that none have occurred in caller scope.
         let ata_state = unsafe { load_token_account_unchecked(associated_token_account)? };
 
-        validate_token_account_owner(ata_state, wallet.key())?;
-        validate_token_account_mint(ata_state, mint_account.key())?;
+        validate_token_account_owner(&ata_state, wallet.address())?;
+        validate_token_account_mint(&ata_state, mint_account.address())?;
 
         match expected_bump {
             Some(bump) => {
                 let seeds: &[&[u8]; 3] = &[
-                    wallet.key().as_ref(),
-                    token_program.key().as_ref(),
-                    mint_account.key().as_ref(),
+                    wallet.address().as_ref(),
+                    token_program.address().as_ref(),
+                    mint_account.address().as_ref(),
                 ];
 
                 // Check if a better canonical bump exists
                 reject_if_better_valid_bump_exists(seeds, program_id, bump)?;
 
-                let maybe_canonical_address = derive_address::<3>(seeds, Some(bump), program_id);
-
-                // We must check that the actual derived address is off-curve,
-                // since it will not fail downstream as in Create paths.
-                // Potential problem if skipping this is demonstrated in
-                // tests/bump/test_idemp_oncurve_attack.rs
-                if !is_off_curve(&maybe_canonical_address) {
-                    log!(
-                        "Error: Invalid bump: bump {} results in on curve address.",
-                        bump,
-                    );
-                    return Err(ProgramError::InvalidSeeds);
-                }
-                if maybe_canonical_address != *associated_token_account.key() {
+                let maybe_canonical_address = derive_address_with_bump(seeds, bump, program_id)?;
+                if maybe_canonical_address != *associated_token_account.address() {
                     log!(
                         "Error: Address mismatch: bump {} derives address which does not match provided associated token account address. Expected: {}, Found: {}",
                         bump,
-                        &maybe_canonical_address,
-                        associated_token_account.key()
+                        maybe_canonical_address.as_ref(),
+                        associated_token_account.address().as_ref()
                     );
                     return Err(ProgramError::InvalidSeeds);
                 }
             }
             None => {
                 let (canonical_address, _bump) = derive_canonical_ata_pda(
-                    wallet.key(),
-                    token_program.key(),
-                    mint_account.key(),
+                    wallet.address(),
+                    token_program.address(),
+                    mint_account.address(),
                     program_id,
                 );
 
-                if canonical_address != *associated_token_account.key() {
+                if canonical_address != *associated_token_account.address() {
                     log!(
                         "Error: Address mismatch: derived associated token address does not match provided address. Expected: {}, Found: {}",
-                        &canonical_address,
-                        associated_token_account.key()
+                        canonical_address.as_ref(),
+                        associated_token_account.address().as_ref()
                     );
                     return Err(ProgramError::InvalidSeeds);
                 }
@@ -368,8 +428,8 @@ pub(crate) unsafe fn check_idempotent_account(
 /// The account size in bytes, or an error if size calculation fails.
 #[inline(always)]
 pub(crate) fn resolve_token_account_space(
-    token_program: &AccountInfo,
-    mint_account: &AccountInfo,
+    token_program: &AccountView,
+    mint_account: &AccountView,
     known_token_account_len: Option<usize>,
 ) -> Result<usize, ProgramError> {
     match known_token_account_len {
@@ -382,38 +442,39 @@ pub(crate) fn resolve_token_account_space(
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub(crate) fn create_and_initialize_ata(
-    payer: &AccountInfo,
-    associated_token_account: &AccountInfo,
-    wallet: &AccountInfo,
-    mint_account: &AccountInfo,
-    token_program: &AccountInfo,
+    payer: &AccountView,
+    associated_token_account: &AccountView,
+    wallet: &AccountView,
+    mint_account: &AccountView,
+    token_program: &AccountView,
     rent: &Rent,
     bump: u8,
     space: usize,
 ) -> ProgramResult {
-    let bump_slice = &[bump];
-    let seeds = pinocchio::seeds!(
-        wallet.key().as_ref(),
-        token_program.key().as_ref(),
-        mint_account.key().as_ref(),
-        bump_slice
-    );
+    let bump_slice = [bump];
+    let seeds: [Seed<'_>; 4] = [
+        Seed::from(wallet.address().as_ref()),
+        Seed::from(token_program.address().as_ref()),
+        Seed::from(mint_account.address().as_ref()),
+        Seed::from(&bump_slice),
+    ];
 
     create_pda_account(
         payer,
         rent,
         space,
-        token_program.key(),
+        token_program.address(),
         associated_token_account,
         &seeds,
     )?;
 
     // Initialize ImmutableOwner for non-SPL Token programs (future compatible)
-    if !is_spl_token_program(token_program.key()) {
-        let initialize_immutable_owner_metas =
-            &[AccountMeta::writable(associated_token_account.key())];
-        let init_immutable_owner_ix = Instruction {
-            program_id: token_program.key(),
+    if !is_spl_token_program(token_program.address()) {
+        let initialize_immutable_owner_metas = &[InstructionAccount::writable(
+            associated_token_account.address(),
+        )];
+        let init_immutable_owner_ix = InstructionView {
+            program_id: token_program.address(),
             accounts: initialize_immutable_owner_metas,
             data: &INITIALIZE_IMMUTABLE_OWNER_DATA,
         };
@@ -421,13 +482,13 @@ pub(crate) fn create_and_initialize_ata(
     }
 
     // Initialize account via InitializeAccount3.
-    let initialize_account_instr_data = build_initialize_account3_data(wallet.key());
+    let initialize_account_instr_data = build_initialize_account3_data(wallet.address());
     let initialize_account_metas = &[
-        AccountMeta::writable(associated_token_account.key()),
-        AccountMeta::readonly(mint_account.key()),
+        InstructionAccount::writable(associated_token_account.address()),
+        InstructionAccount::readonly(mint_account.address()),
     ];
-    let init_ix = Instruction {
-        program_id: token_program.key(),
+    let init_ix = InstructionView {
+        program_id: token_program.address(),
         accounts: initialize_account_metas,
         data: &initialize_account_instr_data,
     };
@@ -440,11 +501,10 @@ pub(crate) fn create_and_initialize_ata(
 /// Returns `true` if the address is off-curve, `false` if on-curve.
 ///
 /// - **On-chain (Solana)**: Uses `sol_curve_validate_point` syscall
-/// - **Tests**: Uses curve25519-dalek to replicate on-chain behavior  
-/// - **Other builds**: Returns `false`
+/// - **Host builds**: Uses curve25519-dalek to replicate on-chain behavior
 #[inline(always)]
 #[allow(unused_variables)]
-pub fn is_off_curve(address: &Pubkey) -> bool {
+pub fn is_off_curve(address: &Address) -> bool {
     #[cfg(target_os = "solana")]
     {
         const ED25519_CURVE_ID: u64 = 0;
@@ -462,19 +522,16 @@ pub fn is_off_curve(address: &Pubkey) -> bool {
 
         syscall_result == 1
     }
-    #[cfg(all(not(target_os = "solana"), test))]
+    #[cfg(not(target_os = "solana"))]
     {
         // Host build (tests, benches): replicate the on-chain `sol_curve_validate_point` logic
         // using curve25519-dalek. A pubkey is "off-curve" if it cannot be decompressed into
         // an Edwards point.
 
-        curve25519_dalek::edwards::CompressedEdwardsY(*address)
-            .decompress()
-            .is_none()
-    }
-    #[cfg(all(not(target_os = "solana"), not(test)))]
-    {
-        false
+        match curve25519_dalek::edwards::CompressedEdwardsY::from_slice(address.as_array()) {
+            Ok(point) => point.decompress().is_none(),
+            Err(_) => true,
+        }
     }
 }
 
@@ -503,7 +560,7 @@ pub fn is_off_curve(address: &Pubkey) -> bool {
 #[inline(always)]
 pub(crate) fn reject_if_better_valid_bump_exists(
     seeds: &[&[u8]; 3],
-    program_id: &Pubkey,
+    program_id: &Address,
     expected_bump: u8,
 ) -> Result<(), ProgramError> {
     // Optimization: Only verify no better bump exists. Don't require expected_bump to
@@ -514,12 +571,11 @@ pub(crate) fn reject_if_better_valid_bump_exists(
     // (i.e. syscalls that will fail) or by calling `is_off_curve`.
     let mut better_bump = 255;
     while better_bump > expected_bump {
-        let maybe_better_address = derive_address::<3>(seeds, Some(better_bump), program_id);
-        if is_off_curve(&maybe_better_address) {
-            log!("Canonical address does not match provided address. Canonical bump is {}, with address {}.", better_bump, &maybe_better_address);
+        if let Ok(maybe_better_address) = derive_address_with_bump(seeds, better_bump, program_id) {
+            log!("Canonical address does not match provided address. Canonical bump is {}, with address {}.", better_bump, maybe_better_address.as_ref());
             return Err(ProgramError::InvalidInstructionData);
         }
-        better_bump -= 1;
+        better_bump = better_bump.checked_sub(1).expect("better_bump underflow");
     }
     Ok(())
 }
@@ -537,7 +593,7 @@ pub(crate) fn reject_if_better_valid_bump_exists(
 /// and call InitializeImmutableOwner followed by InitializeAccount3.
 #[inline(always)]
 pub(crate) fn process_create_associated_token_account(
-    program_id: &Pubkey,
+    program_id: &Address,
     create_accounts: &CreateAccounts,
     expected_bump: Option<u8>,
     known_token_account_len: Option<usize>,
@@ -547,9 +603,9 @@ pub(crate) fn process_create_associated_token_account(
             // Check if a better canonical bump exists
             reject_if_better_valid_bump_exists(
                 &[
-                    create_accounts.wallet.key().as_ref(),
-                    create_accounts.token_program.key().as_ref(),
-                    create_accounts.mint.key().as_ref(),
+                    create_accounts.wallet.address().as_ref(),
+                    create_accounts.token_program.address().as_ref(),
+                    create_accounts.mint.address().as_ref(),
                 ],
                 program_id,
                 provided_bump,
@@ -558,9 +614,9 @@ pub(crate) fn process_create_associated_token_account(
         }
         None => {
             let (_address, computed_bump) = derive_canonical_ata_pda(
-                create_accounts.wallet.key(),
-                create_accounts.token_program.key(),
-                create_accounts.mint.key(),
+                create_accounts.wallet.address(),
+                create_accounts.token_program.address(),
+                create_accounts.mint.address(),
                 program_id,
             );
             computed_bump
@@ -575,7 +631,7 @@ pub(crate) fn process_create_associated_token_account(
 
     match create_accounts.rent_sysvar {
         Some(rent_account) => {
-            let rent_ref = unsafe { Rent::from_account_info_unchecked(rent_account) }?;
+            let rent_ref = unsafe { Rent::from_account_view_unchecked(rent_account) }?;
             create_and_initialize_ata(
                 create_accounts.payer,
                 create_accounts.associated_token_account_to_create,
@@ -606,22 +662,20 @@ pub(crate) fn process_create_associated_token_account(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ata_mollusk_harness::validate_token_account_structure;
     use core::ptr;
+    use spl_associated_token_account_mollusk_harness::validate_token_account_structure;
     use std::vec::Vec;
     use {
-        pinocchio::{program_error::ProgramError, pubkey::Pubkey},
+        pinocchio::{account::RuntimeAccount, error::ProgramError, AccountView, Address},
         solana_keypair::Keypair,
-        solana_program::pubkey::Pubkey as SolanaPubkey,
+        solana_pubkey::Pubkey as SolanaPubkey,
         solana_signer::Signer,
-        spl_token_interface::state::{
-            account::Account as TokenAccount, multisig::Multisig, Transmutable,
-        },
+        spl_token_interface::state::{Account as TokenAccount, Multisig},
         std::{collections::HashSet, vec},
     };
 
     // Test utility functions
-    fn create_token_account_data(mint: &Pubkey, owner: &Pubkey, amount: u64) -> Vec<u8> {
+    fn create_token_account_data(mint: &Address, owner: &Address, amount: u64) -> Vec<u8> {
         let mut data = vec![0u8; TokenAccount::LEN];
 
         // Set mint (bytes 0-31)
@@ -644,7 +698,7 @@ mod tests {
         let program_id = SolanaPubkey::new_unique();
         let seeds = &[b"test_seed" as &[u8]];
         let (off_curve_address, _) = SolanaPubkey::find_program_address(seeds, &program_id);
-        let pinocchio_format = Pubkey::from(off_curve_address.to_bytes());
+        let pinocchio_format = Address::from(off_curve_address.to_bytes());
         let result = is_off_curve(&pinocchio_format);
         assert!(result);
     }
@@ -654,7 +708,7 @@ mod tests {
         // Generate a random address
         let wallet = Keypair::new();
         let address = wallet.pubkey();
-        let pinocchio_format = Pubkey::from(address.to_bytes());
+        let pinocchio_format = Address::from(address.to_bytes());
         let result = is_off_curve(&pinocchio_format);
         assert!(!result);
     }
@@ -716,49 +770,55 @@ mod tests {
 
     #[test]
     fn test_validate_token_account_owner() {
-        let owner1 = Pubkey::from([1u8; 32]);
-        let owner2 = Pubkey::from([2u8; 32]);
-        let mint = Pubkey::from([3u8; 32]);
+        let owner1 = Address::from([1u8; 32]);
+        let owner2 = Address::from([2u8; 32]);
+        let mint = Address::from([3u8; 32]);
         let data = create_token_account_data(&mint, &owner1, 1000);
-        let account: &TokenAccount = unsafe { &*(data.as_ptr() as *const TokenAccount) };
+        let account = parse_token_account(&data);
 
-        assert!(validate_token_account_owner(account, &owner1).is_ok());
+        assert!(validate_token_account_owner(&account, &owner1).is_ok());
         assert_eq!(
-            validate_token_account_owner(account, &owner2).unwrap_err(),
+            validate_token_account_owner(&account, &owner2).unwrap_err(),
             ProgramError::IllegalOwner
         );
     }
 
     #[test]
     fn test_validate_token_account_mint() {
-        let mint1 = Pubkey::from([1u8; 32]);
-        let mint2 = Pubkey::from([2u8; 32]);
-        let owner = Pubkey::from([3u8; 32]);
+        let mint1 = Address::from([1u8; 32]);
+        let mint2 = Address::from([2u8; 32]);
+        let owner = Address::from([3u8; 32]);
         let data = create_token_account_data(&mint1, &owner, 1000);
-        let account: &TokenAccount = unsafe { &*(data.as_ptr() as *const TokenAccount) };
+        let account = parse_token_account(&data);
 
-        assert!(validate_token_account_mint(account, &mint1).is_ok());
+        assert!(validate_token_account_mint(&account, &mint1).is_ok());
         assert_eq!(
-            validate_token_account_mint(account, &mint2).unwrap_err(),
+            validate_token_account_mint(&account, &mint2).unwrap_err(),
             ProgramError::InvalidAccountData
         );
     }
 
     #[test]
     fn test_create_token_account_data_structure() {
-        let mint = Pubkey::from([1u8; 32]);
-        let owner = Pubkey::from([2u8; 32]);
+        let mint = Address::from([1u8; 32]);
+        let owner = Address::from([2u8; 32]);
         let amount = 1000u64;
 
         let data = create_token_account_data(&mint, &owner, amount);
+        let mint_pubkey = SolanaPubkey::new_from_array(mint.to_bytes());
+        let owner_pubkey = SolanaPubkey::new_from_array(owner.to_bytes());
 
-        assert!(validate_token_account_structure(&data, &mint, &owner));
+        assert!(validate_token_account_structure(
+            &data,
+            &mint_pubkey,
+            &owner_pubkey
+        ));
         assert!(valid_token_account_data(&data));
     }
 
     #[test]
     fn test_build_initialize_account3_data_basic() {
-        let owner = Pubkey::from([1u8; 32]);
+        let owner = Address::from([1u8; 32]);
         let data = build_initialize_account3_data(&owner);
 
         assert_eq!(data.len(), 33);
@@ -768,8 +828,8 @@ mod tests {
 
     #[test]
     fn test_build_initialize_account3_data_different_owners() {
-        let owner1 = Pubkey::from([1u8; 32]);
-        let owner2 = Pubkey::from([2u8; 32]);
+        let owner1 = Address::from([1u8; 32]);
+        let owner2 = Address::from([2u8; 32]);
 
         let data1 = build_initialize_account3_data(&owner1);
         let data2 = build_initialize_account3_data(&owner2);
@@ -834,7 +894,7 @@ mod tests {
 
     #[test]
     fn test_instruction_data_deterministic() {
-        let owner = Pubkey::from([42u8; 32]);
+        let owner = Address::from([42u8; 32]);
         let amount = 1000u64;
         let decimals = 6u8;
 
@@ -871,41 +931,27 @@ mod tests {
         );
     }
 
-    // Test utility - AccountLayout structure for creating test accounts
-    #[repr(C)]
-    struct AccountLayout {
-        borrow_state: u8,
-        is_signer: u8,
-        is_writable: u8,
-        executable: u8,
-        resize_delta: u32,
-        key: Pubkey,
-        owner: Pubkey,
-        lamports: u64,
-        data_len: u64,
-    }
-
     fn with_test_accounts_for_parsing<F, R>(count: usize, test_fn: F) -> R
     where
-        F: FnOnce(&[AccountInfo]) -> R,
+        F: FnOnce(&[AccountView]) -> R,
     {
-        let mut account_data: Vec<AccountLayout> = (0..count)
-            .map(|i| AccountLayout {
+        let mut account_data: Vec<RuntimeAccount> = (0..count)
+            .map(|i| RuntimeAccount {
                 borrow_state: 0b_1111_1111,
                 is_signer: 0,
                 is_writable: 0,
                 executable: 0,
                 resize_delta: 0,
-                key: Pubkey::from([i as u8; 32]),
-                owner: Pubkey::from([(i as u8).wrapping_add(1); 32]),
+                address: Address::from([i as u8; 32]),
+                owner: Address::from([(i as u8).wrapping_add(1); 32]),
                 lamports: 0,
                 data_len: 0,
             })
             .collect();
 
-        let account_infos: Vec<AccountInfo> = account_data
+        let account_infos: Vec<AccountView> = account_data
             .iter_mut()
-            .map(|layout| unsafe { std::mem::transmute::<*mut AccountLayout, AccountInfo>(layout) })
+            .map(|layout| unsafe { AccountView::new_unchecked(layout as *mut RuntimeAccount) })
             .collect();
 
         test_fn(&account_infos)
@@ -914,27 +960,27 @@ mod tests {
     #[test]
     fn test_parse_create_accounts_success_without_rent() {
         // Exactly 6 accounts – rent sysvar should be `None`.
-        with_test_accounts_for_parsing(6, |accounts| {
+        with_test_accounts_for_parsing(6, |accounts: &[AccountView]| {
             let parsed = parse_create_accounts(accounts).unwrap();
 
             assert!(ptr::eq(parsed.payer, &accounts[0]));
-            assert_eq!(parsed.payer.key(), accounts[0].key());
+            assert_eq!(parsed.payer.address(), accounts[0].address());
             assert!(ptr::eq(
                 parsed.associated_token_account_to_create,
                 &accounts[1]
             ));
             assert_eq!(
-                parsed.associated_token_account_to_create.key(),
-                accounts[1].key()
+                parsed.associated_token_account_to_create.address(),
+                accounts[1].address()
             );
             assert!(ptr::eq(parsed.wallet, &accounts[2]));
-            assert_eq!(parsed.wallet.key(), accounts[2].key());
+            assert_eq!(parsed.wallet.address(), accounts[2].address());
             assert!(ptr::eq(parsed.mint, &accounts[3]));
-            assert_eq!(parsed.mint.key(), accounts[3].key());
+            assert_eq!(parsed.mint.address(), accounts[3].address());
             assert!(ptr::eq(parsed.system_program, &accounts[4]));
-            assert_eq!(parsed.system_program.key(), accounts[4].key());
+            assert_eq!(parsed.system_program.address(), accounts[4].address());
             assert!(ptr::eq(parsed.token_program, &accounts[5]));
-            assert_eq!(parsed.token_program.key(), accounts[5].key());
+            assert_eq!(parsed.token_program.address(), accounts[5].address());
             assert!(parsed.rent_sysvar.is_none());
         });
     }
@@ -942,20 +988,20 @@ mod tests {
     #[test]
     fn test_parse_create_accounts_success_with_rent() {
         // 7 accounts – index 6 is rent sysvar.
-        with_test_accounts_for_parsing(7, |accounts| {
+        with_test_accounts_for_parsing(7, |accounts: &[AccountView]| {
             assert_eq!(accounts.len(), 7);
 
             let parsed = parse_create_accounts(accounts).unwrap();
 
             assert!(parsed.rent_sysvar.is_some());
             assert!(ptr::eq(parsed.rent_sysvar.unwrap(), &accounts[6]));
-            assert_eq!(parsed.rent_sysvar.unwrap().key(), accounts[6].key());
+            assert_eq!(parsed.rent_sysvar.unwrap().address(), accounts[6].address());
         });
     }
 
     #[test]
     fn test_parse_create_accounts_error_insufficient() {
-        with_test_accounts_for_parsing(5, |accounts| {
+        with_test_accounts_for_parsing(5, |accounts: &[AccountView]| {
             assert!(matches!(
                 parse_create_accounts(accounts),
                 Err(ProgramError::NotEnoughAccountKeys)
@@ -965,10 +1011,11 @@ mod tests {
 
     #[test]
     fn test_fn_is_spl_token_program() {
-        assert!(is_spl_token_program(&spl_token_interface::program::id()));
+        assert!(is_spl_token_program(&Address::from(
+            spl_token_interface::id().to_bytes()
+        )));
 
-        let token_2022_id =
-            pinocchio_pubkey::pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+        let token_2022_id = Address::from(spl_token_2022::id().to_bytes());
         assert!(!is_spl_token_program(&token_2022_id));
     }
 }

@@ -1,11 +1,13 @@
 use {
     super::test_bump_utils::setup_mollusk_for_bump_tests,
     mollusk_svm::result::Check,
-    ata_mollusk_harness::{
+    solana_keypair::Keypair,
+    solana_pubkey::Pubkey,
+    solana_sdk::program_error::ProgramError,
+    solana_signer::Signer,
+    spl_associated_token_account_mollusk_harness::{
         build_create_ata_instruction, create_ata_test_accounts, CreateAtaInstructionType,
     },
-    solana_pubkey::Pubkey,
-    solana_sdk::{program_error::ProgramError, signature::Keypair, signer::Signer},
     std::vec::Vec,
 };
 
@@ -54,7 +56,7 @@ fn find_wallet_pair(
 #[test]
 fn test_rejects_suboptimal_bump() {
     let ata_program_id = spl_associated_token_account::id();
-    let token_program_id = spl_token::id();
+    let token_program_id = spl_token_interface::id();
     let mint_pubkey = Pubkey::new_unique();
     let payer = Keypair::new();
 
@@ -68,7 +70,7 @@ fn test_rejects_suboptimal_bump() {
         (254u8, 250u8),
     ];
 
-    let mollusk = setup_mollusk_for_bump_tests(&token_program_id.to_bytes());
+    let mollusk = setup_mollusk_for_bump_tests(&token_program_id);
 
     let mut wallet_infos = Vec::new();
     for &(canonical, sub) in &pairs {

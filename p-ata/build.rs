@@ -13,6 +13,7 @@ use solana_pubkey::Pubkey;
 fn main() {
     println!("cargo:rerun-if-changed=programs/token");
     println!("cargo:rerun-if-changed=programs/token-2022");
+    println!("cargo:rerun-if-env-changed=P_ATA_BUILD_PROGRAMS");
 
     #[cfg(feature = "build-programs")]
     builder::build_programs();
@@ -23,9 +24,20 @@ mod builder {
     use super::*;
 
     pub fn build_programs() {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+
+        if std::env::var_os("P_ATA_BUILD_PROGRAMS").is_none() {
+            return;
+        }
+
         println!("cargo:warning=Building token programs for benchmarking...");
 
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+        if !has_build_sbf(&manifest_dir) {
+            println!(
+                "cargo:warning=Skipping build-programs feature because `cargo build-sbf` is not available"
+            );
+            return;
+        }
 
         update_submodules(&manifest_dir);
         build_p_token(&manifest_dir, Path::new(""));
@@ -34,6 +46,24 @@ mod builder {
         build_p_ata_variants(&manifest_dir);
 
         println!("cargo:warning=Token programs built successfully!");
+    }
+
+    fn has_build_sbf(manifest_dir: &str) -> bool {
+        let Ok(output) = Command::new("cargo")
+            .args(["build-sbf", "--help"])
+            .current_dir(manifest_dir)
+            .output()
+        else {
+            return false;
+        };
+
+        if output.status.success() {
+            return true;
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        !(stderr.contains("no such command") || stdout.contains("no such command"))
     }
 
     fn update_submodules(manifest_dir: &str) {
@@ -57,6 +87,13 @@ mod builder {
         println!("cargo:warning=Building p-token program...");
 
         let p_token_dir = Path::new(manifest_dir).join("programs/token/p-token");
+        if !p_token_dir.exists() {
+            println!(
+                "cargo:warning=P-token directory not found at {:?}, skipping...",
+                p_token_dir
+            );
+            return;
+        }
         let output = Command::new("cargo")
             .args(["build-sbf"])
             .current_dir(&p_token_dir)
@@ -77,6 +114,13 @@ mod builder {
         println!("cargo:warning=Building token-2022 program...");
 
         let token_2022_dir = Path::new(manifest_dir).join("programs/token-2022/program");
+        if !token_2022_dir.exists() {
+            println!(
+                "cargo:warning=Token-2022 directory not found at {:?}, skipping...",
+                token_2022_dir
+            );
+            return;
+        }
 
         let output = Command::new("cargo")
             .args(["build-sbf"])

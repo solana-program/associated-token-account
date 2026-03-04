@@ -21,8 +21,8 @@ cargo-nightly:
 	cargo $(nightly) $(ARGS)
 
 generate-clients:
-	pnpm --dir pinocchio/clients install --frozen-lockfile
-	pnpm --dir pinocchio/clients run generate
+	RUSTUP_TOOLCHAIN="${RUST_TOOLCHAIN_NIGHTLY}" pnpm --dir pinocchio/clients install --frozen-lockfile
+	RUSTUP_TOOLCHAIN="${RUST_TOOLCHAIN_NIGHTLY}" pnpm --dir pinocchio/clients run generate
 
 audit:
 	cargo audit \

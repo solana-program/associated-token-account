@@ -82,6 +82,9 @@ test-doc-%:
 test-%:
 	SBF_OUT_DIR=$(PWD)/target/deploy cargo $(nightly) test --manifest-path $(call make-path,$*)/Cargo.toml $(ARGS)
 
+miri-%:
+	cargo $(nightly) miri test --manifest-path $(call make-path,$*)/Cargo.toml $(ARGS)
+
 # Helpers for publishing
 tag-name = $(lastword $(subst /, ,$(call make-path,$1)))
 preid-arg = $(subst pre,--preid $2,$(findstring pre,$1))

@@ -1,0 +1,22 @@
+[package]
+name = "pinocchio-associated-token-account-program"
+version = "0.1.0"
+description = "A pinocchio-based Associated Token Account program"
+authors = ["Anza Maintainers <maintainers@anza.xyz>"]
+repository = "https://github.com/solana-program/associated-token-account"
+license = "Apache-2.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[package.metadata.solana]
+program-id = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+
+[lints]
+workspace = true
+
+[dependencies]
+# TODO: Pinned to anza-xyz/pinocchio#307 (CreateAccountAllowPrefund builder), waiting on merge/publish
+pinocchio = { version = "0.10.1", git = "https://github.com/anza-xyz/pinocchio", rev = "9bb172e7a78875d29520e3398da97323173e0e66", default-features = false }
+pinocchio-associated-token-account-interface = { path = "../interface" }

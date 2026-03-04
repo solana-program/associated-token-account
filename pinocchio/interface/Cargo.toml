@@ -10,7 +10,18 @@ edition = "2021"
 [lib]
 crate-type = ["rlib"]
 
+[[bin]]
+name = "generate-idl"
+path = "src/bin/generate-idl.rs"
+required-features = ["codama"]
+
+[features]
+codama = ["dep:codama", "dep:codama-macros", "dep:serde_json"]
+
 [dependencies]
+codama = { version = "0.7.3", optional = true }
+codama-macros = { version = "0.7.3", optional = true }
+serde_json = { version = "1.0.149", optional = true }
 solana-address = { version = "2.2.0", features = ["decode"] }
 
 [package.metadata.solana]

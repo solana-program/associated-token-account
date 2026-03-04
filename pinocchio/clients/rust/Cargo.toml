@@ -1,0 +1,31 @@
+workspace = { }
+
+[package]
+name = "pinocchio-associated-token-account-rust-client"
+version = "0.1.0"
+description = "Generated Rust client for pinocchio-associated-token-account-interface"
+license = "Apache-2.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = [ ]
+
+[dependencies]
+borsh = "^0.10"
+solana-instruction = "~2.3"
+solana-account-info = "~2.3"
+solana-program-error = "~2.2"
+solana-cpi = "~2.2"
+
+  [dependencies.solana-pubkey]
+  features = [ "curve25519", "borsh" ]
+  version = "~2.3"
+
+  [dependencies.serde]
+  features = [ "derive" ]
+  optional = true
+  version = "^1.0"
+

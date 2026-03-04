@@ -1,0 +1,25 @@
+{
+  "idl": "../interface/idl.json",
+  "before": [
+    {
+      "from": "codama#updateProgramsVisitor",
+      "args": [
+        {
+          "pinocchioAssociatedTokenAccountInterface": {
+            "name": "associatedTokenAccount"
+          }
+        }
+      ]
+    }
+  ],
+  "scripts": {
+    "js": {
+      "from": "@codama/renderers-js",
+      "args": ["js"]
+    },
+    "rust": {
+      "from": "@codama/renderers-rust",
+      "args": ["rust", { "formatCode": true }]
+    }
+  }
+}

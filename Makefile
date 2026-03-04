@@ -21,7 +21,8 @@ cargo-nightly:
 	cargo $(nightly) $(ARGS)
 
 generate-clients:
-	@echo "No JavaScript clients to generate"
+	pnpm --dir pinocchio/clients install --frozen-lockfile
+	pnpm --dir pinocchio/clients run generate
 
 audit:
 	cargo audit \

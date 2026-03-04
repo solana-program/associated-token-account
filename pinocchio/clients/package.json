@@ -1,0 +1,17 @@
+{
+  "name": "pinocchio-associated-token-account",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "idl": "cargo run -p pinocchio-associated-token-account-interface --features codama --bin generate-idl",
+    "codama": "codama run js rust",
+    "codama:js": "codama run js",
+    "codama:rust": "codama run rust",
+    "generate": "pnpm run idl && pnpm run codama"
+  },
+  "devDependencies": {
+    "@codama/renderers-js": "2.0.3",
+    "@codama/renderers-rust": "2.0.1",
+    "codama": "1.5.1"
+  }
+}

@@ -1,0 +1,20 @@
+[package]
+name = "pinocchio-associated-token-account-interface"
+version = "0.1.0"
+description = "Pinocchio instructions and types for interacting with the Associated Token Account program"
+authors = ["Anza Maintainers <maintainers@anza.xyz>"]
+repository = "https://github.com/solana-program/associated-token-account"
+license = "Apache-2.0"
+edition = "2021"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+solana-address = { version = "2.2.0", features = ["decode"] }
+
+[package.metadata.solana]
+program-id = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+
+[lints]
+workspace = true

@@ -1,0 +1,9 @@
+use pinocchio::{AccountView, Address, ProgramResult};
+
+#[inline(always)]
+pub(crate) fn process_recover_nested(
+    _program_id: &Address,
+    _accounts: &[AccountView],
+) -> ProgramResult {
+    unimplemented!()
+}

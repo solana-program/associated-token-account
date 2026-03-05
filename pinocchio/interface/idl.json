@@ -24,7 +24,7 @@
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
-            "name": "associatedToken"
+            "name": "associatedTokenAccount"
           },
           {
             "docs": [
@@ -111,7 +111,7 @@
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
-            "name": "associatedToken"
+            "name": "associatedTokenAccount"
           },
           {
             "docs": [
@@ -184,12 +184,12 @@
         "accounts": [
           {
             "docs": [
-              "Nested associated token account, must be owned by `owner_associated_token`"
+              "Nested associated token account, must be owned by `owner_associated_token_account`"
             ],
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
-            "name": "nestedAssociatedToken"
+            "name": "nestedAssociatedTokenAccount"
           },
           {
             "docs": [
@@ -207,7 +207,7 @@
             "isSigner": false,
             "isWritable": true,
             "kind": "instructionAccountNode",
-            "name": "destinationAssociatedToken"
+            "name": "destinationAssociatedTokenAccount"
           },
           {
             "docs": [
@@ -216,7 +216,7 @@
             "isSigner": false,
             "isWritable": false,
             "kind": "instructionAccountNode",
-            "name": "ownerAssociatedToken"
+            "name": "ownerAssociatedTokenAccount"
           },
           {
             "docs": [

@@ -26,7 +26,7 @@ pub enum AssociatedTokenAccountInstruction {
             docs = "Funding account (must be a system account)"
         )),
         codama(account(
-            name = "associated_token",
+            name = "associated_token_account",
             writable,
             docs = "Associated token account address to be created"
         )),
@@ -59,7 +59,7 @@ pub enum AssociatedTokenAccountInstruction {
             docs = "Funding account (must be a system account)"
         )),
         codama(account(
-            name = "associated_token",
+            name = "associated_token_account",
             writable,
             docs = "Associated token account address to be created"
         )),
@@ -95,21 +95,21 @@ pub enum AssociatedTokenAccountInstruction {
     #[cfg_attr(
         feature = "codama",
         codama(account(
-            name = "nested_associated_token",
+            name = "nested_associated_token_account",
             writable,
-            docs = "Nested associated token account, must be owned by `owner_associated_token`"
+            docs = "Nested associated token account, must be owned by `owner_associated_token_account`"
         )),
         codama(account(
             name = "nested_mint",
             docs = "Token mint for the nested associated token account"
         )),
         codama(account(
-            name = "destination_associated_token",
+            name = "destination_associated_token_account",
             writable,
             docs = "Wallet's associated token account"
         )),
         codama(account(
-            name = "owner_associated_token",
+            name = "owner_associated_token_account",
             docs = "Owner associated token account address, must be owned by `wallet`"
         )),
         codama(account(

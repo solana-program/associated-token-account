@@ -21,7 +21,11 @@ cargo-nightly:
 	cargo $(nightly) $(ARGS)
 
 generate-clients:
-	cargo $(nightly) run -p pinocchio-associated-token-account-interface --features codama --bin generate-idl
+	@echo "No JavaScript clients to generate"
+
+generate-idl-%:
+	@cargo install --locked --version =0.7.3 codama-cli
+	codama-rs generate-idl $(call make-path,$*) -o $(call make-path,$*)/idl.json --pretty $(ARGS)
 
 audit:
 	cargo audit \

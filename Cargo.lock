@@ -1837,7 +1837,6 @@ version = "0.1.0"
 dependencies = [
  "codama",
  "codama-macros",
- "serde_json",
  "solana-address 2.2.0",
 ]
 

@@ -4,12 +4,12 @@ Pinocchio instructions and types for interacting with the Associated Token Accou
 
 ## Codama
 
-This crate includes Codama macros and an IDL generator binary.
+This crate includes Codama macros.
 
 Generate the IDL from repo root:
 
 ```bash
-cargo run -p pinocchio-associated-token-account-interface --features codama --bin generate-idl
+make generate-idl-pinocchio-interface
 ```
 
 This writes:

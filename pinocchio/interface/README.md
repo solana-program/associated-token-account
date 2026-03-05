@@ -17,13 +17,3 @@ This writes:
 ```text
 pinocchio/interface/idl.json
 ```
-
-Client generation tooling and generated clients live in:
-
-```text
-pinocchio/clients
-```
-
-See:
-
-- `pinocchio/clients/README.md`

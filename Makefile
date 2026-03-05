@@ -21,8 +21,7 @@ cargo-nightly:
 	cargo $(nightly) $(ARGS)
 
 generate-clients:
-	RUSTUP_TOOLCHAIN="${RUST_TOOLCHAIN_NIGHTLY}" pnpm --dir pinocchio/clients install --frozen-lockfile
-	RUSTUP_TOOLCHAIN="${RUST_TOOLCHAIN_NIGHTLY}" pnpm --dir pinocchio/clients run generate
+	cargo $(nightly) run -p pinocchio-associated-token-account-interface --features codama --bin generate-idl
 
 audit:
 	cargo audit \

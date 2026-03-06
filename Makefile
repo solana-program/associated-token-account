@@ -23,6 +23,10 @@ cargo-nightly:
 generate-clients:
 	@echo "No JavaScript clients to generate"
 
+generate-idl-%:
+	@cargo install --locked --version =0.7.3 codama-cli
+	codama-rs generate-idl $(call make-path,$*) -o $(call make-path,$*)/idl.json --pretty $(ARGS)
+
 audit:
 	cargo audit \
 			--ignore RUSTSEC-2022-0093 \

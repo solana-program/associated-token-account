@@ -10,7 +10,12 @@ edition = "2021"
 [lib]
 crate-type = ["rlib"]
 
+[features]
+codama = ["dep:codama", "dep:codama-macros"]
+
 [dependencies]
+codama = { version = "0.7.3", optional = true }
+codama-macros = { version = "0.7.3", optional = true }
 solana-address = { version = "2.2.0", features = ["decode"] }
 
 [package.metadata.solana]

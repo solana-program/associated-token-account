@@ -1,8 +1,12 @@
 //! Instruction types for the Associated Token Account program.
 
+#[cfg(feature = "codama")]
+use codama_macros::CodamaInstructions;
+
 /// Instructions supported by the `AssociatedTokenAccount` program
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "codama", derive(CodamaInstructions))]
 pub enum AssociatedTokenAccountInstruction {
     /// Creates an associated token account for the given wallet address and
     /// token mint Returns an error if the account exists.
@@ -13,6 +17,28 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` The token mint for the new associated token account
     ///   4. `[]` System program
     ///   5. `[]` SPL Token program
+    #[cfg_attr(
+        feature = "codama",
+        codama(account(
+            name = "funder",
+            signer,
+            writable,
+            docs = "Funding account (must be a system account)"
+        )),
+        codama(account(
+            name = "associated_token_account",
+            writable,
+            docs = "Associated token account address to be created"
+        )),
+        codama(account(name = "wallet", docs = "Wallet address for the new associated token account")),
+        codama(account(name = "mint", docs = "The token mint for the new associated token account")),
+        codama(account(
+            name = "system_program",
+            docs = "System program",
+            default_value = program("system")
+        )),
+        codama(account(name = "token_program", docs = "SPL Token program"))
+    )]
     Create,
     /// Creates an associated token account for the given wallet address and
     /// token mint, if it doesn't already exist.  Returns an error if the
@@ -24,6 +50,28 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` The token mint for the new associated token account
     ///   4. `[]` System program
     ///   5. `[]` SPL Token program
+    #[cfg_attr(
+        feature = "codama",
+        codama(account(
+            name = "funder",
+            signer,
+            writable,
+            docs = "Funding account (must be a system account)"
+        )),
+        codama(account(
+            name = "associated_token_account",
+            writable,
+            docs = "Associated token account address to be created"
+        )),
+        codama(account(name = "wallet", docs = "Wallet address for the new associated token account")),
+        codama(account(name = "mint", docs = "The token mint for the new associated token account")),
+        codama(account(
+            name = "system_program",
+            docs = "System program",
+            default_value = program("system")
+        )),
+        codama(account(name = "token_program", docs = "SPL Token program"))
+    )]
     CreateIdempotent,
     /// Transfers from and closes a nested associated token account: an
     /// associated token account owned by an associated token account.
@@ -44,6 +92,38 @@ pub enum AssociatedTokenAccountInstruction {
     ///   5. `[writeable, signer]` Wallet address for the owner associated token
     ///      account
     ///   6. `[]` SPL Token program
+    #[cfg_attr(
+        feature = "codama",
+        codama(account(
+            name = "nested_associated_token_account",
+            writable,
+            docs = "Nested associated token account, must be owned by `owner_associated_token_account`"
+        )),
+        codama(account(
+            name = "nested_mint",
+            docs = "Token mint for the nested associated token account"
+        )),
+        codama(account(
+            name = "destination_associated_token_account",
+            writable,
+            docs = "Wallet's associated token account"
+        )),
+        codama(account(
+            name = "owner_associated_token_account",
+            docs = "Owner associated token account address, must be owned by `wallet`"
+        )),
+        codama(account(
+            name = "owner_mint",
+            docs = "Token mint for the owner associated token account"
+        )),
+        codama(account(
+            name = "wallet",
+            signer,
+            writable,
+            docs = "Wallet address for the owner associated token account"
+        )),
+        codama(account(name = "token_program", docs = "SPL Token program"))
+    )]
     RecoverNested,
 }
 

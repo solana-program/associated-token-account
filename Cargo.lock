@@ -433,6 +433,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eab1c04a571841102f5345a8fc0f6bb3d31c315dec879b5c6e42e40ce7ffa34e"
 
 [[package]]
+name = "ata-compat-tests"
+version = "0.1.0"
+dependencies = [
+ "mollusk-svm",
+ "solana-address 2.2.0",
+ "solana-instruction",
+ "solana-program-error",
+ "solana-program-pack",
+ "spl-associated-token-account-interface 2.0.0",
+ "spl-associated-token-account-mollusk-harness",
+ "spl-token-2022-interface",
+ "spl-token-interface",
+ "test-case",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1828,6 +1844,7 @@ dependencies = [
  "solana-account-view",
  "solana-address 2.2.0",
  "solana-define-syscall 4.0.1",
+ "solana-instruction-view",
  "solana-program-error",
 ]
 
@@ -1846,6 +1863,18 @@ version = "0.1.0"
 dependencies = [
  "pinocchio",
  "pinocchio-associated-token-account-interface",
+ "pinocchio-system",
+ "solana-program-pack",
+ "spl-token-2022-interface",
+]
+
+[[package]]
+name = "pinocchio-system"
+version = "0.5.0"
+source = "git+https://github.com/anza-xyz/pinocchio?rev=9bb172e7a78875d29520e3398da97323173e0e66#9bb172e7a78875d29520e3398da97323173e0e66"
+dependencies = [
+ "pinocchio",
+ "solana-address 2.2.0",
 ]
 
 [[package]]
@@ -2627,6 +2656,18 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_derive",
+ "solana-program-error",
+]
+
+[[package]]
+name = "solana-instruction-view"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60147e4d0a4620013df40bf30a86dd299203ff12fcb8b593cd51014fce0875d8"
+dependencies = [
+ "solana-account-view",
+ "solana-address 2.2.0",
+ "solana-define-syscall 4.0.1",
  "solana-program-error",
 ]
 
@@ -3653,6 +3694,39 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "test-case"
+version = "3.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eb2550dd13afcd286853192af8601920d959b14c401fcece38071d53bf0768a8"
+dependencies = [
+ "test-case-macros",
+]
+
+[[package]]
+name = "test-case-core"
+version = "3.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adcb7fd841cd518e279be3d5a3eb0636409487998a4aff22f3de87b81e88384f"
+dependencies = [
+ "cfg-if",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "test-case-macros"
+version = "3.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c89e72a01ed4c579669add59014b9a524d609c0c88c6a585ce37485879f6ffb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+ "test-case-core",
 ]
 
 [[package]]

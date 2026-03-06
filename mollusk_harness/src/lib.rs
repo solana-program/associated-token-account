@@ -15,10 +15,29 @@ use {
     std::{collections::HashMap, vec::Vec},
 };
 
-/// Setup mollusk with local ATA and token programs
-pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
+/// The ATA implementation to load into Mollusk.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtaProgramUnderTest {
+    Legacy,
+    Pinocchio,
+}
+
+impl AtaProgramUnderTest {
+    fn program_name(self) -> &'static str {
+        match self {
+            Self::Legacy => "spl_associated_token_account",
+            Self::Pinocchio => "pinocchio_associated_token_account_program",
+        }
+    }
+}
+
+/// Setup mollusk with the selected ATA implementation and token programs.
+fn setup_mollusk_with_ata_program(
+    token_program_id: &Pubkey,
+    ata_program: AtaProgramUnderTest,
+) -> Mollusk {
     let ata_program_id = spl_associated_token_account_interface::program::id();
-    let mut mollusk = Mollusk::new(&ata_program_id, "spl_associated_token_account");
+    let mut mollusk = Mollusk::new(&ata_program_id, ata_program.program_name());
 
     if *token_program_id == spl_token_2022_interface::id() {
         mollusk.add_program(token_program_id, "spl_token_2022", &LOADER_V3);
@@ -117,7 +136,12 @@ impl AtaTestHarness {
 
     /// Create a new test harness with the specified token program
     pub fn new(token_program_id: &Pubkey) -> Self {
-        let mollusk = setup_mollusk_with_programs(token_program_id);
+        Self::new_for(AtaProgramUnderTest::Legacy, token_program_id)
+    }
+
+    /// Create a new test harness for a specific ATA implementation.
+    pub fn new_for(ata_program: AtaProgramUnderTest, token_program_id: &Pubkey) -> Self {
+        let mollusk = setup_mollusk_with_ata_program(token_program_id, ata_program);
         let payer = Pubkey::new_unique();
         let ctx = mollusk.with_context(HashMap::new());
 
@@ -398,20 +422,19 @@ impl AtaTestHarness {
         ata_address
     }
 
-    /// Create a token account with wrong owner at the ATA address (for error testing)
-    pub fn insert_wrong_owner_token_account(&self, wrong_owner: Pubkey) -> Pubkey {
+    /// Insert a token account directly at the canonical ATA address.
+    pub fn insert_token_account_at_ata_address(&self, owner: Pubkey) -> Pubkey {
         let wallet = self.wallet.as_ref().expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
-        self.ensure_accounts_with_lamports(&[(wrong_owner, 1_000_000)]);
+        self.ensure_accounts_with_lamports(&[(owner, 1_000_000)]);
         let ata_address =
             get_associated_token_address_with_program_id(wallet, &mint, &self.token_program_id);
         // Create token account with wrong owner at the ATA address
-        let wrong_account =
-            AccountBuilder::token_account(&mint, &wrong_owner, 0, &self.token_program_id);
+        let token_account = AccountBuilder::token_account(&mint, &owner, 0, &self.token_program_id);
         self.ctx
             .account_store
             .borrow_mut()
-            .insert(ata_address, wrong_account);
+            .insert(ata_address, token_account);
         ata_address
     }
 

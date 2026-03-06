@@ -20,3 +20,8 @@ workspace = true
 # TODO: Pinned to anza-xyz/pinocchio#307 (CreateAccountAllowPrefund builder), waiting on merge/publish
 pinocchio = { version = "0.10.1", git = "https://github.com/anza-xyz/pinocchio", rev = "9bb172e7a78875d29520e3398da97323173e0e66", default-features = false }
 pinocchio-associated-token-account-interface = { path = "../interface" }
+pinocchio-system = { version = "0.5.0", git = "https://github.com/anza-xyz/pinocchio", rev = "9bb172e7a78875d29520e3398da97323173e0e66" }
+
+[dev-dependencies]
+solana-program-pack = "3.1.0"
+spl-token-2022-interface = "2.1.0"

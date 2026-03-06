@@ -277,8 +277,43 @@
       }
     ],
     "definedTypes": [],
-    "pdas": [],
-    "errors": []
+    "pdas": [
+      {
+        "kind": "pdaNode",
+        "name": "associatedTokenPda",
+        "seeds": [
+          {
+            "kind": "variablePdaSeedNode",
+            "name": "wallet",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "variablePdaSeedNode",
+            "name": "tokenProgram",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "variablePdaSeedNode",
+            "name": "mint",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          }
+        ]
+      }
+    ],
+    "errors": [
+      {
+        "kind": "errorNode",
+        "name": "invalidOwner",
+        "code": 0,
+        "message": "Associated token account owner does not match address derivation"
+      }
+    ]
   },
   "additionalPrograms": []
 }

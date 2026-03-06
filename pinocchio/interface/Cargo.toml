@@ -16,7 +16,7 @@ codama = ["dep:codama", "dep:codama-macros"]
 [dependencies]
 codama = { version = "0.7.4", optional = true }
 codama-macros = { version = "0.7.4", optional = true }
-solana-address = { version = "2.3.0", features = ["decode"] }
+solana-address = { version = "2.3.0", features = ["curve25519", "decode"] }
 
 [package.metadata.solana]
 program-id = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"

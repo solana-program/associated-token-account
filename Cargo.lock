@@ -1864,8 +1864,7 @@ dependencies = [
  "pinocchio",
  "pinocchio-associated-token-account-interface",
  "pinocchio-system",
- "solana-program-pack",
- "spl-token-2022-interface",
+ "pinocchio-token-2022",
 ]
 
 [[package]]
@@ -1875,6 +1874,17 @@ source = "git+https://github.com/anza-xyz/pinocchio?rev=9bb172e7a78875d29520e339
 dependencies = [
  "pinocchio",
  "solana-address 2.3.0",
+]
+
+[[package]]
+name = "pinocchio-token-2022"
+version = "0.2.0"
+source = "git+https://github.com/anza-xyz/pinocchio?rev=2913fd77d8156160aff86d1fd350a2abec3caf5c#2913fd77d8156160aff86d1fd350a2abec3caf5c"
+dependencies = [
+ "solana-account-view",
+ "solana-address 2.2.0",
+ "solana-instruction-view",
+ "solana-program-error",
 ]
 
 [[package]]

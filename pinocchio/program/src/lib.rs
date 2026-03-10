@@ -9,4 +9,3 @@ mod entrypoint;
 mod error;
 mod processor;
 mod recover;
-mod token_account;

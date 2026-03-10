@@ -1,7 +1,8 @@
 use {
-    crate::{error::ToProgramError, token_account::parse_token_account_mint_and_owner},
+    crate::error::ToProgramError,
     pinocchio::{error::ProgramError, AccountView, Address, ProgramResult},
     pinocchio_associated_token_account_interface::error::AssociatedTokenAccountError,
+    pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
 };
 
 use pinocchio_associated_token_account_interface::pda::AssociatedTokenPda;
@@ -15,6 +16,9 @@ pub(crate) enum CreateMode {
     Idempotent,
 }
 
+/// Returns `Ok(true)` only when the canonical ATA already exists and idempotent create may
+/// treat the instruction as a no-op. `Ok(false)` means the helper could not validate the
+/// current account as that preexisting ATA, so the caller must continue its normal checks.
 #[inline(always)]
 fn is_valid_existing_ata_for_idempotent(
     associated_token_account: &AccountView,
@@ -22,19 +26,28 @@ fn is_valid_existing_ata_for_idempotent(
     mint: &AccountView,
     token_program: &AccountView,
 ) -> Result<bool, ProgramError> {
+    // Preexisting ATA must already be owned by the requested token program
     if !associated_token_account.owned_by(token_program.address()) {
         return Ok(false);
     }
 
     let ata_data = associated_token_account.try_borrow()?;
-    let Some((ata_mint, ata_owner)) = parse_token_account_mint_and_owner(&ata_data) else {
+    // Preexisting ATA must be parsable as a token account
+    let Ok(token_account_ext) = StateWithExtensions::<TokenAccount>::from_bytes(&ata_data) else {
         return Ok(false);
     };
 
-    if ata_owner != *wallet.address() {
+    let token_account = token_account_ext.base();
+    // Preexisting ATA cannot be in the uninitialized state
+    let Ok(AccountState::Initialized | AccountState::Frozen) = token_account.state() else {
+        return Ok(false);
+    };
+
+    // Now that ATA is confirmed, it must match the wallet or mint supplied
+    if token_account.owner() != wallet.address() {
         return Err(AssociatedTokenAccountError::InvalidOwner.to_program_err());
     }
-    if ata_mint != *mint.address() {
+    if token_account.mint() != mint.address() {
         return Err(ProgramError::InvalidAccountData);
     }
 

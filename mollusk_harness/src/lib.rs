@@ -1,5 +1,5 @@
 use {
-    mollusk_svm::{program::loader_keys::LOADER_V3, result::Check, Mollusk, MolluskContext},
+    mollusk_svm::{result::Check, Mollusk, MolluskContext},
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
@@ -15,34 +15,15 @@ use {
     std::{collections::HashMap, vec::Vec},
 };
 
-/// The ATA implementation to load into Mollusk.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AtaProgramUnderTest {
-    Legacy,
-    Pinocchio,
-}
-
-impl AtaProgramUnderTest {
-    fn program_name(self) -> &'static str {
-        match self {
-            Self::Legacy => "spl_associated_token_account",
-            Self::Pinocchio => "pinocchio_associated_token_account_program",
-        }
-    }
-}
-
-/// Setup mollusk with the selected ATA implementation and token programs.
-fn setup_mollusk_with_ata_program(
-    token_program_id: &Pubkey,
-    ata_program: AtaProgramUnderTest,
-) -> Mollusk {
+/// Setup mollusk with local ATA and token programs
+pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
     let ata_program_id = spl_associated_token_account_interface::program::id();
-    let mut mollusk = Mollusk::new(&ata_program_id, ata_program.program_name());
+    let mut mollusk = Mollusk::new(&ata_program_id, "spl_associated_token_account");
 
     if *token_program_id == spl_token_2022_interface::id() {
-        mollusk.add_program(token_program_id, "spl_token_2022", &LOADER_V3);
+        mollusk.add_program(token_program_id, "spl_token_2022");
     } else {
-        mollusk.add_program(token_program_id, "pinocchio_token_program", &LOADER_V3);
+        mollusk.add_program(token_program_id, "pinocchio_token_program");
     }
 
     mollusk
@@ -136,12 +117,7 @@ impl AtaTestHarness {
 
     /// Create a new test harness with the specified token program
     pub fn new(token_program_id: &Pubkey) -> Self {
-        Self::new_for(AtaProgramUnderTest::Legacy, token_program_id)
-    }
-
-    /// Create a new test harness for a specific ATA implementation.
-    pub fn new_for(ata_program: AtaProgramUnderTest, token_program_id: &Pubkey) -> Self {
-        let mollusk = setup_mollusk_with_ata_program(token_program_id, ata_program);
+        let mollusk = setup_mollusk_with_programs(token_program_id);
         let payer = Pubkey::new_unique();
         let ctx = mollusk.with_context(HashMap::new());
 

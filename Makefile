@@ -65,6 +65,19 @@ sort-check:
 bench-%:
 	cargo $(nightly) bench --manifest-path $(call make-path,$*)/Cargo.toml $(ARGS)
 
+# Add new --test entries as p-ata is ready for them
+generate-fixtures:
+	rm -rf pinocchio/program/fuzz/blob pinocchio/program/fuzz/program-mb.so && \
+	mkdir -p pinocchio/program/fuzz/blob && \
+	RUST_LOG=error \
+	SBF_OUT_DIR=$(PWD)/target/deploy \
+	EJECT_FUZZ_FIXTURES=$(PWD)/pinocchio/program/fuzz/blob \
+	cargo $(nightly) test --features mollusk-svm/fuzz --manifest-path program/Cargo.toml \
+		--test create_always \
+		--test create_idempotent \
+		--test create_shared && \
+	cp target/deploy/spl_associated_token_account.so pinocchio/program/fuzz/program-mb.so
+
 regression-%:
 	mollusk run-test --proto mollusk --ignore-compute-units $(call make-path,$*)/fuzz/program-mb.so ./target/deploy/$(subst -,_,$(shell toml get $(call make-path,$*)/Cargo.toml package.name)).so $(call make-path,$*)/fuzz/blob $(shell toml get $(call make-path,$*)/Cargo.toml package.metadata.solana.program-id)
 

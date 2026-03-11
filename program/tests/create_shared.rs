@@ -1,22 +1,19 @@
 use {
     mollusk_svm::result::Check,
-    solana_address::Address,
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
+    solana_pubkey::Pubkey,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_associated_token_account_mollusk_harness::{
-        build_create_ata_instruction, AtaProgramUnderTest, AtaTestHarness, CreateAtaInstructionType,
+        build_create_ata_instruction, AtaTestHarness, CreateAtaInstructionType,
     },
-    test_case::test_matrix,
+    test_case::test_case,
 };
 
-#[test_matrix(
-    [AtaProgramUnderTest::Legacy, AtaProgramUnderTest::Pinocchio],
-    [spl_token_interface::id(), spl_token_2022_interface::id()]
-)]
-fn create_rejects_too_few_accounts(ata_program: AtaProgramUnderTest, token_program_id: Address) {
-    let harness =
-        AtaTestHarness::new_for(ata_program, &token_program_id).with_wallet_and_mint(1_000_000, 6);
+#[test_case(spl_token_interface::id())]
+#[test_case(spl_token_2022_interface::id())]
+fn create_rejects_too_few_accounts(token_program_id: Pubkey) {
+    let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
     let ata_address =
@@ -42,13 +39,10 @@ fn create_rejects_too_few_accounts(ata_program: AtaProgramUnderTest, token_progr
     );
 }
 
-#[test_matrix(
-    [AtaProgramUnderTest::Legacy, AtaProgramUnderTest::Pinocchio],
-    [spl_token_interface::id(), spl_token_2022_interface::id()]
-)]
-fn create_account_mismatch(ata_program: AtaProgramUnderTest, token_program_id: Address) {
-    let harness =
-        AtaTestHarness::new_for(ata_program, &token_program_id).with_wallet_and_mint(1_000_000, 6);
+#[test_case(spl_token_interface::id())]
+#[test_case(spl_token_2022_interface::id())]
+fn create_account_mismatch(token_program_id: Pubkey) {
+    let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
 
     let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
@@ -70,9 +64,9 @@ fn create_account_mismatch(ata_program: AtaProgramUnderTest, token_program_id: A
         );
 
         instruction.accounts[account_idx] = if account_idx == 1 {
-            AccountMeta::new(Address::default(), false)
+            AccountMeta::new(Pubkey::default(), false)
         } else {
-            AccountMeta::new_readonly(Address::default(), false)
+            AccountMeta::new_readonly(Pubkey::default(), false)
         };
 
         harness.ctx.process_and_validate_instruction(

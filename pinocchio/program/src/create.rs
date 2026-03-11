@@ -43,7 +43,7 @@ fn is_valid_existing_ata_for_idempotent(
         return Ok(false);
     };
 
-    // Now that ATA is confirmed, it must match the wallet or mint supplied
+    // Now that ATA is confirmed, it must match the wallet and mint supplied
     if token_account.owner() != wallet.address() {
         return Err(AssociatedTokenAccountError::InvalidOwner.to_program_err());
     }

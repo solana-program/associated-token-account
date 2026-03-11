@@ -26,7 +26,7 @@ impl AssociatedTokenPda {
         token_program_id: &Address,
         token_mint_address: &Address,
     ) -> (Address, u8) {
-        Address::find_program_address(
+        Address::derive_program_address(
             &[
                 wallet_address.as_ref(),
                 token_program_id.as_ref(),
@@ -34,5 +34,6 @@ impl AssociatedTokenPda {
             ],
             program_id,
         )
+        .expect("Unable to find a viable program address bump seed")
     }
 }

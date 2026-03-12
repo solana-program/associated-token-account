@@ -1811,11 +1811,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pinocchio"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c06810dac15a4ef83d3dabdb4f2f22fb39c9adff669cd2781da4f716510a647c"
+dependencies = [
+ "solana-account-view",
+ "solana-address 2.3.0",
+ "solana-define-syscall 4.0.1",
+ "solana-instruction-view",
+ "solana-program-error",
+]
+
+[[package]]
 name = "pinocchio-associated-token-account-interface"
 version = "0.1.0"
 dependencies = [
  "codama",
  "codama-macros",
+ "pinocchio 0.10.2",
  "solana-address 2.3.0",
 ]
 
@@ -1823,7 +1837,7 @@ dependencies = [
 name = "pinocchio-associated-token-account-program"
 version = "0.1.0"
 dependencies = [
- "pinocchio",
+ "pinocchio 0.10.1",
  "pinocchio-associated-token-account-interface",
  "pinocchio-system",
  "pinocchio-token-2022",
@@ -1834,7 +1848,7 @@ name = "pinocchio-system"
 version = "0.5.0"
 source = "git+https://github.com/anza-xyz/pinocchio?rev=9bb172e7a78875d29520e3398da97323173e0e66#9bb172e7a78875d29520e3398da97323173e0e66"
 dependencies = [
- "pinocchio",
+ "pinocchio 0.10.1",
  "solana-address 2.3.0",
 ]
 

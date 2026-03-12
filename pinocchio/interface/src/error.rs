@@ -17,3 +17,9 @@ pub enum AssociatedTokenAccountError {
     )]
     InvalidOwner,
 }
+
+impl From<AssociatedTokenAccountError> for pinocchio::error::ProgramError {
+    fn from(e: AssociatedTokenAccountError) -> Self {
+        pinocchio::error::ProgramError::Custom(e as u32)
+    }
+}

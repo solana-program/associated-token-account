@@ -79,22 +79,22 @@ fn idempotent_rejects_uninitialized_token_owned_canonical_ata(token_program_id: 
 
 #[test_case(spl_token_interface::id())]
 #[test_case(spl_token_2022_interface::id())]
-fn idempotent_rejects_malformed_token_owned_canonical_ata(token_program_id: Pubkey) {
+fn idempotent_rejects_invalid_data_token_owned_canonical_ata(token_program_id: Pubkey) {
     let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
     let ata_address =
         get_associated_token_address_with_program_id(&wallet, &mint, &token_program_id);
 
-    let mut malformed_token_account =
+    let mut invalid_data_token_account =
         AccountBuilder::system_account(token_account_rent_exempt_balance());
-    malformed_token_account.owner = token_program_id;
-    malformed_token_account.data = vec![0];
+    invalid_data_token_account.owner = token_program_id;
+    invalid_data_token_account.data = vec![0];
     harness
         .ctx
         .account_store
         .borrow_mut()
-        .insert(ata_address, malformed_token_account);
+        .insert(ata_address, invalid_data_token_account);
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account_interface::program::id(),

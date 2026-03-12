@@ -1,5 +1,4 @@
 use {
-    crate::error::ToProgramError,
     pinocchio::{error::ProgramError, AccountView, Address, ProgramResult},
     pinocchio_associated_token_account_interface::error::AssociatedTokenAccountError,
     pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
@@ -45,7 +44,7 @@ fn is_valid_existing_ata_for_idempotent(
 
     // Now that ATA is confirmed, it must match the wallet and mint supplied
     if token_account.owner() != wallet.address() {
-        return Err(AssociatedTokenAccountError::InvalidOwner.to_program_err());
+        return Err(AssociatedTokenAccountError::InvalidOwner.into());
     }
     if token_account.mint() != mint.address() {
         return Err(ProgramError::InvalidAccountData);

@@ -41,7 +41,7 @@ fn create_rejects_too_few_accounts(token_program_id: Pubkey) {
 
 #[test_case(spl_token_interface::id())]
 #[test_case(spl_token_2022_interface::id())]
-fn create_account_mismatch(token_program_id: Pubkey) {
+fn create_rejects_mismatch_derivation(token_program_id: Pubkey) {
     let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
 
     let wallet = harness.wallet.unwrap();

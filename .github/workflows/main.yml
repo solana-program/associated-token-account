@@ -12,6 +12,7 @@ env:
   WASM_PACKAGES: "['interface', 'program']"
   IDL_PACKAGES: "['pinocchio-interface']"
   MIRI_PACKAGES: "['pinocchio-program']"
+  REGRESSION_PACKAGES: "['pinocchio-program']"
 
 jobs:
   set_env:
@@ -23,6 +24,7 @@ jobs:
       WASM_PACKAGES: ${{ steps.compute.outputs.WASM_PACKAGES }}
       IDL_PACKAGES: ${{ steps.compute.outputs.IDL_PACKAGES }}
       MIRI_PACKAGES: ${{ steps.compute.outputs.MIRI_PACKAGES }}
+      REGRESSION_PACKAGES: ${{ steps.compute.outputs.REGRESSION_PACKAGES }}
       RUST_TOOLCHAIN_NIGHTLY: ${{ steps.compute.outputs.RUST_TOOLCHAIN_NIGHTLY }}
       SOLANA_CLI_VERSION: ${{ steps.compute.outputs.SOLANA_CLI_VERSION }}
     steps:
@@ -38,6 +40,7 @@ jobs:
           echo "WASM_PACKAGES=${{ env.WASM_PACKAGES }}" >> $GITHUB_OUTPUT
           echo "IDL_PACKAGES=${{ env.IDL_PACKAGES }}" >> $GITHUB_OUTPUT
           echo "MIRI_PACKAGES=${{ env.MIRI_PACKAGES }}" >> $GITHUB_OUTPUT
+          echo "REGRESSION_PACKAGES=${{ env.REGRESSION_PACKAGES }}" >> $GITHUB_OUTPUT
           echo "RUST_TOOLCHAIN_NIGHTLY=$(make rust-toolchain-nightly)" >> "$GITHUB_OUTPUT"
           echo "SOLANA_CLI_VERSION=$(make solana-cli-version)" >> "$GITHUB_OUTPUT"
 
@@ -49,6 +52,7 @@ jobs:
       rust-packages: ${{ needs.set_env.outputs.RUST_PACKAGES }}
       wasm-packages: ${{ needs.set_env.outputs.WASM_PACKAGES }}
       idl-packages: ${{ needs.set_env.outputs.IDL_PACKAGES }}
+      regression-packages: ${{ needs.set_env.outputs.REGRESSION_PACKAGES }}
       rustfmt-toolchain: ${{ needs.set_env.outputs.RUST_TOOLCHAIN_NIGHTLY }}
       clippy-toolchain: ${{ needs.set_env.outputs.RUST_TOOLCHAIN_NIGHTLY }}
       solana-cli-version: ${{ needs.set_env.outputs.SOLANA_CLI_VERSION }}

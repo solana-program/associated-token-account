@@ -14,7 +14,7 @@ crate-type = ["rlib"]
 codama = ["dep:codama", "dep:codama-macros"]
 
 [dependencies]
-codama = { version = "0.7.3", optional = true }
+codama = { version = "0.7.4", optional = true }
 codama-macros = { version = "0.7.4", optional = true }
 solana-address = { version = "2.3.0", features = ["decode"] }
 

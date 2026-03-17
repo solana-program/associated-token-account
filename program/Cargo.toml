@@ -33,12 +33,19 @@ thiserror = "2.0"
 
 [dev-dependencies]
 spl-associated-token-account-mollusk-harness = { version = "1.0.0", path = "../mollusk_harness" }
-mollusk-svm = "0.12.0"
 solana-program-pack = "3.1"
 test-case = "3.3.1"
 
+# TODO: Waiting on Mollusk releases for:
+#   PR #203 (Agave 4.x runtime): https://github.com/anza-xyz/mollusk/pull/203
+#   PR #206 (CLI program loading flags): https://github.com/anza-xyz/mollusk/pull/206
+mollusk-svm = { version = "0.10.3", git = "https://github.com/grod220/mollusk", branch = "combine-203-206" }
+
 [lib]
 crate-type = ["cdylib", "lib"]
+
+[lints]
+workspace = true
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]

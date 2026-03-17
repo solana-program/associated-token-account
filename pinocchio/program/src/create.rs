@@ -1,10 +1,15 @@
 use {
-    pinocchio::{error::ProgramError, AccountView, Address, ProgramResult},
-    pinocchio_associated_token_account_interface::error::AssociatedTokenAccountError,
-    pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
+    crate::size::get_account_data_size,
+    pinocchio::{cpi::Signer, error::ProgramError, AccountView, Address, ProgramResult},
+    pinocchio_associated_token_account_interface::{
+        error::AssociatedTokenAccountError, pda::AssociatedTokenPda,
+    },
+    pinocchio_system_prefund::instructions::CreateAccountAllowPrefund,
+    pinocchio_token_2022::{
+        instructions::{InitializeAccount3, InitializeImmutableOwner},
+        state::{AccountState, StateWithExtensions, TokenAccount},
+    },
 };
-
-use pinocchio_associated_token_account_interface::pda::AssociatedTokenPda;
 
 /// Specify when to create the associated token account.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -56,16 +61,16 @@ fn is_valid_existing_ata_for_idempotent(
 #[inline(always)]
 pub(crate) fn process_create_associated_token_account(
     program_id: &Address,
-    accounts: &[AccountView],
+    accounts: &mut [AccountView],
     create_mode: CreateMode,
 ) -> ProgramResult {
-    let [_payer, associated_token_account, wallet, mint, _system_program, token_program, ..] =
+    let [payer, associated_token_account, wallet, mint, _system_program, token_program, ..] =
         accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    let (associated_token_address, _bump_seed) = AssociatedTokenPda::get_address_and_bump_seed(
+    let (associated_token_address, bump_seed) = AssociatedTokenPda::get_address_and_bump_seed(
         program_id,
         wallet.address(),
         token_program.address(),
@@ -75,6 +80,7 @@ pub(crate) fn process_create_associated_token_account(
         return Err(ProgramError::InvalidSeeds);
     }
 
+    // For `CreateIdempotent`, if the ATA already exists and is valid, return early
     if create_mode == CreateMode::Idempotent
         && is_valid_existing_ata_for_idempotent(
             associated_token_account,
@@ -90,5 +96,41 @@ pub(crate) fn process_create_associated_token_account(
         return Err(ProgramError::IllegalOwner);
     }
 
-    unimplemented!()
+    let account_len = get_account_data_size(mint, token_program)?;
+
+    // Create the PDA (handles pre-funded accounts)
+    let bump_ref = &[bump_seed];
+    let seeds = AssociatedTokenPda::signer_seeds(
+        wallet.address(),
+        token_program.address(),
+        mint.address(),
+        bump_ref,
+    );
+    let signer = Signer::from(&seeds);
+    CreateAccountAllowPrefund::with_minimum_balance(
+        payer,
+        associated_token_account,
+        account_len,
+        token_program.address(),
+        None,
+    )?
+    .invoke_signed(&[signer])?;
+
+    // Lock the owner field (skip for SPL Token)
+    if *token_program.address() != pinocchio_token::ID {
+        InitializeImmutableOwner {
+            account: associated_token_account,
+            token_program: token_program.address(),
+        }
+        .invoke()?;
+    }
+
+    // Initialize the token account state
+    InitializeAccount3 {
+        account: associated_token_account,
+        mint,
+        owner: wallet.address(),
+        token_program: token_program.address(),
+    }
+    .invoke()
 }

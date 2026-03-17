@@ -1,0 +1,14 @@
+{
+  "checks": [
+    "programResult",
+    {
+      "allResultingAccounts": {
+        "data": true,
+        "executable": true,
+        "lamports": true,
+        "owner": true,
+        "space": true
+      }
+    }
+  ]
+}

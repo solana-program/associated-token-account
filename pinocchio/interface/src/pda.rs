@@ -1,6 +1,6 @@
 //! Address derivation helpers for Associated Token Account program-derived addresses.
 
-use solana_address::Address;
+use {pinocchio::cpi::Seed, solana_address::Address};
 
 #[cfg_attr(feature = "codama", derive(codama::CodamaPda))]
 #[cfg_attr(
@@ -35,5 +35,20 @@ impl AssociatedTokenPda {
             program_id,
         )
         .expect("Unable to find a viable program address bump seed")
+    }
+
+    /// Returns the PDA signer seeds for `invoke_signed`.
+    pub fn signer_seeds<'a>(
+        wallet_address: &'a Address,
+        token_program_id: &'a Address,
+        token_mint_address: &'a Address,
+        bump_seed: &'a [u8],
+    ) -> [Seed<'a>; 4] {
+        [
+            Seed::from(wallet_address.as_ref()),
+            Seed::from(token_program_id.as_ref()),
+            Seed::from(token_mint_address.as_ref()),
+            Seed::from(bump_seed),
+        ]
     }
 }

@@ -8,6 +8,7 @@ use {
         build_create_ata_instruction, token_account_rent_exempt_balance, AccountBuilder,
         AtaTestHarness, CreateAtaInstructionType,
     },
+    spl_token_interface::state::AccountState,
     test_case::test_case,
 };
 
@@ -113,6 +114,36 @@ fn idempotent_rejects_invalid_data_token_owned_canonical_ata(token_program_id: P
 
 #[test_case(spl_token_interface::id())]
 #[test_case(spl_token_2022_interface::id())]
+fn idempotent_rejects_packed_uninitialized_token_owned_canonical_ata(token_program_id: Pubkey) {
+    let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
+    let wallet = harness.wallet.unwrap();
+    let ata_address = harness.insert_token_account_at_ata_address(wallet);
+
+    harness
+        .ctx
+        .account_store
+        .borrow_mut()
+        .get_mut(&ata_address)
+        .unwrap()
+        .data[108] = AccountState::Uninitialized as u8;
+
+    let instruction = build_create_ata_instruction(
+        spl_associated_token_account_interface::program::id(),
+        harness.payer,
+        ata_address,
+        wallet,
+        harness.mint.unwrap(),
+        token_program_id,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
+    );
+
+    harness
+        .ctx
+        .process_and_validate_instruction(&instruction, &[Check::err(ProgramError::IllegalOwner)]);
+}
+
+#[test_case(spl_token_interface::id())]
+#[test_case(spl_token_2022_interface::id())]
 fn idempotent_rejects_wrong_owner(token_program_id: Pubkey) {
     let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let wrong_owner = Pubkey::new_unique();
@@ -171,6 +202,46 @@ fn idempotent_accepts_preexisting_valid_ata(token_program_id: Pubkey) {
     let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
     let ata_address = harness.insert_token_account_at_ata_address(wallet);
+
+    let instruction = build_create_ata_instruction(
+        spl_associated_token_account_interface::program::id(),
+        harness.payer,
+        ata_address,
+        wallet,
+        mint,
+        token_program_id,
+        CreateAtaInstructionType::CreateIdempotent { bump: None },
+    );
+
+    harness.ctx.process_and_validate_instruction(
+        &instruction,
+        &[
+            Check::success(),
+            Check::account(&ata_address)
+                .space(spl_token_interface::state::Account::LEN)
+                .owner(&token_program_id)
+                .lamports(token_account_rent_exempt_balance())
+                .build(),
+        ],
+    );
+}
+
+#[test_case(spl_token_interface::id())]
+#[test_case(spl_token_2022_interface::id())]
+fn idempotent_accepts_frozen_ata(token_program_id: Pubkey) {
+    let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
+    let wallet = harness.wallet.unwrap();
+    let mint = harness.mint.unwrap();
+    let ata_address = harness.insert_token_account_at_ata_address(wallet);
+
+    // Set the token account state to Frozen (byte at offset 108)
+    harness
+        .ctx
+        .account_store
+        .borrow_mut()
+        .get_mut(&ata_address)
+        .unwrap()
+        .data[108] = AccountState::Frozen as u8;
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account_interface::program::id(),

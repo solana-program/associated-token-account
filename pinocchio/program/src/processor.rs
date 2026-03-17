@@ -10,7 +10,7 @@ use {
 #[inline(always)]
 pub fn process_instruction(
     program_id: &Address,
-    accounts: &[AccountView],
+    accounts: &mut [AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
     match parse_instruction(instruction_data)? {

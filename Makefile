@@ -75,11 +75,17 @@ generate-fixtures:
 	cargo $(nightly) test --features mollusk-svm/fuzz --manifest-path program/Cargo.toml \
 		--test create_always \
 		--test create_idempotent \
-		--test create_shared && \
-	cp target/deploy/spl_associated_token_account.so pinocchio/program/fuzz/program-mb.so
+		--test create_shared \
+		--test extended_mint && \
+		cp target/deploy/spl_associated_token_account.so pinocchio/program/fuzz/program-mb.so
 
 regression-%:
-	mollusk run-test --proto mollusk --ignore-compute-units $(call make-path,$*)/fuzz/program-mb.so ./target/deploy/$(subst -,_,$(shell toml get $(call make-path,$*)/Cargo.toml package.name)).so $(call make-path,$*)/fuzz/blob $(shell toml get $(call make-path,$*)/Cargo.toml package.metadata.solana.program-id)
+	mollusk run-test \
+		--proto mollusk \
+		--config $(call make-path,$*)/fuzz/mollusk-config.json \
+		--add-program-with-loader-and-elf TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA BPFLoader2111111111111111111111111111111111 program/tests/fixtures/pinocchio_token_program.so \
+		--add-program-with-loader-and-elf TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb BPFLoaderUpgradeab1e11111111111111111111111 program/tests/fixtures/spl_token_2022.so \
+		$(call make-path,$*)/fuzz/program-mb.so ./target/deploy/$(subst -,_,$(shell toml get $(call make-path,$*)/Cargo.toml package.name)).so $(call make-path,$*)/fuzz/blob $(shell toml get $(call make-path,$*)/Cargo.toml package.metadata.solana.program-id)
 
 format-rust:
 	cargo $(nightly) fmt --all $(ARGS)

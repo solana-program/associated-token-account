@@ -17,9 +17,18 @@ program-id = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
 workspace = true
 
 [dependencies]
-# TODO: Pinned to anza-xyz/pinocchio#307 (CreateAccountAllowPrefund builder), waiting on merge/publish
-pinocchio = { version = "0.10.1", git = "https://github.com/anza-xyz/pinocchio", rev = "9bb172e7a78875d29520e3398da97323173e0e66", default-features = false }
 pinocchio-associated-token-account-interface = { path = "../interface" }
-pinocchio-system = { version = "0.5.0", git = "https://github.com/anza-xyz/pinocchio", rev = "9bb172e7a78875d29520e3398da97323173e0e66" }
-# TODO: Waiting on merge https://github.com/anza-xyz/pinocchio/pull/349
-pinocchio-token-2022 = { version = "0.2.0", git = "https://github.com/anza-xyz/pinocchio", rev = "2913fd77d8156160aff86d1fd350a2abec3caf5c" }
+pinocchio-log = { version = "0.5.1", features = ["macro"] }
+
+# TODO: Waiting on PR #349 to merge and then be released: https://github.com/anza-xyz/pinocchio/pull/349.
+#       We need StateWithExtensions API from that PR.
+pinocchio = { version = "0.10.1", git = "https://github.com/anza-xyz/pinocchio", rev = "b2c1d325d7da5ca7e4d7283c99690504c015b860", default-features = false, features = ["cpi"] }
+pinocchio-system = { version = "0.5.0", git = "https://github.com/anza-xyz/pinocchio", rev = "b2c1d325d7da5ca7e4d7283c99690504c015b860" }
+
+# TODO: Waiting on a pinocchio-system release that includes CreateAccountAllowPrefund ix builder
+pinocchio-system-prefund = { package = "pinocchio-system", version = "0.5.0", git = "https://github.com/anza-xyz/pinocchio", rev = "e99a819bb51cbe47f7c76f8762af150b6d1217e2" }
+pinocchio-token = { version = "0.5.0", git = "https://github.com/anza-xyz/pinocchio", rev = "b2c1d325d7da5ca7e4d7283c99690504c015b860" }
+pinocchio-token-2022 = { version = "0.2.0", git = "https://github.com/anza-xyz/pinocchio", rev = "b2c1d325d7da5ca7e4d7283c99690504c015b860" }
+
+[dev-dependencies]
+solana-address = { version = "2.3.0", features = ["atomic"] }

@@ -36,10 +36,9 @@ spl-associated-token-account-mollusk-harness = { version = "1.0.0", path = "../m
 solana-program-pack = "3.1"
 test-case = "3.3.1"
 
-# TODO: Waiting on Mollusk releases for:
+# TODO: Waiting on upstream Mollusk release support for:
 #   PR #203 (Agave 4.x runtime): https://github.com/anza-xyz/mollusk/pull/203
-#   PR #206 (CLI program loading flags): https://github.com/anza-xyz/mollusk/pull/206
-mollusk-svm = { version = "0.10.3", git = "https://github.com/grod220/mollusk", branch = "combine-203-206" }
+mollusk-svm = { version = "0.11.0", git = "https://github.com/grod220/mollusk", branch = "dep-updates-4.0" }
 
 [lib]
 crate-type = ["cdylib", "lib"]

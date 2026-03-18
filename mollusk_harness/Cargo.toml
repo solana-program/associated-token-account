@@ -24,8 +24,7 @@ spl-associated-token-account-interface = { version = "2.0", path = "../interface
 spl-token-interface = "2.0"
 spl-token-2022-interface = "2.1"
 
-# TODO: Waiting on Mollusk releases for:
+# TODO: Waiting on upstream Mollusk release support for:
 #   PR #203 (Agave 4.x runtime): https://github.com/anza-xyz/mollusk/pull/203
-#   PR #206 (CLI program loading flags): https://github.com/anza-xyz/mollusk/pull/206
-mollusk-svm = { version = "0.10.3", git = "https://github.com/grod220/mollusk", branch = "combine-203-206" }
-mollusk-svm-programs-token = { version = "0.10.3", git = "https://github.com/grod220/mollusk", branch = "combine-203-206" }
+mollusk-svm = { version = "0.11.0", git = "https://github.com/grod220/mollusk", branch = "dep-updates-4.0" }
+mollusk-svm-programs-token = { version = "0.11.0", git = "https://github.com/grod220/mollusk", branch = "dep-updates-4.0" }

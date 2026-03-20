@@ -1811,7 +1811,7 @@ version = "0.10.1"
 source = "git+https://github.com/anza-xyz/pinocchio?rev=9bb172e7a78875d29520e3398da97323173e0e66#9bb172e7a78875d29520e3398da97323173e0e66"
 dependencies = [
  "solana-account-view",
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-define-syscall 4.0.1",
  "solana-instruction-view",
  "solana-program-error",
@@ -1824,7 +1824,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c06810dac15a4ef83d3dabdb4f2f22fb39c9adff669cd2781da4f716510a647c"
 dependencies = [
  "solana-account-view",
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-define-syscall 4.0.1",
  "solana-instruction-view",
  "solana-program-error",
@@ -1837,7 +1837,7 @@ dependencies = [
  "codama",
  "codama-macros",
  "pinocchio 0.10.2",
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
 ]
 
 [[package]]
@@ -1856,7 +1856,7 @@ version = "0.5.0"
 source = "git+https://github.com/anza-xyz/pinocchio?rev=9bb172e7a78875d29520e3398da97323173e0e66#9bb172e7a78875d29520e3398da97323173e0e66"
 dependencies = [
  "pinocchio 0.10.1",
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
 ]
 
 [[package]]
@@ -1865,7 +1865,7 @@ version = "0.2.0"
 source = "git+https://github.com/anza-xyz/pinocchio?rev=2913fd77d8156160aff86d1fd350a2abec3caf5c#2913fd77d8156160aff86d1fd350a2abec3caf5c"
 dependencies = [
  "solana-account-view",
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-instruction-view",
  "solana-program-error",
 ]
@@ -2304,7 +2304,7 @@ version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc3397241392f5756925029acaa8515dc70fcbe3d8059d4885d7d6533baf64fd"
 dependencies = [
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-program-error",
  "solana-program-memory",
 ]
@@ -2315,7 +2315,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f37ca34c37f92ee341b73d5ce7c8ef5bb38e9a87955b4bd343c63fa18b149215"
 dependencies = [
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-program-error",
 ]
 
@@ -2325,14 +2325,14 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2ecac8e1b7f74c2baa9e774c42817e3e75b20787134b76cc4d45e8a604488f5"
 dependencies = [
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
 ]
 
 [[package]]
 name = "solana-address"
-version = "2.3.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "500b83d41bda401b84ebff6033e2e7bc828870ea444805112d15fc0a3e470b9c"
+checksum = "7f67735365edc7fb19ed74ec950597107c8ee9cbfebac57b8868b3e78fb6df16"
 dependencies = [
  "borsh",
  "bytemuck",
@@ -2630,7 +2630,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60147e4d0a4620013df40bf30a86dd299203ff12fcb8b593cd51014fce0875d8"
 dependencies = [
  "solana-account-view",
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-define-syscall 4.0.1",
  "solana-program-error",
 ]
@@ -2726,7 +2726,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0448b1fd891c5f46491e5dc7d9986385ba3c852c340db2911dd29faa01d2b08d"
 dependencies = [
  "lazy_static",
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-hash 4.2.0",
  "solana-instruction",
  "solana-sanitize",
@@ -2906,7 +2906,7 @@ version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b06bd918d60111ee1f97de817113e2040ca0cedb740099ee8d646233f6b906c"
 dependencies = [
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
 ]
 
 [[package]]
@@ -2951,7 +2951,7 @@ version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "def234c1956ff616d46c9dd953f251fa7096ddbaa6d52b165218de97882b7280"
 dependencies = [
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
 ]
 
 [[package]]
@@ -3186,7 +3186,7 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_derive",
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-instruction",
  "solana-msg",
  "solana-program-error",
@@ -3256,7 +3256,7 @@ version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17358d1e9a13e5b9c2264d301102126cf11a47fd394cdf3dec174fe7bc96e1de"
 dependencies = [
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-sdk-ids",
 ]
 
@@ -3266,7 +3266,7 @@ version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96697cff5075a028265324255efed226099f6d761ca67342b230d09f72cc48d2"
 dependencies = [
- "solana-address 2.3.0",
+ "solana-address 2.4.0",
  "solana-hash 4.2.0",
  "solana-instruction",
  "solana-instruction-error",
@@ -3951,9 +3951,9 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "wincode"
-version = "0.4.5"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9a7bf870d59e16860de785358c89e75cffd171c04fb5f93fba029a167cb0263"
+checksum = "dc91ddd8c932a38bbec58ed536d9e93ce9cd01b6af9b6de3c501132cf98ddec6"
 dependencies = [
  "pastey",
  "proc-macro2",

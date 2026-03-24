@@ -5,7 +5,6 @@ use {
     solana_program_pack::Pack,
     solana_pubkey::Pubkey,
     solana_rent::Rent,
-    solana_system_interface::program as system_program,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_associated_token_account_mollusk_harness::{
         build_create_ata_instruction, token_2022_immutable_owner_account_len,
@@ -156,21 +155,26 @@ fn create_rejects_invalid_mint_data(token_program_id: Pubkey, idempotent: bool) 
     [spl_token_interface::id(), spl_token_2022_interface::id()],
     [true, false]
 )]
-fn create_rejects_prefunded_initialized_system_account(token_program_id: Pubkey, idempotent: bool) {
+fn create_fails_token_cpi_when_system_account_has_preexisting_data(
+    token_program_id: Pubkey,
+    idempotent: bool,
+) {
     let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
     let ata_address =
         get_associated_token_address_with_program_id(&wallet, &mint, &token_program_id);
 
-    let mut initialized_system_account =
-        AccountBuilder::token_account(&mint, &wallet, 0, &token_program_id);
-    initialized_system_account.owner = system_program::id();
+    // System-owned account at the ATA address with pre-existing data already
+    // allocated, unlike the normal prefunded case (lamports only, zero-length
+    // data). Note this is an unusual state for a PDA.
+    let mut account = AccountBuilder::system_account(token_account_rent_exempt_balance());
+    account.data = vec![0; spl_token_interface::state::Account::LEN];
     harness
         .ctx
         .account_store
         .borrow_mut()
-        .insert(ata_address, initialized_system_account);
+        .insert(ata_address, account);
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account_interface::program::id(),
@@ -182,6 +186,9 @@ fn create_rejects_prefunded_initialized_system_account(token_program_id: Pubkey,
         instruction_type(idempotent),
     );
 
+    // ATA passes the system-ownership check and hands this account to
+    // CreateAccountAllowPrefund + InitializeAccount3. The token program
+    // rejects the initialization (CPI failure).
     harness.ctx.process_and_validate_instruction(
         &instruction,
         &[Check::err(ProgramError::Custom(
@@ -269,7 +276,12 @@ fn create_accepts_prefunded_account_below_rent_exempt_minimum(
     let ata_address =
         get_associated_token_address_with_program_id(&wallet, &mint, &token_program_id);
 
-    let insufficient_lamports = 890880;
+    let insufficient_lamports = if token_program_id == spl_token_2022_interface::id() {
+        token_2022_immutable_owner_rent_exempt_balance()
+    } else {
+        token_account_rent_exempt_balance()
+    }
+    .saturating_sub(1);
     harness.ensure_account_exists_with_lamports(ata_address, insufficient_lamports);
 
     let instruction = build_create_ata_instruction(
@@ -346,7 +358,10 @@ fn create_accepts_prefunded_account_above_rent_exempt_minimum(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
     [true, false]
 )]
-fn create_rejects_wrong_system_program_account(token_program_id: Pubkey, idempotent: bool) {
+fn create_fails_cpi_when_system_program_account_is_wrong(
+    token_program_id: Pubkey,
+    idempotent: bool,
+) {
     let mut harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let bogus_system_program = Pubkey::new_unique();
     harness.ensure_account_exists_with_lamports(bogus_system_program, 1_000_000);
@@ -354,6 +369,8 @@ fn create_rejects_wrong_system_program_account(token_program_id: Pubkey, idempot
     let mut instruction = harness.build_create_ata_instruction(instruction_type(idempotent));
     instruction.accounts[4] = AccountMeta::new_readonly(bogus_system_program, false);
 
+    // The runtime returns `NotEnoughAccountKeys` when the CPI target (system program) is
+    // missing from the transaction's account list.
     harness.ctx.process_and_validate_instruction(
         &instruction,
         &[Check::err(ProgramError::NotEnoughAccountKeys)],

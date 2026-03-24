@@ -38,6 +38,7 @@ impl AssociatedTokenPda {
     }
 
     /// Returns the PDA signer seeds for `invoke_signed`.
+    #[inline(always)]
     pub fn signer_seeds<'a>(
         wallet_address: &'a Address,
         token_program_id: &'a Address,

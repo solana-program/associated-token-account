@@ -46,20 +46,6 @@ impl<const DATA_LEN: usize> TestAccount<DATA_LEN> {
 }
 
 #[test]
-fn get_account_data_size_rejects_non_executable_token_program() {
-    let mint_address = Address::new_unique();
-    let mut mint =
-        TestAccount::<{ Mint::BASE_LEN }>::new(mint_address, pinocchio_token_2022::ID, false);
-    let mut token_program =
-        TestAccount::<0>::new(pinocchio_token::ID, Address::new_unique(), false);
-
-    assert_eq!(
-        get_account_data_size(&mint.view(), &token_program.view()),
-        Err(ProgramError::IncorrectProgramId)
-    );
-}
-
-#[test]
 fn get_account_data_size_short_circuits_for_spl_token() {
     let mint_address = Address::new_unique();
     let mut mint =

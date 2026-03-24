@@ -12,6 +12,8 @@ use {
     test_case::test_case,
 };
 
+const TOKEN_ACCOUNT_STATE_OFFSET: usize = 108;
+
 #[test_case(spl_token_interface::id())]
 #[test_case(spl_token_2022_interface::id())]
 fn idempotent_rejects_non_token_owned_canonical_ata(token_program_id: Pubkey) {
@@ -125,7 +127,7 @@ fn idempotent_rejects_packed_uninitialized_token_owned_canonical_ata(token_progr
         .borrow_mut()
         .get_mut(&ata_address)
         .unwrap()
-        .data[108] = AccountState::Uninitialized as u8;
+        .data[TOKEN_ACCOUNT_STATE_OFFSET] = AccountState::Uninitialized as u8;
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account_interface::program::id(),
@@ -137,6 +139,9 @@ fn idempotent_rejects_packed_uninitialized_token_owned_canonical_ata(token_progr
         CreateAtaInstructionType::CreateIdempotent { bump: None },
     );
 
+    // Zeroing the account state byte defeats the idempotent fast-path (unpack
+    // fails), so the processor falls through to the ownership check and returns
+    // `IllegalOwner` because the account is still token-owned, not system-owned.
     harness
         .ctx
         .process_and_validate_instruction(&instruction, &[Check::err(ProgramError::IllegalOwner)]);
@@ -241,7 +246,7 @@ fn idempotent_accepts_frozen_ata(token_program_id: Pubkey) {
         .borrow_mut()
         .get_mut(&ata_address)
         .unwrap()
-        .data[108] = AccountState::Frozen as u8;
+        .data[TOKEN_ACCOUNT_STATE_OFFSET] = AccountState::Frozen as u8;
 
     let instruction = build_create_ata_instruction(
         spl_associated_token_account_interface::program::id(),

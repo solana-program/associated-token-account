@@ -31,10 +31,6 @@ pub(crate) fn get_account_data_size(
     mint: &AccountView,
     token_program: &AccountView,
 ) -> Result<u64, ProgramError> {
-    if !token_program.executable() {
-        return Err(ProgramError::IncorrectProgramId);
-    }
-
     // SPL Token accounts are always exactly 165 bytes.
     if *token_program.address() == pinocchio_token::ID {
         return Ok(TokenAccount::BASE_LEN as u64);

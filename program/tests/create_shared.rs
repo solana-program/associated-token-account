@@ -130,17 +130,13 @@ fn create_rejects_wrong_token_program_account_after_passing_seed_check(
     [true, false]
 )]
 fn create_rejects_invalid_mint_data(token_program_id: Pubkey, idempotent: bool) {
-    let mut harness = AtaTestHarness::new(&token_program_id).with_wallet(1_000_000);
-    let mint = Pubkey::new_unique();
-    harness.ensure_account_exists_with_lamports(mint, Rent::default().minimum_balance(Mint::LEN));
-    {
-        let mut store = harness.ctx.account_store.borrow_mut();
-        let mint_account = store.get_mut(&mint).unwrap();
-        mint_account.owner = token_program_id;
-        mint_account.data = vec![0; Mint::LEN - 1];
-    }
-    harness.mint = Some(mint);
-
+    let mut harness = AtaTestHarness::new(&token_program_id)
+        .with_wallet(1_000_000)
+        .with_raw_mint(
+            token_program_id,
+            Rent::default().minimum_balance(Mint::LEN),
+            vec![0; Mint::LEN - 1],
+        );
     let instruction = harness.build_create_ata_instruction(instruction_type(idempotent));
 
     harness.ctx.process_and_validate_instruction(

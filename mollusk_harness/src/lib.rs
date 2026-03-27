@@ -16,15 +16,10 @@ use {
 };
 
 /// Setup mollusk with local ATA and token programs
-pub fn setup_mollusk_with_programs(token_program_id: &Pubkey) -> Mollusk {
+fn setup_mollusk(token_program_id: &Pubkey, token_program_name: &str) -> Mollusk {
     let ata_program_id = spl_associated_token_account_interface::program::id();
     let mut mollusk = Mollusk::new(&ata_program_id, "spl_associated_token_account");
-
-    if *token_program_id == spl_token_2022_interface::id() {
-        mollusk.add_program(token_program_id, "spl_token_2022");
-    } else {
-        mollusk.add_program(token_program_id, "pinocchio_token_program");
-    }
+    mollusk.add_program(token_program_id, token_program_name);
 
     mollusk
 }
@@ -117,7 +112,26 @@ impl AtaTestHarness {
 
     /// Create a new test harness with the specified token program
     pub fn new(token_program_id: &Pubkey) -> Self {
-        let mollusk = setup_mollusk_with_programs(token_program_id);
+        let token_program_name = if *token_program_id == spl_token_2022_interface::id() {
+            "spl_token_2022"
+        } else {
+            "pinocchio_token_program"
+        };
+        Self::new_with_token_program_name(token_program_id, token_program_name)
+    }
+
+    /// Create a new test harness using a custom token program ELF name under the
+    /// provided token program id.
+    pub fn new_with_token_program_name(
+        token_program_id: &Pubkey,
+        token_program_name: &str,
+    ) -> Self {
+        let mollusk = setup_mollusk(token_program_id, token_program_name);
+        Self::new_with_mollusk(token_program_id, mollusk)
+    }
+
+    /// Create a new test harness from a pre-configured Mollusk instance.
+    fn new_with_mollusk(token_program_id: &Pubkey, mollusk: Mollusk) -> Self {
         let payer = Pubkey::new_unique();
         let ctx = mollusk.with_context(HashMap::new());
 
@@ -158,6 +172,21 @@ impl AtaTestHarness {
         self.mint = Some(mint_account);
         self.mint_authority = Some(mint_authority);
         self.initialize_mint(decimals)
+    }
+
+    /// Insert a raw mint account owned by the provided program and use it as the
+    /// harness mint without attempting any mint initialization.
+    pub fn with_raw_mint(mut self, owner: Pubkey, lamports: u64, data: Vec<u8>) -> Self {
+        let mint = Pubkey::new_unique();
+        self.ensure_account_exists_with_lamports(mint, lamports);
+        {
+            let mut store = self.ctx.account_store.borrow_mut();
+            let mint_account = store.get_mut(&mint).expect("mint account must exist");
+            mint_account.owner = owner;
+            mint_account.data = data;
+        }
+        self.mint = Some(mint);
+        self
     }
 
     /// Create and initialize a Token-2022 mint with specific extensions

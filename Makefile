@@ -77,7 +77,7 @@ endef
 generate-fixtures:
 	rm -rf pinocchio/program/fuzz/blob pinocchio/program/fuzz/blob-mock pinocchio/program/fuzz/program-mb.so
 	mkdir -p pinocchio/program/fuzz/blob pinocchio/program/fuzz/blob-mock
-	$(call run-fixture-tests,pinocchio/program/fuzz/blob,create_always create_idempotent create_shared extended_mint)
+	$(call run-fixture-tests,pinocchio/program/fuzz/blob,create_always create_idempotent create_shared extended_mint recover_nested)
 	$(call run-fixture-tests,pinocchio/program/fuzz/blob-mock,create_return_data)
 	cp target/deploy/spl_associated_token_account.so pinocchio/program/fuzz/program-mb.so
 

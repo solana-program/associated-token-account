@@ -598,6 +598,16 @@ impl AccountBuilder {
         amount: u64,
         token_program: &Pubkey,
     ) -> Account {
+        Self::token_account_with_close_authority(mint, owner, amount, None, token_program)
+    }
+
+    pub fn token_account_with_close_authority(
+        mint: &Pubkey,
+        owner: &Pubkey,
+        amount: u64,
+        close_authority: Option<Pubkey>,
+        token_program: &Pubkey,
+    ) -> Account {
         let account_data = TokenAccount {
             mint: *mint,
             owner: *owner,
@@ -606,7 +616,7 @@ impl AccountBuilder {
             state: AccountState::Initialized,
             is_native: COption::None,
             delegated_amount: 0,
-            close_authority: COption::None,
+            close_authority: close_authority.into(),
         };
 
         if *token_program == spl_token_2022_interface::id() {

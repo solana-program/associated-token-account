@@ -16,8 +16,10 @@ codama = ["dep:codama", "dep:codama-macros"]
 [dependencies]
 codama = { version = "0.8.0", optional = true }
 codama-macros = { version = "0.8.0", optional = true }
-pinocchio = "0.10.1"
 solana-address = { version = "2.5.0", features = ["curve25519", "decode"] }
+
+# TODO: Waiting on pinocchio crate publish
+pinocchio = { version = "0.10.1", git = "https://github.com/anza-xyz/pinocchio", rev = "0ca7555836700b31dae01ef6da37ef66df1831b8", default-features = false, features = ["cpi"] }
 
 [package.metadata.solana]
 program-id = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"

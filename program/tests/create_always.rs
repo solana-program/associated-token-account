@@ -1,5 +1,6 @@
 use {
     mollusk_svm::result::Check,
+    solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
     spl_associated_token_account_mollusk_harness::{
@@ -32,4 +33,20 @@ fn create_rejects_existing_ata(token_program_id: Pubkey) {
     harness
         .ctx
         .process_and_validate_instruction(&instruction, &[Check::err(ProgramError::IllegalOwner)]);
+}
+
+#[test_case(spl_token_interface::id())]
+#[test_case(spl_token_2022_interface::id())]
+fn create_accepts_legacy_implicit_instruction(token_program_id: Pubkey) {
+    let mut harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
+
+    harness.create_and_check_ata_with_custom_instruction(
+        CreateAtaInstructionType::default(),
+        |instruction| {
+            instruction.data = vec![];
+            instruction
+                .accounts
+                .push(AccountMeta::new_readonly(solana_sysvar::rent::id(), false));
+        },
+    );
 }

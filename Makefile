@@ -65,21 +65,36 @@ sort-check:
 bench-%:
 	cargo $(nightly) bench --manifest-path $(call make-path,$*)/Cargo.toml $(ARGS)
 
-# Add new --test entries as p-ata is ready for them
+# $(1) = blob dir, $(2..N) = --test names
+define run-fixture-tests
+RUST_LOG=error \
+SBF_OUT_DIR=$(PWD)/target/deploy \
+EJECT_FUZZ_FIXTURES=$(PWD)/$(1) \
+cargo $(nightly) test --features mollusk-svm/fuzz --manifest-path program/Cargo.toml \
+	$(foreach t,$(2),--test $(t))
+endef
+
 generate-fixtures:
-	rm -rf pinocchio/program/fuzz/blob pinocchio/program/fuzz/program-mb.so && \
-	mkdir -p pinocchio/program/fuzz/blob && \
-	RUST_LOG=error \
-	SBF_OUT_DIR=$(PWD)/target/deploy \
-	EJECT_FUZZ_FIXTURES=$(PWD)/pinocchio/program/fuzz/blob \
-	cargo $(nightly) test --features mollusk-svm/fuzz --manifest-path program/Cargo.toml \
-		--test create_always \
-		--test create_idempotent \
-		--test create_shared && \
+	rm -rf pinocchio/program/fuzz/blob pinocchio/program/fuzz/blob-mock pinocchio/program/fuzz/program-mb.so
+	mkdir -p pinocchio/program/fuzz/blob pinocchio/program/fuzz/blob-mock
+	$(call run-fixture-tests,pinocchio/program/fuzz/blob,create_always create_idempotent create_shared extended_mint)
+	$(call run-fixture-tests,pinocchio/program/fuzz/blob-mock,create_return_data)
 	cp target/deploy/spl_associated_token_account.so pinocchio/program/fuzz/program-mb.so
 
+# $(1) = pattern target (e.g. pinocchio-program), $(2) = Token-2022 ELF, $(3) = blob dir
+define run-mollusk-regression
+mollusk run-test \
+	--proto mollusk \
+	--config $(call make-path,$(1))/fuzz/mollusk-config.json \
+	--add-program-with-loader-and-elf TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA BPFLoader2111111111111111111111111111111111 program/tests/fixtures/pinocchio_token_program.so \
+	--add-program-with-loader-and-elf TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb BPFLoaderUpgradeab1e11111111111111111111111 $(2) \
+	$(call make-path,$(1))/fuzz/program-mb.so ./target/deploy/$(subst -,_,$(shell toml get $(call make-path,$(1))/Cargo.toml package.name)).so $(3) $(shell toml get $(call make-path,$(1))/Cargo.toml package.metadata.solana.program-id)
+endef
+
 regression-%:
-	mollusk run-test --proto mollusk --ignore-compute-units $(call make-path,$*)/fuzz/program-mb.so ./target/deploy/$(subst -,_,$(shell toml get $(call make-path,$*)/Cargo.toml package.name)).so $(call make-path,$*)/fuzz/blob $(shell toml get $(call make-path,$*)/Cargo.toml package.metadata.solana.program-id)
+	cargo build-sbf --manifest-path $(call make-path,$*)/Cargo.toml
+	$(call run-mollusk-regression,$*,program/tests/fixtures/spl_token_2022.so,pinocchio/program/fuzz/blob)
+	$(call run-mollusk-regression,$*,program/tests/fixtures/mock_token_program.so,pinocchio/program/fuzz/blob-mock)
 
 format-rust:
 	cargo $(nightly) fmt --all $(ARGS)

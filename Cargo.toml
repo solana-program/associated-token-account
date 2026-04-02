@@ -14,5 +14,5 @@ consolidate-commits = false
 level = "warn"
 check-cfg = [
     'cfg(target_os, values("solana"))',
-    'cfg(feature, values("custom-alloc", "custom-panic", "frozen-abi", "no-entrypoint"))',
+    'cfg(feature, values("custom-alloc", "custom-heap", "custom-panic", "frozen-abi", "no-entrypoint"))',
 ]

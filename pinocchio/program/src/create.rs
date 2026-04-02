@@ -1,6 +1,8 @@
 use {
     crate::size::get_account_data_size,
-    pinocchio::{cpi::Signer, error::ProgramError, AccountView, Address, ProgramResult},
+    pinocchio::{
+        cpi::Signer, error::ProgramError, instruction::seeds, AccountView, Address, ProgramResult,
+    },
     pinocchio_associated_token_account_interface::{
         error::AssociatedTokenAccountError, pda::AssociatedTokenPda,
     },
@@ -100,11 +102,11 @@ pub(crate) fn process_create_associated_token_account(
 
     // Create the PDA (handles pre-funded accounts)
     let bump_ref = &[bump_seed];
-    let seeds = AssociatedTokenPda::signer_seeds(
-        wallet.address(),
-        token_program.address(),
-        mint.address(),
-        bump_ref,
+    let seeds = seeds!(
+        wallet.address().as_ref(),
+        token_program.address().as_ref(),
+        mint.address().as_ref(),
+        bump_ref
     );
     let signer = Signer::from(&seeds);
     CreateAccountAllowPrefund::with_minimum_balance(
@@ -118,6 +120,8 @@ pub(crate) fn process_create_associated_token_account(
 
     // Lock the owner field (skip for SPL Token)
     if *token_program.address() != pinocchio_token::ID {
+        // TODO: Use new Batch ix now available in t-22
+
         InitializeImmutableOwner {
             account: associated_token_account,
             token_program: token_program.address(),

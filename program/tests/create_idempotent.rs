@@ -142,6 +142,7 @@ fn idempotent_rejects_packed_uninitialized_token_owned_canonical_ata(token_progr
     // Zeroing the account state byte defeats the idempotent fast-path (unpack
     // fails), so the processor falls through to the ownership check and returns
     // `IllegalOwner` because the account is still token-owned, not system-owned.
+    // Note: This is the current behavior of the deployed program.
     harness
         .ctx
         .process_and_validate_instruction(&instruction, &[Check::err(ProgramError::IllegalOwner)]);

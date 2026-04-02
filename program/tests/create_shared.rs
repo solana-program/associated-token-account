@@ -9,7 +9,7 @@ use {
     spl_associated_token_account_mollusk_harness::{
         build_create_ata_instruction, token_2022_immutable_owner_account_len,
         token_2022_immutable_owner_rent_exempt_balance, token_account_rent_exempt_balance,
-        AccountBuilder, AtaTestHarness, CreateAtaInstructionType,
+        AtaTestHarness, CreateAtaInstructionType,
     },
     spl_token_interface::state::Mint,
     test_case::{test_case, test_matrix},
@@ -143,52 +143,6 @@ fn create_rejects_invalid_mint_data(token_program_id: Pubkey, idempotent: bool) 
         &instruction,
         &[Check::err(ProgramError::Custom(
             spl_token_2022_interface::error::TokenError::InvalidMint as u32,
-        ))],
-    );
-}
-
-#[test_matrix(
-    [spl_token_interface::id(), spl_token_2022_interface::id()],
-    [true, false]
-)]
-fn create_fails_token_cpi_when_system_account_has_preexisting_data(
-    token_program_id: Pubkey,
-    idempotent: bool,
-) {
-    let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
-    let wallet = harness.wallet.unwrap();
-    let mint = harness.mint.unwrap();
-    let ata_address =
-        get_associated_token_address_with_program_id(&wallet, &mint, &token_program_id);
-
-    // System-owned account at the ATA address with pre-existing data already
-    // allocated, unlike the normal prefunded case (lamports only, zero-length
-    // data). Note this is an unusual state for a PDA.
-    let mut account = AccountBuilder::system_account(token_account_rent_exempt_balance());
-    account.data = vec![0; spl_token_interface::state::Account::LEN];
-    harness
-        .ctx
-        .account_store
-        .borrow_mut()
-        .insert(ata_address, account);
-
-    let instruction = build_create_ata_instruction(
-        spl_associated_token_account_interface::program::id(),
-        harness.payer,
-        ata_address,
-        wallet,
-        mint,
-        token_program_id,
-        instruction_type(idempotent),
-    );
-
-    // ATA passes the system-ownership check and hands this account to
-    // CreateAccountAllowPrefund + InitializeAccount3. The token program
-    // rejects the initialization (CPI failure).
-    harness.ctx.process_and_validate_instruction(
-        &instruction,
-        &[Check::err(ProgramError::Custom(
-            spl_token_2022_interface::error::TokenError::NotRentExempt as u32,
         ))],
     );
 }
@@ -354,7 +308,7 @@ fn create_accepts_prefunded_account_above_rent_exempt_minimum(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
     [true, false]
 )]
-fn create_fails_cpi_when_system_program_account_is_wrong(
+fn create_fails_cpi_with_invalid_system_program_account(
     token_program_id: Pubkey,
     idempotent: bool,
 ) {

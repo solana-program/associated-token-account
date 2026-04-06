@@ -140,6 +140,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "android_system_properties"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "819e7219dbd41043ac279b19830f2efc897156490d7fd6ea916720117ee66311"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "anstream"
 version = "0.6.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -685,6 +694,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "chrono"
+version = "0.4.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
+dependencies = [
+ "iana-time-zone",
+ "js-sys",
+ "num-traits",
+ "wasm-bindgen",
+ "windows-link",
+]
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -880,6 +902,12 @@ name = "constant_time_eq"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
+
+[[package]]
+name = "core-foundation-sys"
+version = "0.8.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cpufeatures"
@@ -1401,6 +1429,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "iana-time-zone"
+version = "0.1.65"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e31bc9ad994ba00e440a8aa5c9ef0ec67d5cb5e5cb0cc7f8b744a35b389cc470"
+dependencies = [
+ "android_system_properties",
+ "core-foundation-sys",
+ "iana-time-zone-haiku",
+ "js-sys",
+ "log",
+ "wasm-bindgen",
+ "windows-core",
+]
+
+[[package]]
+name = "iana-time-zone-haiku"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f31827a206f56af32e590ba56d5d2d085f558508192593743f16b2306495269f"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "ident_case"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1653,8 +1705,8 @@ dependencies = [
  "agave-feature-set",
  "agave-syscalls",
  "bincode",
- "mollusk-svm-error",
- "mollusk-svm-result",
+ "mollusk-svm-error 0.11.0 (git+https://github.com/grod220/mollusk?branch=dep-updates-4.0)",
+ "mollusk-svm-result 0.11.0 (git+https://github.com/grod220/mollusk?branch=dep-updates-4.0)",
  "solana-account 3.4.0",
  "solana-account 4.2.0",
  "solana-bpf-loader-program",
@@ -1691,9 +1743,77 @@ dependencies = [
 ]
 
 [[package]]
+name = "mollusk-svm"
+version = "0.11.0"
+source = "git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0#57ad0e512756162875876897ad83cdb962f9e5a0"
+dependencies = [
+ "agave-feature-set",
+ "agave-syscalls",
+ "bincode",
+ "mollusk-svm-error 0.11.0 (git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0)",
+ "mollusk-svm-result 0.11.0 (git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0)",
+ "solana-account 3.4.0",
+ "solana-account 4.2.0",
+ "solana-bpf-loader-program",
+ "solana-clock",
+ "solana-compute-budget",
+ "solana-epoch-rewards",
+ "solana-epoch-schedule",
+ "solana-hash 3.1.0",
+ "solana-instruction",
+ "solana-instruction-error",
+ "solana-instructions-sysvar",
+ "solana-loader-v3-interface",
+ "solana-loader-v4-interface",
+ "solana-logger",
+ "solana-message",
+ "solana-precompile-error",
+ "solana-program-error",
+ "solana-program-runtime",
+ "solana-pubkey 4.1.0",
+ "solana-rent 3.1.0",
+ "solana-rent 4.1.0",
+ "solana-sdk-ids",
+ "solana-slot-hashes",
+ "solana-stake-interface 3.1.0",
+ "solana-svm-callback",
+ "solana-svm-log-collector",
+ "solana-svm-timings",
+ "solana-svm-transaction",
+ "solana-system-program",
+ "solana-sysvar 4.0.0",
+ "solana-sysvar-id",
+ "solana-transaction-context",
+ "solana-transaction-error",
+]
+
+[[package]]
+name = "mollusk-svm-bencher"
+version = "0.11.0"
+source = "git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0#57ad0e512756162875876897ad83cdb962f9e5a0"
+dependencies = [
+ "chrono",
+ "mollusk-svm 0.11.0 (git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0)",
+ "num-format",
+ "serde_json",
+ "solana-account 4.2.0",
+ "solana-instruction",
+ "solana-pubkey 4.1.0",
+]
+
+[[package]]
 name = "mollusk-svm-error"
 version = "0.11.0"
 source = "git+https://github.com/grod220/mollusk?branch=dep-updates-4.0#57ad0e512756162875876897ad83cdb962f9e5a0"
+dependencies = [
+ "solana-pubkey 4.1.0",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "mollusk-svm-error"
+version = "0.11.0"
+source = "git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0#57ad0e512756162875876897ad83cdb962f9e5a0"
 dependencies = [
  "solana-pubkey 4.1.0",
  "thiserror 1.0.69",
@@ -1704,7 +1824,21 @@ name = "mollusk-svm-programs-token"
 version = "0.11.0"
 source = "git+https://github.com/grod220/mollusk?branch=dep-updates-4.0#57ad0e512756162875876897ad83cdb962f9e5a0"
 dependencies = [
- "mollusk-svm",
+ "mollusk-svm 0.11.0 (git+https://github.com/grod220/mollusk?branch=dep-updates-4.0)",
+ "solana-account 4.2.0",
+ "solana-program-pack",
+ "solana-pubkey 4.1.0",
+ "solana-rent 4.1.0",
+ "spl-associated-token-account-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spl-token-interface",
+]
+
+[[package]]
+name = "mollusk-svm-programs-token"
+version = "0.11.0"
+source = "git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0#57ad0e512756162875876897ad83cdb962f9e5a0"
+dependencies = [
+ "mollusk-svm 0.11.0 (git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0)",
  "solana-account 4.2.0",
  "solana-program-pack",
  "solana-pubkey 4.1.0",
@@ -1717,6 +1851,19 @@ dependencies = [
 name = "mollusk-svm-result"
 version = "0.11.0"
 source = "git+https://github.com/grod220/mollusk?branch=dep-updates-4.0#57ad0e512756162875876897ad83cdb962f9e5a0"
+dependencies = [
+ "solana-account 4.2.0",
+ "solana-instruction",
+ "solana-program-error",
+ "solana-pubkey 4.1.0",
+ "solana-rent 4.1.0",
+ "solana-transaction-error",
+]
+
+[[package]]
+name = "mollusk-svm-result"
+version = "0.11.0"
+source = "git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0#57ad0e512756162875876897ad83cdb962f9e5a0"
 dependencies = [
  "solana-account 4.2.0",
  "solana-instruction",
@@ -1780,6 +1927,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "num-format"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a652d9771a63711fd3c3deb670acfbe5c30a4072e664d7a3bf5a9e1056ac72c3"
+dependencies = [
+ "arrayvec",
+ "itoa",
 ]
 
 [[package]]
@@ -1992,6 +2149,9 @@ dependencies = [
 name = "pinocchio-associated-token-account-program"
 version = "0.1.0"
 dependencies = [
+ "mollusk-svm 0.11.0 (git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0)",
+ "mollusk-svm-bencher",
+ "mollusk-svm-programs-token 0.11.0 (git+https://github.com/grod220/mollusk?rev=57ad0e512756162875876897ad83cdb962f9e5a0)",
  "pinocchio 0.10.2 (git+https://github.com/anza-xyz/pinocchio?rev=0ca7555836700b31dae01ef6da37ef66df1831b8)",
  "pinocchio-associated-token-account-interface",
  "pinocchio-log",
@@ -1999,6 +2159,16 @@ dependencies = [
  "pinocchio-system 0.5.0 (git+https://github.com/anza-xyz/pinocchio?rev=009301423f920fd105bd32a25560d127b6f0bf4f)",
  "pinocchio-token",
  "pinocchio-token-2022",
+ "solana-account 4.2.0",
+ "solana-logger",
+ "solana-program-option",
+ "solana-program-pack",
+ "solana-pubkey 4.1.0",
+ "solana-rent 4.1.0",
+ "solana-system-interface 3.1.0",
+ "spl-associated-token-account-interface 2.0.0",
+ "spl-token-2022-interface",
+ "spl-token-interface",
 ]
 
 [[package]]
@@ -3742,7 +3912,7 @@ name = "spl-associated-token-account"
 version = "8.0.0"
 dependencies = [
  "borsh",
- "mollusk-svm",
+ "mollusk-svm 0.11.0 (git+https://github.com/grod220/mollusk?branch=dep-updates-4.0)",
  "num-derive",
  "num-traits",
  "solana-account-info",
@@ -3789,8 +3959,8 @@ dependencies = [
 name = "spl-associated-token-account-mollusk-harness"
 version = "1.0.0"
 dependencies = [
- "mollusk-svm",
- "mollusk-svm-programs-token",
+ "mollusk-svm 0.11.0 (git+https://github.com/grod220/mollusk?branch=dep-updates-4.0)",
+ "mollusk-svm-programs-token 0.11.0 (git+https://github.com/grod220/mollusk?branch=dep-updates-4.0)",
  "solana-account 4.2.0",
  "solana-instruction",
  "solana-program-error",
@@ -4375,10 +4545,63 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-core"
+version = "0.62.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8e83a14d34d0623b51dce9581199302a221863196a1dde71a7663a4c2be9deb"
+dependencies = [
+ "windows-implement",
+ "windows-interface",
+ "windows-link",
+ "windows-result",
+ "windows-strings",
+]
+
+[[package]]
+name = "windows-implement"
+version = "0.60.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "windows-interface"
+version = "0.59.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-result"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
+dependencies = [
+ "windows-link",
+]
+
+[[package]]
+name = "windows-strings"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7837d08f69c77cf6b07689544538e017c1bfcf57e34b4c0ff58e6c2cd3b37091"
+dependencies = [
+ "windows-link",
+]
 
 [[package]]
 name = "windows-sys"

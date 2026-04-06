@@ -63,7 +63,7 @@ sort-check:
 	cargo $(nightly) sort --workspace --check $(ARGS)
 
 bench-%:
-	cargo $(nightly) bench --manifest-path $(call make-path,$*)/Cargo.toml $(ARGS)
+	SBF_OUT_DIR=$(PWD)/target/deploy cargo $(nightly) bench --manifest-path $(call make-path,$*)/Cargo.toml $(ARGS)
 
 # $(1) = blob dir, $(2..N) = --test names
 define run-fixture-tests

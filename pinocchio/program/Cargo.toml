@@ -29,3 +29,22 @@ pinocchio = { version = "0.10.1", git = "https://github.com/anza-xyz/pinocchio",
 # TODO: Waiting on a pinocchio-system release that includes CreateAccountAllowPrefund ix builder
 pinocchio-system-prefund = { package = "pinocchio-system", version = "0.5.0", git = "https://github.com/anza-xyz/pinocchio", rev = "009301423f920fd105bd32a25560d127b6f0bf4f" }
 pinocchio-token-2022 = { version = "0.2.0", git = "https://github.com/anza-xyz/pinocchio", rev = "0ca7555836700b31dae01ef6da37ef66df1831b8" }
+
+[dev-dependencies]
+mollusk-svm = { version = "0.11.0", git = "https://github.com/grod220/mollusk", rev = "57ad0e512756162875876897ad83cdb962f9e5a0" }
+mollusk-svm-bencher = { version = "0.11.0", git = "https://github.com/grod220/mollusk", rev = "57ad0e512756162875876897ad83cdb962f9e5a0" }
+mollusk-svm-programs-token = { version = "0.11.0", git = "https://github.com/grod220/mollusk", rev = "57ad0e512756162875876897ad83cdb962f9e5a0" }
+solana-account = "4.2.0"
+solana-logger = "3.0.0"
+solana-program-option = "3.1.0"
+solana-program-pack = "3.1.0"
+solana-pubkey = "4.1.0"
+solana-rent = "4.1.0"
+solana-system-interface = "3.1.0"
+spl-associated-token-account-interface = { path = "../../interface" }
+spl-token-2022-interface = "2.1.0"
+spl-token-interface = "2.0.0"
+
+[[bench]]
+name = "compute_units"
+harness = false

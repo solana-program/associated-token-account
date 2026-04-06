@@ -14,14 +14,14 @@ use {
 
 /// Token-2022 account data size when the mint has no extensions.
 /// The only account extension is `ImmutableOwner` (zero-length value), so the
-/// total is `TokenAccount::BASE_LEN (165) + TLV_START_INDEX (1) + TLV_HEADER_LEN (4)`.
+/// total is `TokenAccount::BASE_LEN (165) + ACCOUNT_TYPE_SIZE (1) + TLV_HEADER_LEN (4)`.
 ///
 /// Reference: https://github.com/anza-xyz/pinocchio/blob/0ca7555836700b31dae01ef6da37ef66df1831b8/programs/token-2022/src/state/extension/mod.rs#L29-L30
-const TLV_START_INDEX: usize = 1;
+const ACCOUNT_TYPE_SIZE: usize = 1;
 /// Reference: https://github.com/anza-xyz/pinocchio/blob/0ca7555836700b31dae01ef6da37ef66df1831b8/programs/token-2022/src/state/extension/mod.rs#L31
 const TLV_HEADER_LEN: usize = 4;
 const TOKEN_2022_BASE_ACCOUNT_DATA_SIZE: u64 =
-    TokenAccount::BASE_LEN as u64 + TLV_START_INDEX as u64 + TLV_HEADER_LEN as u64;
+    TokenAccount::BASE_LEN as u64 + ACCOUNT_TYPE_SIZE as u64 + TLV_HEADER_LEN as u64;
 
 /// Get the required account data size for an ATA with the `ImmutableOwner` extension.
 /// Short-circuits for the two common cases (SPL Token, Token-2022 with no mint

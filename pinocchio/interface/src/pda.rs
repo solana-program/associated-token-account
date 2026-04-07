@@ -20,7 +20,7 @@ pub struct AssociatedTokenPda;
 impl AssociatedTokenPda {
     /// Derives the associated token account address and bump seed
     /// for the given wallet address, token mint and token program id.
-    pub fn get_address_and_bump_seed(
+    pub fn derive_address_and_bump_seed(
         program_id: &Address,
         wallet_address: &Address,
         token_program_id: &Address,
@@ -35,5 +35,23 @@ impl AssociatedTokenPda {
             program_id,
         )
         .expect("Unable to find a viable program address bump seed")
+    }
+
+    /// Derives the associated token account address for the given wallet
+    /// address, token mint and token program id.
+    #[inline(always)]
+    pub fn derive_address(
+        program_id: &Address,
+        wallet_address: &Address,
+        token_program_id: &Address,
+        token_mint_address: &Address,
+    ) -> Address {
+        Self::derive_address_and_bump_seed(
+            program_id,
+            wallet_address,
+            token_program_id,
+            token_mint_address,
+        )
+        .0
     }
 }

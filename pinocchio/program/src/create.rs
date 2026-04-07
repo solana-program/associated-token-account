@@ -72,7 +72,7 @@ pub(crate) fn process_create_associated_token_account(
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    let (associated_token_address, bump_seed) = AssociatedTokenPda::get_address_and_bump_seed(
+    let (associated_token_address, bump_seed) = AssociatedTokenPda::derive_address_and_bump_seed(
         program_id,
         wallet.address(),
         token_program.address(),

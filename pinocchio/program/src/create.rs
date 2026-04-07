@@ -22,44 +22,6 @@ pub(crate) enum CreateMode {
     Idempotent,
 }
 
-/// Returns `Ok(true)` only when the canonical ATA already exists and idempotent create may
-/// treat the instruction as a no-op. `Ok(false)` means the helper could not validate the
-/// current account as that preexisting ATA, so the caller must continue its normal checks.
-#[inline(always)]
-fn is_valid_existing_ata_for_idempotent(
-    associated_token_account: &AccountView,
-    wallet: &AccountView,
-    mint: &AccountView,
-    token_program: &AccountView,
-) -> Result<bool, ProgramError> {
-    // Preexisting ATA must already be owned by the requested token program
-    if !associated_token_account.owned_by(token_program.address()) {
-        return Ok(false);
-    }
-
-    let ata_data = associated_token_account.try_borrow()?;
-    // Preexisting ATA must be parsable as a token account
-    let Ok(token_account_ext) = StateWithExtensions::<TokenAccount>::from_bytes(&ata_data) else {
-        return Ok(false);
-    };
-
-    let token_account = token_account_ext.base();
-    // Preexisting ATA cannot be in the uninitialized state
-    let Ok(AccountState::Initialized | AccountState::Frozen) = token_account.state() else {
-        return Ok(false);
-    };
-
-    // Now that ATA is confirmed, it must match the wallet and mint supplied
-    if token_account.owner() != wallet.address() {
-        return Err(AssociatedTokenAccountError::InvalidOwner.into());
-    }
-    if token_account.mint() != mint.address() {
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    Ok(true)
-}
-
 #[inline(always)]
 pub(crate) fn process_create_associated_token_account(
     program_id: &Address,
@@ -82,16 +44,30 @@ pub(crate) fn process_create_associated_token_account(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // For `CreateIdempotent`, if the ATA already exists and is valid, return early
+    // For `CreateIdempotent`, if the ATA already exists and is valid, it's a no-op
     if create_mode == CreateMode::Idempotent
-        && is_valid_existing_ata_for_idempotent(
-            associated_token_account,
-            wallet,
-            mint,
-            token_program,
-        )?
+        // Preexisting ATA must already be owned by the requested token program
+        && associated_token_account.owned_by(token_program.address())
     {
-        return Ok(());
+        let ata_data = associated_token_account.try_borrow()?;
+        // Preexisting ATA must be parsable as a token account
+        if let Ok(token_account_ext) = StateWithExtensions::<TokenAccount>::from_bytes(&ata_data) {
+            let token_account = token_account_ext.base();
+            // Preexisting ATA cannot be in the uninitialized state
+            if let Ok(account_state) = token_account.state() {
+                if account_state != AccountState::Uninitialized {
+                    // Now that ATA is confirmed, it must match the wallet and mint supplied
+                    if token_account.owner() != wallet.address() {
+                        return Err(AssociatedTokenAccountError::InvalidOwner.into());
+                    }
+                    if token_account.mint() != mint.address() {
+                        return Err(ProgramError::InvalidAccountData);
+                    }
+                    // Confirmed `CreateIdempotent` no-op
+                    return Ok(());
+                }
+            }
+        }
     }
 
     if !associated_token_account.owned_by(&pinocchio_system::ID) {

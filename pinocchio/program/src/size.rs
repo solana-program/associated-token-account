@@ -80,6 +80,11 @@ fn get_account_data_size_cpi(
             ProgramError::InvalidInstructionData
         })
         .and_then(|return_data| {
+            if return_data.program_id() != token_program_address {
+                log!("Error: return data came from unexpected program");
+                return Err(ProgramError::IncorrectProgramId);
+            }
+
             let bytes = return_data.as_slice();
             bytes.try_into().map(u64::from_le_bytes).map_err(|_| {
                 log!(

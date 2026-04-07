@@ -54,19 +54,18 @@ pub(crate) fn process_create_associated_token_account(
         if let Ok(token_account_ext) = StateWithExtensions::<TokenAccount>::from_bytes(&ata_data) {
             let token_account = token_account_ext.base();
             // Preexisting ATA cannot be in the uninitialized state
-            if matches!(
-                token_account.state(),
-                Ok(AccountState::Initialized | AccountState::Frozen)
-            ) {
-                // Now that ATA is confirmed, it must match the wallet and mint supplied
-                if token_account.owner() != wallet.address() {
-                    return Err(AssociatedTokenAccountError::InvalidOwner.into());
+            if let Ok(account_state) = token_account.state() {
+                if account_state != AccountState::Uninitialized {
+                    // Now that ATA is confirmed, it must match the wallet and mint supplied
+                    if token_account.owner() != wallet.address() {
+                        return Err(AssociatedTokenAccountError::InvalidOwner.into());
+                    }
+                    if token_account.mint() != mint.address() {
+                        return Err(ProgramError::InvalidAccountData);
+                    }
+                    // Confirmed `CreateIdempotent` no-op
+                    return Ok(());
                 }
-                if token_account.mint() != mint.address() {
-                    return Err(ProgramError::InvalidAccountData);
-                }
-                // Confirmed `CreateIdempotent` no-op
-                return Ok(());
             }
         }
     }

@@ -91,7 +91,9 @@ pub enum AssociatedTokenAccountInstruction {
     ///   4. `[]` Token mint for the owner associated token account
     ///   5. `[writeable, signer]` Wallet address for the owner associated token
     ///      account
-    ///   6. `[]` SPL Token program
+    ///   6. `[]` Token program for the owner mint
+    ///   7. `[]` Optional token program for the nested mint, if different from
+    ///      the owner mint's token program
     #[cfg_attr(
         feature = "codama",
         codama(account(
@@ -122,7 +124,15 @@ pub enum AssociatedTokenAccountInstruction {
             writable,
             docs = "Wallet address for the owner associated token account"
         )),
-        codama(account(name = "token_program", docs = "SPL Token program"))
+        codama(account(
+            name = "owner_token_program",
+            docs = "Token program for the owner mint"
+        )),
+        codama(account(
+            name = "nested_token_program",
+            optional,
+            docs = "Optional token program for the nested mint, if different from the owner mint's token program"
+        ))
     )]
     RecoverNested,
 }

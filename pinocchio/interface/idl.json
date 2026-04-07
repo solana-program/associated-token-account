@@ -243,11 +243,21 @@
           },
           {
             "kind": "instructionAccountNode",
-            "name": "tokenProgram",
+            "name": "ownerTokenProgram",
             "isWritable": false,
             "isSigner": false,
             "docs": [
-              "SPL Token program"
+              "Token program for the owner mint"
+            ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "nestedTokenProgram",
+            "isWritable": false,
+            "isSigner": false,
+            "isOptional": true,
+            "docs": [
+              "Optional token program for the nested mint, if different from the owner mint's token program"
             ]
           }
         ],

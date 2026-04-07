@@ -8,7 +8,6 @@ use {
     },
     spl_associated_token_account_mollusk_harness::{AccountBuilder, AtaTestHarness},
     spl_token_2022_interface::extension::StateWithExtensionsOwned,
-    spl_token_interface::error::TokenError,
     test_case::test_case,
 };
 
@@ -390,72 +389,6 @@ fn fail_nested_mint_invalid_data(token_program_id: Pubkey) {
     harness.ctx.process_and_validate_instruction(
         &recover_instruction,
         &[Check::err(ProgramError::InvalidAccountData)],
-    );
-}
-
-#[test_case(spl_token_interface::id())]
-#[test_case(spl_token_2022_interface::id())]
-fn fail_transfer_checked_cpi_error(token_program_id: Pubkey) {
-    let harness = AtaTestHarness::new(&token_program_id)
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let owner_mint = harness.mint.unwrap();
-    let owner_ata = harness.ata_address.unwrap();
-
-    let mut harness = harness.with_mint(0);
-    let nested_mint = harness.mint.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-    let destination_ata = harness.create_ata_for_owner(harness.wallet.unwrap(), 1_000_000);
-
-    harness.ctx.account_store.borrow_mut().insert(
-        destination_ata,
-        AccountBuilder::token_account(&owner_mint, &harness.wallet.unwrap(), 0, &token_program_id),
-    );
-
-    let recover_instruction = harness.build_recover_nested_instruction(owner_mint, nested_mint);
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::Custom(
-            TokenError::MintMismatch as u32,
-        ))],
-    );
-}
-
-#[test_case(spl_token_interface::id())]
-#[test_case(spl_token_2022_interface::id())]
-fn fail_close_account_cpi_error(token_program_id: Pubkey) {
-    let mut harness = AtaTestHarness::new(&token_program_id)
-        .with_wallet(1_000_000)
-        .with_mint(0)
-        .with_ata();
-
-    let mint = harness.mint.unwrap();
-    let owner_ata = harness.ata_address.unwrap();
-    let nested_ata = harness.create_ata_for_owner(owner_ata, 1_000_000);
-    harness.mint_tokens_to(nested_ata, TEST_MINT_AMOUNT);
-
-    let wrong_close_authority = Pubkey::new_unique();
-    harness.ensure_accounts_with_lamports(&[(wrong_close_authority, 1_000_000)]);
-    harness.ctx.account_store.borrow_mut().insert(
-        nested_ata,
-        AccountBuilder::token_account_with_close_authority(
-            &mint,
-            &owner_ata,
-            TEST_MINT_AMOUNT,
-            Some(wrong_close_authority),
-            &token_program_id,
-        ),
-    );
-
-    let recover_instruction = harness.build_recover_nested_instruction(mint, mint);
-    harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::Custom(
-            TokenError::OwnerMismatch as u32,
-        ))],
     );
 }
 

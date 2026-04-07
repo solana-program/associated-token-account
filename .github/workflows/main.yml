@@ -17,6 +17,7 @@ env:
   # https://github.com/anza-xyz/mollusk/pull/203
   # REGRESSION_PACKAGES: "['pinocchio-program']"
   REGRESSION_PACKAGES: ""
+  BENCH_PACKAGES: "['pinocchio-program']"
 
 jobs:
   set_env:
@@ -29,6 +30,7 @@ jobs:
       IDL_PACKAGES: ${{ steps.compute.outputs.IDL_PACKAGES }}
       MIRI_PACKAGES: ${{ steps.compute.outputs.MIRI_PACKAGES }}
       REGRESSION_PACKAGES: ${{ steps.compute.outputs.REGRESSION_PACKAGES }}
+      BENCH_PACKAGES: ${{ steps.compute.outputs.BENCH_PACKAGES }}
       RUST_TOOLCHAIN_NIGHTLY: ${{ steps.compute.outputs.RUST_TOOLCHAIN_NIGHTLY }}
       SOLANA_CLI_VERSION: ${{ steps.compute.outputs.SOLANA_CLI_VERSION }}
     steps:
@@ -45,6 +47,7 @@ jobs:
           echo "IDL_PACKAGES=${{ env.IDL_PACKAGES }}" >> $GITHUB_OUTPUT
           echo "MIRI_PACKAGES=${{ env.MIRI_PACKAGES }}" >> $GITHUB_OUTPUT
           echo "REGRESSION_PACKAGES=${{ env.REGRESSION_PACKAGES }}" >> $GITHUB_OUTPUT
+          echo "BENCH_PACKAGES=${{ env.BENCH_PACKAGES }}" >> $GITHUB_OUTPUT
           echo "RUST_TOOLCHAIN_NIGHTLY=$(make rust-toolchain-nightly)" >> "$GITHUB_OUTPUT"
           echo "SOLANA_CLI_VERSION=$(make solana-cli-version)" >> "$GITHUB_OUTPUT"
 
@@ -57,6 +60,7 @@ jobs:
       wasm-packages: ${{ needs.set_env.outputs.WASM_PACKAGES }}
       idl-packages: ${{ needs.set_env.outputs.IDL_PACKAGES }}
       regression-packages: ${{ needs.set_env.outputs.REGRESSION_PACKAGES }}
+      bench-packages: ${{ needs.set_env.outputs.BENCH_PACKAGES }}
       rustfmt-toolchain: ${{ needs.set_env.outputs.RUST_TOOLCHAIN_NIGHTLY }}
       clippy-toolchain: ${{ needs.set_env.outputs.RUST_TOOLCHAIN_NIGHTLY }}
       solana-cli-version: ${{ needs.set_env.outputs.SOLANA_CLI_VERSION }}

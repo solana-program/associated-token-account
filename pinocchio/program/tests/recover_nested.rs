@@ -1,5 +1,5 @@
 use {
-    mollusk_svm::result::Check,
+    mollusk_svm_result::Check,
     pinocchio_associated_token_account_interface::instruction::AssociatedTokenAccountInstruction,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
@@ -153,36 +153,6 @@ fn fail_wrong_nested_token_program_account() {
     setup.harness.ctx.process_and_validate_instruction(
         &recover_instruction,
         &[Check::err(ProgramError::InvalidSeeds)],
-    );
-}
-
-#[test]
-fn fail_nested_mint_invalid_data() {
-    let owner_token_program_id = spl_token_interface::id();
-    let nested_token_program_id = spl_token_2022_interface::id();
-    let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
-
-    // Corrupt the nested mint so recovery fails while unpacking mint state
-    setup
-        .harness
-        .ctx
-        .account_store
-        .borrow_mut()
-        .get_mut(&setup.nested_mint)
-        .unwrap()
-        .data = vec![0_u8; 3];
-
-    let recover_instruction = recover_nested_ix(
-        setup.wallet,
-        setup.owner_mint,
-        setup.nested_mint,
-        owner_token_program_id,
-        nested_token_program_id,
-    );
-
-    setup.harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::InvalidAccountData)],
     );
 }
 

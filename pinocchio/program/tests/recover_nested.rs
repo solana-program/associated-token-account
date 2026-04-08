@@ -1,9 +1,9 @@
 use {
     mollusk_svm_result::Check,
     pinocchio_associated_token_account_interface::instruction::AssociatedTokenAccountInstruction,
+    solana_address::Address,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
-    solana_pubkey::Pubkey,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_associated_token_account_mollusk_harness::{AtaProgram, AtaTestHarness},
     spl_token_2022_interface::{extension::StateWithExtensionsOwned, state::Account},
@@ -14,20 +14,20 @@ const TEST_MINT_AMOUNT: u64 = 100;
 
 struct RecoverNestedSetup {
     harness: AtaTestHarness,
-    wallet: Pubkey,
-    owner_mint: Pubkey,
-    nested_mint: Pubkey,
-    nested_ata: Pubkey,
-    destination_ata: Pubkey,
+    wallet: Address,
+    owner_mint: Address,
+    nested_mint: Address,
+    nested_ata: Address,
+    destination_ata: Address,
 }
 
 // TODO: Need to add to token-program sdk
 fn recover_nested_ix(
-    wallet: Pubkey,
-    owner_mint: Pubkey,
-    nested_mint: Pubkey,
-    owner_token_program_id: Pubkey,
-    nested_token_program_id: Pubkey,
+    wallet: Address,
+    owner_mint: Address,
+    nested_mint: Address,
+    owner_token_program_id: Address,
+    nested_token_program_id: Address,
 ) -> Instruction {
     let owner_associated_account_address =
         get_associated_token_address_with_program_id(&wallet, &owner_mint, &owner_token_program_id);
@@ -61,8 +61,8 @@ fn recover_nested_ix(
 // Build a nested ATA layout where the owner and nested accounts can be under
 // different token programs
 fn recover_nested_setup(
-    owner_token_program_id: Pubkey,
-    nested_token_program_id: Pubkey,
+    owner_token_program_id: Address,
+    nested_token_program_id: Address,
 ) -> RecoverNestedSetup {
     let mut harness =
         AtaTestHarness::new_with_ata_program(&owner_token_program_id, AtaProgram::Pinocchio)
@@ -160,10 +160,7 @@ fn fail_wrong_nested_token_program_account() {
 #[test_case(spl_token_interface::id(), spl_token_2022_interface::id())]
 #[test_case(spl_token_2022_interface::id(), spl_token_interface::id())]
 #[test_case(spl_token_2022_interface::id(), spl_token_2022_interface::id())]
-fn success_explicit_token_program_layout(
-    owner_token_program_id: Pubkey,
-    nested_token_program_id: Pubkey,
-) {
+fn success_mixed_token_programs(owner_token_program_id: Address, nested_token_program_id: Address) {
     let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
 
     let pre_wallet_lamports = {

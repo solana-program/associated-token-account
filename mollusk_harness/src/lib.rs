@@ -33,10 +33,10 @@ fn ata_program_name(ata_program: AtaProgram) -> &'static str {
     }
 }
 
-fn pinocchio_token_program_fixture_path() -> PathBuf {
+fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../program/tests/fixtures")
-        .join(format!("{PINOCCHIO_TOKEN_PROGRAM_NAME}.so"))
+        .join(format!("{name}.so"))
 }
 
 fn add_token_program_by_name(
@@ -45,12 +45,11 @@ fn add_token_program_by_name(
     token_program_name: &str,
 ) {
     match token_program_name {
-        SPL_TOKEN_2022_PROGRAM_NAME => mollusk_svm_programs_token::token2022::add_program(mollusk),
-        PINOCCHIO_TOKEN_PROGRAM_NAME => {
-            let elf = mollusk_svm::file::read_file(pinocchio_token_program_fixture_path());
+        SPL_TOKEN_2022_PROGRAM_NAME | PINOCCHIO_TOKEN_PROGRAM_NAME => {
+            let elf = mollusk_svm::file::read_file(fixture_path(token_program_name));
             mollusk.add_program_with_loader_and_elf(
                 token_program_id,
-                &mollusk_svm::program::loader_keys::LOADER_V2,
+                &mollusk_svm::program::loader_keys::LOADER_V3,
                 &elf,
             );
         }

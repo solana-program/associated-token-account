@@ -1,3 +1,4 @@
+use crate::batch::batch_init_and_lock_owner;
 use {
     crate::size::get_account_data_size,
     pinocchio::{
@@ -7,10 +8,8 @@ use {
         error::AssociatedTokenAccountError, pda::AssociatedTokenPda,
     },
     pinocchio_system_prefund::instructions::CreateAccountAllowPrefund,
-    pinocchio_token_2022::{
-        instructions::{InitializeAccount3, InitializeImmutableOwner},
-        state::{AccountState, StateWithExtensions, TokenAccount},
-    },
+    pinocchio_token::instructions::InitializeAccount3,
+    pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
 };
 
 /// Specify when to create the associated token account.
@@ -94,23 +93,16 @@ pub(crate) fn process_create_associated_token_account(
     )?
     .invoke_signed(&[signer])?;
 
-    // Lock the owner field (skip for SPL Token)
+    // If token-2022, lock the owner field
     if *token_program.address() != pinocchio_token::ID {
-        // TODO: Use new Batch ix now available in t-22
-
-        InitializeImmutableOwner {
-            account: associated_token_account,
-            token_program: token_program.address(),
-        }
-        .invoke()?;
+        batch_init_and_lock_owner(
+            token_program.address(),
+            associated_token_account,
+            mint,
+            wallet.address(),
+        )
+    } else {
+        // If spl-token, just initialize
+        InitializeAccount3::new(associated_token_account, mint, wallet.address()).invoke()
     }
-
-    // Initialize the token account state
-    InitializeAccount3 {
-        account: associated_token_account,
-        mint,
-        owner: wallet.address(),
-        token_program: token_program.address(),
-    }
-    .invoke()
 }

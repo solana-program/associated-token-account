@@ -2165,7 +2165,7 @@ dependencies = [
  "solana-program-pack",
  "solana-pubkey 4.2.0",
  "solana-rent 4.1.0",
- "solana-system-interface 3.1.0",
+ "solana-system-interface 3.2.0",
  "spl-associated-token-account-interface 2.0.0",
  "spl-token-2022-interface",
  "spl-token-interface",
@@ -2875,7 +2875,7 @@ dependencies = [
  "solana-svm-log-collector",
  "solana-svm-measure",
  "solana-svm-type-overrides",
- "solana-system-interface 3.1.0",
+ "solana-system-interface 3.2.0",
  "solana-transaction-context",
 ]
 
@@ -3366,7 +3366,7 @@ dependencies = [
  "solana-svm-timings",
  "solana-svm-transaction",
  "solana-svm-type-overrides",
- "solana-system-interface 3.1.0",
+ "solana-system-interface 3.2.0",
  "solana-sysvar 3.1.1",
  "solana-sysvar-id",
  "solana-transaction-context",
@@ -3607,7 +3607,7 @@ dependencies = [
  "solana-instruction",
  "solana-program-error",
  "solana-pubkey 4.2.0",
- "solana-system-interface 3.1.0",
+ "solana-system-interface 3.2.0",
  "solana-sysvar 4.0.0",
  "solana-sysvar-id",
 ]
@@ -3696,9 +3696,9 @@ dependencies = [
 
 [[package]]
 name = "solana-system-interface"
-version = "3.1.0"
+version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a95a6f2e23ed861d6444ad4a6d6896c418d7d101b960787e65a8e33157cee81b"
+checksum = "55b54965bf0b76fa8e2b35376583efddd4d916618cfe595bf48c7d7b55a9e628"
 dependencies = [
  "num-traits",
  "serde",
@@ -3730,7 +3730,7 @@ dependencies = [
  "solana-sdk-ids",
  "solana-svm-log-collector",
  "solana-svm-type-overrides",
- "solana-system-interface 3.1.0",
+ "solana-system-interface 3.2.0",
  "solana-sysvar 3.1.1",
  "solana-transaction-context",
 ]
@@ -3925,7 +3925,7 @@ dependencies = [
  "solana-pubkey 4.2.0",
  "solana-rent 3.1.0",
  "solana-sdk-ids",
- "solana-system-interface 3.1.0",
+ "solana-system-interface 3.2.0",
  "solana-sysvar 3.1.1",
  "spl-associated-token-account-interface 2.0.0",
  "spl-associated-token-account-mollusk-harness",
@@ -3968,7 +3968,7 @@ dependencies = [
  "solana-program-pack",
  "solana-pubkey 4.2.0",
  "solana-rent 4.1.0",
- "solana-system-interface 3.1.0",
+ "solana-system-interface 3.2.0",
  "solana-sysvar 3.1.1",
  "spl-associated-token-account-interface 2.0.0",
  "spl-token-2022-interface",

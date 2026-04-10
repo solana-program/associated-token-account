@@ -16,6 +16,7 @@ use {
         program::id as ata_program_id,
     },
     spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
+    std::path::PathBuf,
 };
 
 fn token_account(program_id: &Address, mint: Address, owner: Address, amount: u64) -> Account {
@@ -140,7 +141,16 @@ fn main() {
         "pinocchio_associated_token_account_program",
     );
     token::add_program(&mut mollusk);
-    token2022::add_program(&mut mollusk);
+
+    // Load Token-2022 with batch instruction support
+    let t22_elf_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../program/tests/fixtures/spl_token_2022.so");
+    let t22_elf = mollusk_svm::file::read_file(t22_elf_path);
+    mollusk.add_program_with_loader_and_elf(
+        &spl_token_2022_interface::id(),
+        &mollusk_svm::program::loader_keys::LOADER_V3,
+        &t22_elf,
+    );
 
     let payer = Address::new_unique();
     let mint_authority = Address::new_unique();

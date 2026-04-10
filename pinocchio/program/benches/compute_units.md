@@ -1,3 +1,22 @@
+#### 2026-04-09 15:12:48.895565 UTC
+
+Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
+
+| Name | CUs | Delta |
+|------|------|-------|
+| create (spl-token) | 3222 | -206 |
+| create (token-2022) | 5266 | -1,211 |
+| create_idempotent (new, spl-token) | 4317 | -206 |
+| create_idempotent (new, token-2022) | 5637 | -1,211 |
+| create_idempotent (existing, spl-token) | 564 | -- |
+| create_idempotent (existing, token-2022) | 1650 | -- |
+| create (prefunded, spl-token) | 3222 | -206 |
+| create (prefunded, token-2022) | 5266 | -1,211 |
+| recover_nested (owner=spl-token, nested=spl-token) | 5245 | -166 |
+| recover_nested (owner=token-2022, nested=token-2022) | 7109 | -6 |
+| recover_nested (owner=spl-token, nested=token-2022) | 9665 | +26 |
+| recover_nested (owner=token-2022, nested=spl-token) | 5615 | -166 |
+
 #### 2026-04-08 22:10:58.302753 UTC
 
 Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)

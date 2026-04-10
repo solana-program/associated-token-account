@@ -4,6 +4,7 @@
 
 #![no_std]
 
+mod batch;
 mod create;
 mod entrypoint;
 mod processor;

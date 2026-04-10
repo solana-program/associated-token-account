@@ -10,18 +10,19 @@ pub mod tools;
 
 #[deprecated(
     since = "4.1.0",
-    note = "Use `spl_associated_token_account_interface::address` instead and remove `spl_associated_token_account` as a dependency"
+    note = "Use `spl_associated_token_account_interface::address` instead and remove \
+            `spl_associated_token_account` as a dependency"
 )]
 pub use spl_associated_token_account_interface::address::{
     get_associated_token_address, get_associated_token_address_with_program_id,
 };
+// Export current SDK types for downstream users building with a different SDK
+// version
+pub use spl_associated_token_account_interface::program::{ID, check_id, id};
 use {
     solana_instruction::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
 };
-// Export current SDK types for downstream users building with a different SDK
-// version
-pub use spl_associated_token_account_interface::program::{check_id, id, ID};
 
 /// Create an associated token account for the given wallet address and token
 /// mint

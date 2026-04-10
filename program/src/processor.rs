@@ -6,7 +6,7 @@ use {
         tools::account::{create_pda_account, get_account_len},
     },
     borsh::BorshDeserialize,
-    solana_account_info::{next_account_info, AccountInfo},
+    solana_account_info::{AccountInfo, next_account_info},
     solana_cpi::{invoke, invoke_signed},
     solana_msg::msg,
     solana_program_error::{ProgramError, ProgramResult},
@@ -226,7 +226,10 @@ pub fn process_recover_nested(program_id: &Pubkey, accounts: &[AccountInfo]) -> 
     let (amount, decimals) = {
         // Check owner associated token account data
         if owner_associated_token_account_info.owner != spl_token_program_id {
-            msg!("Owner associated token account not owned by provided token program, recreate the owner associated token account first");
+            msg!(
+                "Owner associated token account not owned by provided token program, recreate the \
+                 owner associated token account first"
+            );
             return Err(ProgramError::IllegalOwner);
         }
         let owner_account_data = owner_associated_token_account_info.data.borrow();

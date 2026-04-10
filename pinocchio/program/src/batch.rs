@@ -1,9 +1,9 @@
 use {
     core::{mem::MaybeUninit, slice::from_raw_parts},
     pinocchio::{
-        cpi::{invoke_unchecked, CpiAccount},
-        instruction::{InstructionAccount, InstructionView},
         AccountView, Address, ProgramResult,
+        cpi::{CpiAccount, invoke_unchecked},
+        instruction::{InstructionAccount, InstructionView},
     },
     pinocchio_token::instructions::{
         Batch, InitializeAccount3, InitializeImmutableOwner, IntoBatch,

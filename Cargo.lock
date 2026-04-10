@@ -98,14 +98,14 @@ dependencies = [
  "solana-secp256k1-recover",
  "solana-sha256-hasher",
  "solana-stable-layout",
- "solana-stake-interface 2.0.2",
+ "solana-stake-interface",
  "solana-svm-callback",
  "solana-svm-feature-set",
  "solana-svm-log-collector",
  "solana-svm-measure",
  "solana-svm-timings",
  "solana-svm-type-overrides",
- "solana-sysvar 3.1.1",
+ "solana-sysvar",
  "solana-sysvar-id",
  "solana-transaction-context",
  "thiserror 2.0.18",
@@ -1699,8 +1699,8 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm"
-version = "0.12.0-agave-4.0"
-source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#d11dd8bf8cff34833e40e0a7c50c80715b7b1ffd"
+version = "0.12.0"
+source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#3b5a6e67ebbdea0d96a29af81b702845400539e3"
 dependencies = [
  "agave-feature-set",
  "agave-syscalls",
@@ -1708,13 +1708,12 @@ dependencies = [
  "mollusk-svm-error",
  "mollusk-svm-result",
  "solana-account 3.4.0",
- "solana-account 4.2.0",
  "solana-bpf-loader-program",
  "solana-clock",
  "solana-compute-budget",
  "solana-epoch-rewards",
  "solana-epoch-schedule",
- "solana-hash 3.1.0",
+ "solana-hash 4.2.0",
  "solana-instruction",
  "solana-instruction-error",
  "solana-instructions-sysvar",
@@ -1727,16 +1726,15 @@ dependencies = [
  "solana-program-runtime",
  "solana-pubkey 4.2.0",
  "solana-rent 3.1.0",
- "solana-rent 4.1.0",
  "solana-sdk-ids",
  "solana-slot-hashes",
- "solana-stake-interface 3.1.0",
+ "solana-stake-interface",
  "solana-svm-callback",
  "solana-svm-log-collector",
  "solana-svm-timings",
  "solana-svm-transaction",
  "solana-system-program",
- "solana-sysvar 4.0.0",
+ "solana-sysvar",
  "solana-sysvar-id",
  "solana-transaction-context",
  "solana-transaction-error",
@@ -1744,22 +1742,22 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-bencher"
-version = "0.12.0-agave-4.0"
-source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#d11dd8bf8cff34833e40e0a7c50c80715b7b1ffd"
+version = "0.12.0"
+source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#3b5a6e67ebbdea0d96a29af81b702845400539e3"
 dependencies = [
  "chrono",
  "mollusk-svm",
  "num-format",
  "serde_json",
- "solana-account 4.2.0",
+ "solana-account 3.4.0",
  "solana-instruction",
  "solana-pubkey 4.2.0",
 ]
 
 [[package]]
 name = "mollusk-svm-error"
-version = "0.12.0-agave-4.0"
-source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#d11dd8bf8cff34833e40e0a7c50c80715b7b1ffd"
+version = "0.12.0"
+source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#3b5a6e67ebbdea0d96a29af81b702845400539e3"
 dependencies = [
  "solana-pubkey 4.2.0",
  "thiserror 2.0.18",
@@ -1767,28 +1765,28 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-programs-token"
-version = "0.12.0-agave-4.0"
-source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#d11dd8bf8cff34833e40e0a7c50c80715b7b1ffd"
+version = "0.12.0"
+source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#3b5a6e67ebbdea0d96a29af81b702845400539e3"
 dependencies = [
  "mollusk-svm",
- "solana-account 4.2.0",
+ "solana-account 3.4.0",
  "solana-program-pack",
  "solana-pubkey 4.2.0",
- "solana-rent 4.1.0",
+ "solana-rent 3.1.0",
  "spl-associated-token-account-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "spl-token-interface",
 ]
 
 [[package]]
 name = "mollusk-svm-result"
-version = "0.12.0-agave-4.0"
-source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#d11dd8bf8cff34833e40e0a7c50c80715b7b1ffd"
+version = "0.12.0"
+source = "git+https://github.com/anza-xyz/mollusk?branch=agave-4.0#3b5a6e67ebbdea0d96a29af81b702845400539e3"
 dependencies = [
- "solana-account 4.2.0",
+ "solana-account 3.4.0",
  "solana-instruction",
  "solana-program-error",
  "solana-pubkey 4.2.0",
- "solana-rent 4.1.0",
+ "solana-rent 3.1.0",
  "solana-transaction-error",
 ]
 
@@ -2628,7 +2626,7 @@ dependencies = [
  "solana-instruction-error",
  "solana-pubkey 4.2.0",
  "solana-sdk-ids",
- "solana-sysvar 3.1.1",
+ "solana-sysvar",
 ]
 
 [[package]]
@@ -2956,7 +2954,6 @@ version = "4.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8064ea1d591ec791be95245058ca40f4f5345d390c200069d0f79bbf55bfae55"
 dependencies = [
- "borsh",
  "bytemuck",
  "bytemuck_derive",
  "five8",
@@ -2964,7 +2961,6 @@ dependencies = [
  "serde_derive",
  "solana-atomic-u64",
  "solana-sanitize",
- "wincode 0.4.9",
 ]
 
 [[package]]
@@ -3282,7 +3278,7 @@ dependencies = [
  "solana-sdk-ids",
  "solana-slot-hashes",
  "solana-stable-layout",
- "solana-stake-interface 2.0.2",
+ "solana-stake-interface",
  "solana-svm-callback",
  "solana-svm-feature-set",
  "solana-svm-log-collector",
@@ -3291,7 +3287,7 @@ dependencies = [
  "solana-svm-transaction",
  "solana-svm-type-overrides",
  "solana-system-interface 3.2.0",
- "solana-sysvar 3.1.1",
+ "solana-sysvar",
  "solana-sysvar-id",
  "solana-transaction-context",
  "thiserror 2.0.18",
@@ -3334,11 +3330,7 @@ version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1771d726d4854f1818c750e14aff40b19d84720d0b1b6d53e50e8f16cb6bd62"
 dependencies = [
- "serde",
- "serde_derive",
- "solana-sdk-ids",
  "solana-sdk-macro",
- "solana-sysvar-id",
 ]
 
 [[package]]
@@ -3513,26 +3505,7 @@ dependencies = [
  "solana-program-error",
  "solana-pubkey 3.0.0",
  "solana-system-interface 2.0.0",
- "solana-sysvar 3.1.1",
- "solana-sysvar-id",
-]
-
-[[package]]
-name = "solana-stake-interface"
-version = "3.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f49eb5c77484214c3484921e2cdda79d185373118b5458c1b2df0f1a04c3bc30"
-dependencies = [
- "num-traits",
- "serde",
- "serde_derive",
- "solana-clock",
- "solana-cpi",
- "solana-instruction",
- "solana-program-error",
- "solana-pubkey 4.2.0",
- "solana-system-interface 3.2.0",
- "solana-sysvar 4.0.0",
+ "solana-sysvar",
  "solana-sysvar-id",
 ]
 
@@ -3655,7 +3628,7 @@ dependencies = [
  "solana-svm-log-collector",
  "solana-svm-type-overrides",
  "solana-system-interface 3.2.0",
- "solana-sysvar 3.1.1",
+ "solana-sysvar",
  "solana-transaction-context",
 ]
 
@@ -3684,38 +3657,6 @@ dependencies = [
  "solana-program-memory",
  "solana-pubkey 4.2.0",
  "solana-rent 3.1.0",
- "solana-sdk-ids",
- "solana-sdk-macro",
- "solana-slot-hashes",
- "solana-slot-history",
- "solana-sysvar-id",
-]
-
-[[package]]
-name = "solana-sysvar"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1632b69b4f72489db5949a10e8308c229dfa003f99ecaa7477b376807c7b81f4"
-dependencies = [
- "base64 0.22.1",
- "bincode",
- "lazy_static",
- "serde",
- "serde_derive",
- "solana-account-info",
- "solana-clock",
- "solana-define-syscall 5.0.0",
- "solana-epoch-rewards",
- "solana-epoch-schedule",
- "solana-fee-calculator",
- "solana-hash 4.2.0",
- "solana-instruction",
- "solana-last-restart-slot",
- "solana-program-entrypoint",
- "solana-program-error",
- "solana-program-memory",
- "solana-pubkey 4.2.0",
- "solana-rent 4.1.0",
  "solana-sdk-ids",
  "solana-sdk-macro",
  "solana-slot-hashes",
@@ -3850,7 +3791,7 @@ dependencies = [
  "solana-rent 3.1.0",
  "solana-sdk-ids",
  "solana-system-interface 3.2.0",
- "solana-sysvar 3.1.1",
+ "solana-sysvar",
  "spl-associated-token-account-interface 2.0.0",
  "spl-associated-token-account-mollusk-harness",
  "spl-token-2022-interface",
@@ -3893,7 +3834,7 @@ dependencies = [
  "solana-pubkey 4.2.0",
  "solana-rent 4.1.0",
  "solana-system-interface 3.2.0",
- "solana-sysvar 3.1.1",
+ "solana-sysvar",
  "spl-associated-token-account-interface 2.0.0",
  "spl-token-2022-interface",
  "spl-token-interface",

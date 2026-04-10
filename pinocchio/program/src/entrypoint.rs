@@ -1,5 +1,5 @@
 use pinocchio::{
-    no_allocator, nostd_panic_handler, program_entrypoint, AccountView, Address, ProgramResult,
+    AccountView, Address, ProgramResult, no_allocator, nostd_panic_handler, program_entrypoint,
 };
 
 program_entrypoint!(process_instruction);

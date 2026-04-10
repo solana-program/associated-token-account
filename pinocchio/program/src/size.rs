@@ -1,9 +1,9 @@
 use {
     pinocchio::{
+        AccountView,
         cpi::{self, get_return_data},
         error::ProgramError,
         instruction::{InstructionAccount, InstructionView},
-        AccountView,
     },
     pinocchio_log::log,
     pinocchio_token_2022::{

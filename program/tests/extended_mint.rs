@@ -4,7 +4,7 @@ use {
     spl_associated_token_account_mollusk_harness::AtaTestHarness,
     spl_token_2022_interface::{
         extension::{
-            transfer_fee, BaseStateWithExtensions, ExtensionType, StateWithExtensionsOwned,
+            BaseStateWithExtensions, ExtensionType, StateWithExtensionsOwned, transfer_fee,
         },
         state::Account,
     },

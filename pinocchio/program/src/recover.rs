@@ -1,6 +1,6 @@
 use {
     pinocchio::{
-        cpi::Signer, error::ProgramError, instruction::seeds, AccountView, Address, ProgramResult,
+        AccountView, Address, ProgramResult, cpi::Signer, error::ProgramError, instruction::seeds,
     },
     pinocchio_associated_token_account_interface::{
         error::AssociatedTokenAccountError, pda::AssociatedTokenPda,
@@ -45,8 +45,16 @@ pub(crate) fn process_recover_nested(
     program_id: &Address,
     accounts: &mut [AccountView],
 ) -> ProgramResult {
-    let [nested_ata, nested_token_mint, destination_ata, owner_ata, owner_token_mint, wallet, owner_token_program, remaining @ ..] =
-        accounts
+    let [
+        nested_ata,
+        nested_token_mint,
+        destination_ata,
+        owner_ata,
+        owner_token_mint,
+        wallet,
+        owner_token_program,
+        remaining @ ..,
+    ] = accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
@@ -106,7 +114,10 @@ pub(crate) fn process_recover_nested(
     // The owner ATA must also belong to that token program so it can sign as
     // the nested account authority during the recovery CPIs
     if !owner_ata.owned_by(owner_token_program.address()) {
-        log!("Owner associated token account not owned by provided token program, recreate the owner associated token account first");
+        log!(
+            "Owner associated token account not owned by provided token program, recreate the \
+             owner associated token account first"
+        );
         return Err(ProgramError::IllegalOwner);
     }
 

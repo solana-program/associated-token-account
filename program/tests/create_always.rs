@@ -4,7 +4,7 @@ use {
     solana_program_error::ProgramError,
     solana_pubkey::Pubkey,
     spl_associated_token_account_mollusk_harness::{
-        build_create_ata_instruction, AtaTestHarness, CreateAtaInstructionType,
+        AtaTestHarness, CreateAtaInstructionType, build_create_ata_instruction,
     },
     test_case::test_case,
 };

@@ -5,8 +5,8 @@ use {
     solana_pubkey::Pubkey,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_associated_token_account_mollusk_harness::{
-        build_create_ata_instruction, token_account_rent_exempt_balance, AccountBuilder,
-        AtaTestHarness, CreateAtaInstructionType,
+        AccountBuilder, AtaTestHarness, CreateAtaInstructionType, build_create_ata_instruction,
+        token_account_rent_exempt_balance,
     },
     spl_token_interface::state::AccountState,
     test_case::test_case,

@@ -99,7 +99,8 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(
             name = "nested_associated_token_account",
             writable,
-            docs = "Nested associated token account, must be owned by `owner_associated_token_account`"
+            docs = "Nested associated token account, must be owned by \
+                    `owner_associated_token_account`"
         )),
         codama(account(
             name = "nested_mint",
@@ -131,7 +132,8 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(
             name = "nested_token_program",
             optional,
-            docs = "Optional token program for the nested mint, if different from the owner mint's token program"
+            docs = "Optional token program for the nested mint, if different from the owner \
+                    mint's token program"
         ))
     )]
     RecoverNested,

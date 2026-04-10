@@ -1,8 +1,7 @@
-use crate::batch::batch_init_and_lock_owner;
 use {
-    crate::size::get_account_data_size,
+    crate::{batch::batch_init_and_lock_owner, size::get_account_data_size},
     pinocchio::{
-        cpi::Signer, error::ProgramError, instruction::seeds, AccountView, Address, ProgramResult,
+        AccountView, Address, ProgramResult, cpi::Signer, error::ProgramError, instruction::seeds,
     },
     pinocchio_associated_token_account_interface::{
         error::AssociatedTokenAccountError, pda::AssociatedTokenPda,
@@ -27,8 +26,15 @@ pub(crate) fn process_create_associated_token_account(
     accounts: &mut [AccountView],
     create_mode: CreateMode,
 ) -> ProgramResult {
-    let [payer, associated_token_account, wallet, mint, _system_program, token_program, ..] =
-        accounts
+    let [
+        payer,
+        associated_token_account,
+        wallet,
+        mint,
+        _system_program,
+        token_program,
+        ..,
+    ] = accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };

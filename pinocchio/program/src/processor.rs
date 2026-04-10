@@ -1,9 +1,9 @@
 use {
     crate::{
-        create::{process_create_associated_token_account, CreateMode},
+        create::{CreateMode, process_create_associated_token_account},
         recover::process_recover_nested,
     },
-    pinocchio::{error::ProgramError, AccountView, Address, ProgramResult},
+    pinocchio::{AccountView, Address, ProgramResult, error::ProgramError},
     pinocchio_associated_token_account_interface::instruction::AssociatedTokenAccountInstruction,
 };
 
@@ -45,7 +45,7 @@ fn parse_instruction(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_instruction, AssociatedTokenAccountInstruction};
+    use super::{AssociatedTokenAccountInstruction, parse_instruction};
 
     #[test]
     fn parse_instruction_matches_ata_wire_format() {

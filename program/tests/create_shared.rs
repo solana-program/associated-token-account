@@ -7,9 +7,9 @@ use {
     solana_rent::Rent,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_associated_token_account_mollusk_harness::{
-        build_create_ata_instruction, token_2022_immutable_owner_account_len,
-        token_2022_immutable_owner_rent_exempt_balance, token_account_rent_exempt_balance,
-        AtaTestHarness, CreateAtaInstructionType,
+        AtaTestHarness, CreateAtaInstructionType, build_create_ata_instruction,
+        token_2022_immutable_owner_account_len, token_2022_immutable_owner_rent_exempt_balance,
+        token_account_rent_exempt_balance,
     },
     spl_token_interface::state::Mint,
     test_case::{test_case, test_matrix},

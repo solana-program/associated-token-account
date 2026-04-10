@@ -1,6 +1,5 @@
 use {
-    mollusk_svm::result::Check,
-    mollusk_svm::{Mollusk, MolluskContext},
+    mollusk_svm::{Mollusk, MolluskContext, result::Check},
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
@@ -12,7 +11,7 @@ use {
     solana_sysvar::rent,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account as Token2022Account},
-    spl_token_interface::{state::Account as TokenAccount, state::AccountState, state::Mint},
+    spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
     std::{collections::HashMap, path::PathBuf, vec::Vec},
 };
 

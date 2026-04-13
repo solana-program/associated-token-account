@@ -29,10 +29,7 @@ fn create_rejects_nested_return_data_from_mock_token_program_when_child_is_not_f
         1_000_000,
         vec![mock_behavior],
     );
-    let mut instruction = harness.build_create_ata_instruction(CreateAtaInstructionType::Create {
-        bump: None,
-        account_len: None,
-    });
+    let mut instruction = harness.build_create_ata_instruction(CreateAtaInstructionType::Create);
     instruction
         .accounts
         .push(AccountMeta::new_readonly(child_program_id, false));
@@ -61,10 +58,7 @@ fn create_rejects_missing_account_size_return_data_from_mock_token_program() {
         1_000_000,
         vec![mock_behavior],
     );
-    let instruction = harness.build_create_ata_instruction(CreateAtaInstructionType::Create {
-        bump: None,
-        account_len: None,
-    });
+    let instruction = harness.build_create_ata_instruction(CreateAtaInstructionType::Create);
 
     harness.ctx.process_and_validate_instruction(
         &instruction,
@@ -90,10 +84,7 @@ fn create_rejects_malformed_account_size_return_data_from_mock_token_program() {
         1_000_000,
         vec![mock_behavior],
     );
-    let instruction = harness.build_create_ata_instruction(CreateAtaInstructionType::Create {
-        bump: None,
-        account_len: None,
-    });
+    let instruction = harness.build_create_ata_instruction(CreateAtaInstructionType::Create);
 
     harness.ctx.process_and_validate_instruction(
         &instruction,

@@ -70,6 +70,16 @@
             "docs": [
               "SPL Token program"
             ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "rentSysvar",
+            "isWritable": false,
+            "isSigner": false,
+            "isOptional": true,
+            "docs": [
+              "Optional rent sysvar"
+            ]
           }
         ],
         "arguments": [
@@ -156,6 +166,16 @@
             "isSigner": false,
             "docs": [
               "SPL Token program"
+            ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "rentSysvar",
+            "isWritable": false,
+            "isSigner": false,
+            "isOptional": true,
+            "docs": [
+              "Optional rent sysvar"
             ]
           }
         ],

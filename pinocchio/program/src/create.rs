@@ -33,11 +33,12 @@ pub(crate) fn process_create_associated_token_account(
         mint,
         _system_program,
         token_program,
-        ..,
+        remaining @ ..,
     ] = accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
+    let rent_sysvar = remaining.first();
 
     let (associated_token_address, bump_seed) = AssociatedTokenPda::derive_address_and_bump_seed(
         program_id,
@@ -95,7 +96,7 @@ pub(crate) fn process_create_associated_token_account(
         associated_token_account,
         account_len,
         token_program.address(),
-        None,
+        rent_sysvar,
     )?
     .invoke_signed(&[signer])?;
 

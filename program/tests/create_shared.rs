@@ -34,6 +34,7 @@ fn create_rejects_too_few_accounts(token_program_id: Pubkey) {
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
+            rent_sysvar: false,
         },
     );
     instruction.accounts.truncate(5);
@@ -65,6 +66,7 @@ fn create_rejects_mismatch_derivation(token_program_id: Pubkey) {
             CreateAtaInstructionType::Create {
                 bump: None,
                 account_len: None,
+                rent_sysvar: false,
             },
         );
 
@@ -83,11 +85,15 @@ fn create_rejects_mismatch_derivation(token_program_id: Pubkey) {
 
 fn instruction_type(idempotent: bool) -> CreateAtaInstructionType {
     if idempotent {
-        CreateAtaInstructionType::CreateIdempotent { bump: None }
+        CreateAtaInstructionType::CreateIdempotent {
+            bump: None,
+            rent_sysvar: false,
+        }
     } else {
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
+            rent_sysvar: false,
         }
     }
 }

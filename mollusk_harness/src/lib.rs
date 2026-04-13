@@ -58,22 +58,20 @@ fn add_token_program_by_name(
 }
 
 /// The type of ATA creation instruction to build.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum CreateAtaInstructionType {
-    /// The standard `Create` instruction, which can optionally include a bump seed and account length.
-    Create {
-        bump: Option<u8>,
-        account_len: Option<u16>,
-    },
-    /// The `CreateIdempotent` instruction, which can optionally include a bump seed.
-    CreateIdempotent { bump: Option<u8> },
+    /// The standard `Create` instruction.
+    #[default]
+    Create,
+    /// The `CreateIdempotent` instruction.
+    CreateIdempotent,
 }
 
-impl Default for CreateAtaInstructionType {
-    fn default() -> Self {
-        Self::Create {
-            bump: None,
-            account_len: None,
+impl From<CreateAtaInstructionType> for u8 {
+    fn from(value: CreateAtaInstructionType) -> Self {
+        match value {
+            CreateAtaInstructionType::Create => 0,
+            CreateAtaInstructionType::CreateIdempotent => 1,
         }
     }
 }
@@ -571,7 +569,7 @@ impl AtaTestHarness {
             wallet,
             mint,
             self.token_program_id,
-            CreateAtaInstructionType::CreateIdempotent { bump: None },
+            CreateAtaInstructionType::CreateIdempotent,
         );
 
         // Replace the ATA address with the wrong account address
@@ -637,29 +635,6 @@ impl AtaTestHarness {
     }
 }
 
-/// Encodes the instruction data payload for ATA creation-related instructions.
-pub fn encode_create_ata_instruction_data(instruction_type: &CreateAtaInstructionType) -> Vec<u8> {
-    match instruction_type {
-        CreateAtaInstructionType::Create { bump, account_len } => {
-            let mut data = vec![0]; // Discriminator for Create
-            if let Some(b) = bump {
-                data.push(*b);
-                if let Some(len) = account_len {
-                    data.extend_from_slice(&len.to_le_bytes());
-                }
-            }
-            data
-        }
-        CreateAtaInstructionType::CreateIdempotent { bump } => {
-            let mut data = vec![1]; // Discriminator for CreateIdempotent
-            if let Some(b) = bump {
-                data.push(*b);
-            }
-            data
-        }
-    }
-}
-
 /// Build a create associated token account instruction with a given discriminator
 pub fn build_create_ata_instruction(
     ata_program_id: Pubkey,
@@ -681,7 +656,7 @@ pub fn build_create_ata_instruction(
             AccountMeta::new_readonly(token_program, false),
             AccountMeta::new_readonly(rent::id(), false),
         ],
-        data: encode_create_ata_instruction_data(&instruction_type),
+        data: vec![u8::from(instruction_type)],
     }
 }
 

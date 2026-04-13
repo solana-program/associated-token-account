@@ -31,10 +31,7 @@ fn create_rejects_too_few_accounts(token_program_id: Pubkey) {
         wallet,
         mint,
         token_program_id,
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        },
+        CreateAtaInstructionType::Create,
     );
     instruction.accounts.truncate(5);
 
@@ -62,10 +59,7 @@ fn create_rejects_mismatch_derivation(token_program_id: Pubkey) {
             wallet,
             mint,
             token_program_id,
-            CreateAtaInstructionType::Create {
-                bump: None,
-                account_len: None,
-            },
+            CreateAtaInstructionType::Create,
         );
 
         instruction.accounts[account_idx] = if account_idx == 1 {
@@ -83,12 +77,9 @@ fn create_rejects_mismatch_derivation(token_program_id: Pubkey) {
 
 fn instruction_type(idempotent: bool) -> CreateAtaInstructionType {
     if idempotent {
-        CreateAtaInstructionType::CreateIdempotent { bump: None }
+        CreateAtaInstructionType::CreateIdempotent
     } else {
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-        }
+        CreateAtaInstructionType::Create
     }
 }
 

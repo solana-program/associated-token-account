@@ -40,7 +40,7 @@ fn idempotent_rejects_non_token_owned_canonical_ata(token_program_id: Pubkey) {
         token_program_id,
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         },
     );
 
@@ -77,7 +77,7 @@ fn idempotent_rejects_uninitialized_token_owned_canonical_ata(token_program_id: 
         token_program_id,
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         },
     );
 
@@ -114,7 +114,7 @@ fn idempotent_rejects_invalid_data_token_owned_canonical_ata(token_program_id: P
         token_program_id,
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         },
     );
 
@@ -147,7 +147,7 @@ fn idempotent_rejects_packed_uninitialized_token_owned_canonical_ata(token_progr
         token_program_id,
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         },
     );
 
@@ -176,7 +176,7 @@ fn idempotent_rejects_wrong_owner(token_program_id: Pubkey) {
         token_program_id,
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         },
     );
 
@@ -209,7 +209,7 @@ fn idempotent_rejects_wrong_mint(token_program_id: Pubkey) {
         token_program_id,
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         },
     );
 
@@ -236,7 +236,7 @@ fn idempotent_accepts_preexisting_valid_ata(token_program_id: Pubkey) {
         token_program_id,
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         },
     );
 
@@ -279,7 +279,7 @@ fn idempotent_accepts_frozen_ata(token_program_id: Pubkey) {
         token_program_id,
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         },
     );
 

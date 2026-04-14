@@ -42,6 +42,7 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(
             name = "rent_sysvar",
             optional,
+            default_value = sysvar("rent"),
             docs = "Optional rent sysvar"
         ))
     )]
@@ -81,6 +82,7 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(
             name = "rent_sysvar",
             optional,
+            default_value = sysvar("rent"),
             docs = "Optional rent sysvar"
         ))
     )]

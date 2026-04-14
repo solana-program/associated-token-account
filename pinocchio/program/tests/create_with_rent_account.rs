@@ -9,17 +9,17 @@ use {
     test_case::test_matrix,
 };
 
-fn instruction_type(idempotent: bool, rent_sysvar: bool) -> CreateAtaInstructionType {
+fn instruction_type(idempotent: bool, rent_sysvar_via_account: bool) -> CreateAtaInstructionType {
     if idempotent {
         CreateAtaInstructionType::CreateIdempotent {
             bump: None,
-            rent_sysvar,
+            rent_sysvar_via_account,
         }
     } else {
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
-            rent_sysvar,
+            rent_sysvar_via_account,
         }
     }
 }

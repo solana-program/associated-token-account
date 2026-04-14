@@ -79,7 +79,11 @@
             "isOptional": true,
             "docs": [
               "Optional rent sysvar"
-            ]
+            ],
+            "defaultValue": {
+              "kind": "publicKeyValueNode",
+              "publicKey": "SysvarRent111111111111111111111111111111111"
+            }
           }
         ],
         "arguments": [
@@ -176,7 +180,11 @@
             "isOptional": true,
             "docs": [
               "Optional rent sysvar"
-            ]
+            ],
+            "defaultValue": {
+              "kind": "publicKeyValueNode",
+              "publicKey": "SysvarRent111111111111111111111111111111111"
+            }
           }
         ],
         "arguments": [

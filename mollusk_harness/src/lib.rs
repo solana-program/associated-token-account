@@ -64,10 +64,13 @@ pub enum CreateAtaInstructionType {
     Create {
         bump: Option<u8>,
         account_len: Option<u16>,
-        rent_sysvar: bool,
+        rent_sysvar_via_account: bool,
     },
     /// The `CreateIdempotent` instruction, which can optionally include a bump seed.
-    CreateIdempotent { bump: Option<u8>, rent_sysvar: bool },
+    CreateIdempotent {
+        bump: Option<u8>,
+        rent_sysvar_via_account: bool,
+    },
 }
 
 impl Default for CreateAtaInstructionType {
@@ -75,7 +78,7 @@ impl Default for CreateAtaInstructionType {
         Self::Create {
             bump: None,
             account_len: None,
-            rent_sysvar: false,
+            rent_sysvar_via_account: false,
         }
     }
 }
@@ -575,7 +578,7 @@ impl AtaTestHarness {
             self.token_program_id,
             CreateAtaInstructionType::CreateIdempotent {
                 bump: None,
-                rent_sysvar: false,
+                rent_sysvar_via_account: false,
             },
         );
 
@@ -678,8 +681,14 @@ pub fn build_create_ata_instruction(
     instruction_type: CreateAtaInstructionType,
 ) -> Instruction {
     let include_rent_sysvar = match instruction_type {
-        CreateAtaInstructionType::Create { rent_sysvar, .. }
-        | CreateAtaInstructionType::CreateIdempotent { rent_sysvar, .. } => rent_sysvar,
+        CreateAtaInstructionType::Create {
+            rent_sysvar_via_account,
+            ..
+        }
+        | CreateAtaInstructionType::CreateIdempotent {
+            rent_sysvar_via_account,
+            ..
+        } => rent_sysvar_via_account,
     };
 
     let mut accounts = vec![

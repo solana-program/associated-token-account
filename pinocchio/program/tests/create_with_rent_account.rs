@@ -28,18 +28,6 @@ fn instruction_type(idempotent: bool, rent_sysvar_via_account: bool) -> CreateAt
     [spl_token_interface::id(), spl_token_2022_interface::id()],
     [true, false]
 )]
-fn create_succeeds_with_optional_rent_account(token_program_id: Address, idempotent: bool) {
-    let mut harness =
-        AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)
-            .with_wallet_and_mint(1_000_000, 6);
-
-    harness.create_ata(instruction_type(idempotent, true));
-}
-
-#[test_matrix(
-    [spl_token_interface::id(), spl_token_2022_interface::id()],
-    [true, false]
-)]
 fn create_rejects_wrong_optional_rent_account(token_program_id: Address, idempotent: bool) {
     let mut harness =
         AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)

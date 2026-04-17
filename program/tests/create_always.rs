@@ -27,6 +27,7 @@ fn create_rejects_existing_ata(token_program_id: Pubkey) {
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
+            rent_sysvar_via_account: false,
         },
     );
 

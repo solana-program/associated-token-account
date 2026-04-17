@@ -64,9 +64,13 @@ pub enum CreateAtaInstructionType {
     Create {
         bump: Option<u8>,
         account_len: Option<u16>,
+        rent_sysvar_via_account: bool,
     },
     /// The `CreateIdempotent` instruction, which can optionally include a bump seed.
-    CreateIdempotent { bump: Option<u8> },
+    CreateIdempotent {
+        bump: Option<u8>,
+        rent_sysvar_via_account: bool,
+    },
 }
 
 impl Default for CreateAtaInstructionType {
@@ -74,6 +78,7 @@ impl Default for CreateAtaInstructionType {
         Self::Create {
             bump: None,
             account_len: None,
+            rent_sysvar_via_account: false,
         }
     }
 }
@@ -571,7 +576,10 @@ impl AtaTestHarness {
             wallet,
             mint,
             self.token_program_id,
-            CreateAtaInstructionType::CreateIdempotent { bump: None },
+            CreateAtaInstructionType::CreateIdempotent {
+                bump: None,
+                rent_sysvar_via_account: false,
+            },
         );
 
         // Replace the ATA address with the wrong account address
@@ -640,7 +648,9 @@ impl AtaTestHarness {
 /// Encodes the instruction data payload for ATA creation-related instructions.
 pub fn encode_create_ata_instruction_data(instruction_type: &CreateAtaInstructionType) -> Vec<u8> {
     match instruction_type {
-        CreateAtaInstructionType::Create { bump, account_len } => {
+        CreateAtaInstructionType::Create {
+            bump, account_len, ..
+        } => {
             let mut data = vec![0]; // Discriminator for Create
             if let Some(b) = bump {
                 data.push(*b);
@@ -650,7 +660,7 @@ pub fn encode_create_ata_instruction_data(instruction_type: &CreateAtaInstructio
             }
             data
         }
-        CreateAtaInstructionType::CreateIdempotent { bump } => {
+        CreateAtaInstructionType::CreateIdempotent { bump, .. } => {
             let mut data = vec![1]; // Discriminator for CreateIdempotent
             if let Some(b) = bump {
                 data.push(*b);
@@ -670,17 +680,32 @@ pub fn build_create_ata_instruction(
     token_program: Pubkey,
     instruction_type: CreateAtaInstructionType,
 ) -> Instruction {
+    let include_rent_sysvar = match instruction_type {
+        CreateAtaInstructionType::Create {
+            rent_sysvar_via_account,
+            ..
+        }
+        | CreateAtaInstructionType::CreateIdempotent {
+            rent_sysvar_via_account,
+            ..
+        } => rent_sysvar_via_account,
+    };
+
+    let mut accounts = vec![
+        AccountMeta::new(payer, true),
+        AccountMeta::new(ata_address, false),
+        AccountMeta::new_readonly(wallet, false),
+        AccountMeta::new_readonly(mint, false),
+        AccountMeta::new_readonly(system_program::id(), false),
+        AccountMeta::new_readonly(token_program, false),
+    ];
+    if include_rent_sysvar {
+        accounts.push(AccountMeta::new_readonly(rent::id(), false));
+    }
+
     Instruction {
         program_id: ata_program_id,
-        accounts: vec![
-            AccountMeta::new(payer, true),
-            AccountMeta::new(ata_address, false),
-            AccountMeta::new_readonly(wallet, false),
-            AccountMeta::new_readonly(mint, false),
-            AccountMeta::new_readonly(system_program::id(), false),
-            AccountMeta::new_readonly(token_program, false),
-            AccountMeta::new_readonly(rent::id(), false),
-        ],
+        accounts,
         data: encode_create_ata_instruction_data(&instruction_type),
     }
 }

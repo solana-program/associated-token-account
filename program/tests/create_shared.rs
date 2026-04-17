@@ -34,6 +34,7 @@ fn create_rejects_too_few_accounts(token_program_id: Pubkey) {
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
+            rent_sysvar_via_account: false,
         },
     );
     instruction.accounts.truncate(5);
@@ -65,6 +66,7 @@ fn create_rejects_mismatch_derivation(token_program_id: Pubkey) {
             CreateAtaInstructionType::Create {
                 bump: None,
                 account_len: None,
+                rent_sysvar_via_account: false,
             },
         );
 
@@ -81,13 +83,17 @@ fn create_rejects_mismatch_derivation(token_program_id: Pubkey) {
     }
 }
 
-fn instruction_type(idempotent: bool) -> CreateAtaInstructionType {
+fn instruction_type(idempotent: bool, rent_sysvar_via_account: bool) -> CreateAtaInstructionType {
     if idempotent {
-        CreateAtaInstructionType::CreateIdempotent { bump: None }
+        CreateAtaInstructionType::CreateIdempotent {
+            bump: None,
+            rent_sysvar_via_account,
+        }
     } else {
         CreateAtaInstructionType::Create {
             bump: None,
             account_len: None,
+            rent_sysvar_via_account,
         }
     }
 }
@@ -116,7 +122,7 @@ fn create_rejects_wrong_token_program_account_after_passing_seed_check(
         wallet,
         mint,
         bogus_token_program,
-        instruction_type(idempotent),
+        instruction_type(idempotent, false),
     );
 
     harness.ctx.process_and_validate_instruction(
@@ -137,7 +143,7 @@ fn create_rejects_invalid_mint_data(token_program_id: Pubkey, idempotent: bool) 
             Rent::default().minimum_balance(Mint::LEN),
             vec![0; Mint::LEN - 1],
         );
-    let instruction = harness.build_create_ata_instruction(instruction_type(idempotent));
+    let instruction = harness.build_create_ata_instruction(instruction_type(idempotent, false));
 
     harness.ctx.process_and_validate_instruction(
         &instruction,
@@ -162,7 +168,7 @@ fn create_rejects_mint_not_owned_by_token_program(token_program_id: Pubkey, idem
         .unwrap()
         .owner = Pubkey::new_unique();
 
-    let instruction = harness.build_create_ata_instruction(instruction_type(idempotent));
+    let instruction = harness.build_create_ata_instruction(instruction_type(idempotent, false));
 
     harness.ctx.process_and_validate_instruction(
         &instruction,
@@ -172,9 +178,14 @@ fn create_rejects_mint_not_owned_by_token_program(token_program_id: Pubkey, idem
 
 #[test_matrix(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
+    [true, false],
     [true, false]
 )]
-fn create_accepts_fresh_account(token_program_id: Pubkey, idempotent: bool) {
+fn create_accepts_fresh_account(
+    token_program_id: Pubkey,
+    idempotent: bool,
+    rent_sysvar_via_account: bool,
+) {
     let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
@@ -188,7 +199,7 @@ fn create_accepts_fresh_account(token_program_id: Pubkey, idempotent: bool) {
         wallet,
         mint,
         token_program_id,
-        instruction_type(idempotent),
+        instruction_type(idempotent, rent_sysvar_via_account),
     );
 
     harness.ctx.process_and_validate_instruction(
@@ -214,11 +225,13 @@ fn create_accepts_fresh_account(token_program_id: Pubkey, idempotent: bool) {
 
 #[test_matrix(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
+    [true, false],
     [true, false]
 )]
 fn create_accepts_prefunded_account_below_rent_exempt_minimum(
     token_program_id: Pubkey,
     idempotent: bool,
+    rent_sysvar_via_account: bool,
 ) {
     let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let wallet = harness.wallet.unwrap();
@@ -241,7 +254,7 @@ fn create_accepts_prefunded_account_below_rent_exempt_minimum(
         wallet,
         mint,
         token_program_id,
-        instruction_type(idempotent),
+        instruction_type(idempotent, rent_sysvar_via_account),
     );
 
     harness.ctx.process_and_validate_instruction(
@@ -262,11 +275,13 @@ fn create_accepts_prefunded_account_below_rent_exempt_minimum(
 
 #[test_matrix(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
+    [true, false],
     [true, false]
 )]
 fn create_accepts_prefunded_account_above_rent_exempt_minimum(
     token_program_id: Pubkey,
     idempotent: bool,
+    rent_sysvar_via_account: bool,
 ) {
     let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let wallet = harness.wallet.unwrap();
@@ -289,7 +304,7 @@ fn create_accepts_prefunded_account_above_rent_exempt_minimum(
         wallet,
         mint,
         token_program_id,
-        instruction_type(idempotent),
+        instruction_type(idempotent, rent_sysvar_via_account),
     );
 
     harness.ctx.process_and_validate_instruction(
@@ -306,17 +321,20 @@ fn create_accepts_prefunded_account_above_rent_exempt_minimum(
 
 #[test_matrix(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
+    [true, false],
     [true, false]
 )]
 fn create_fails_cpi_with_invalid_system_program_account(
     token_program_id: Pubkey,
     idempotent: bool,
+    rent_sysvar_via_account: bool,
 ) {
     let mut harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
     let bogus_system_program = Pubkey::new_unique();
     harness.ensure_account_exists_with_lamports(bogus_system_program, 1_000_000);
 
-    let mut instruction = harness.build_create_ata_instruction(instruction_type(idempotent));
+    let mut instruction =
+        harness.build_create_ata_instruction(instruction_type(idempotent, rent_sysvar_via_account));
     instruction.accounts[4] = AccountMeta::new_readonly(bogus_system_program, false);
 
     // The runtime returns `NotEnoughAccountKeys` when the CPI target (system program) is

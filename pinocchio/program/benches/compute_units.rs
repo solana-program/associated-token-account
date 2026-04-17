@@ -19,6 +19,18 @@ use {
     std::path::PathBuf,
 };
 
+fn with_rent_account(
+    mut instruction: Instruction,
+    mut accounts: Vec<(Address, Account)>,
+    rent_sysvar: &(Address, Account),
+) -> (Instruction, Vec<(Address, Account)>) {
+    instruction
+        .accounts
+        .push(AccountMeta::new_readonly(rent_sysvar.0, false));
+    accounts.push(rent_sysvar.clone());
+    (instruction, accounts)
+}
+
 fn token_account(program_id: &Address, mint: Address, owner: Address, amount: u64) -> Account {
     let account = TokenAccount {
         mint,
@@ -157,6 +169,7 @@ fn main() {
     let payer_account = Account::new(10_000_000_000, 0, &system_program::id());
 
     let system_account = mollusk_svm::program::keyed_account_for_system_program();
+    let rent_sysvar = mollusk.sysvars.keyed_account_for_rent_sysvar();
     let spl_token_account = token::keyed_account();
     let t22_account = token2022::keyed_account();
 
@@ -190,6 +203,7 @@ fn main() {
         system_account.clone(),
         spl_token_account.clone(),
     ];
+    let (ix1_rent, accs1_rent) = with_rent_account(ix1.clone(), accs1.clone(), &rent_sysvar);
 
     // Bench 2: create (token-2022)
     let wallet2 = Address::new_unique();
@@ -212,6 +226,7 @@ fn main() {
         system_account.clone(),
         t22_account.clone(),
     ];
+    let (ix2_rent, accs2_rent) = with_rent_account(ix2.clone(), accs2.clone(), &rent_sysvar);
 
     // Bench 3: create_idempotent (new, spl-token)
     let wallet3 = Address::new_unique();
@@ -234,6 +249,7 @@ fn main() {
         system_account.clone(),
         spl_token_account.clone(),
     ];
+    let (ix3_rent, accs3_rent) = with_rent_account(ix3.clone(), accs3.clone(), &rent_sysvar);
 
     // Bench 4: create_idempotent (new, token-2022)
     let wallet3b = Address::new_unique();
@@ -256,6 +272,7 @@ fn main() {
         system_account.clone(),
         t22_account.clone(),
     ];
+    let (ix3b_rent, accs3b_rent) = with_rent_account(ix3b.clone(), accs3b.clone(), &rent_sysvar);
 
     // Bench 5: create_idempotent (existing, spl-token)
     let wallet4 = Address::new_unique();
@@ -344,6 +361,7 @@ fn main() {
         system_account.clone(),
         spl_token_account.clone(),
     ];
+    let (ix5_rent, accs5_rent) = with_rent_account(ix5.clone(), accs5.clone(), &rent_sysvar);
 
     // Bench 8: create (prefunded, token-2022)
     let wallet5b = Address::new_unique();
@@ -377,8 +395,9 @@ fn main() {
         system_account.clone(),
         t22_account.clone(),
     ];
+    let (ix5b_rent, accs5b_rent) = with_rent_account(ix5b.clone(), accs5b.clone(), &rent_sysvar);
 
-    // Benches 9-12: recover_nested
+    // Benches 11-14: recover_nested
     let (ix6, accs6) = recover_nested_case(
         Address::new_from_array([1; 32]),
         Address::new_from_array([2; 32]),
@@ -418,13 +437,43 @@ fn main() {
 
     MolluskComputeUnitBencher::new(mollusk)
         .bench(("create (spl-token)", &ix1, &accs1))
+        .bench((
+            "create (spl-token, w/ rent account)",
+            &ix1_rent,
+            &accs1_rent,
+        ))
         .bench(("create (token-2022)", &ix2, &accs2))
+        .bench((
+            "create (token-2022, w/ rent account)",
+            &ix2_rent,
+            &accs2_rent,
+        ))
         .bench(("create_idempotent (new, spl-token)", &ix3, &accs3))
+        .bench((
+            "create_idempotent (new, spl-token, w/ rent account)",
+            &ix3_rent,
+            &accs3_rent,
+        ))
         .bench(("create_idempotent (new, token-2022)", &ix3b, &accs3b))
+        .bench((
+            "create_idempotent (new, token-2022, w/ rent account)",
+            &ix3b_rent,
+            &accs3b_rent,
+        ))
         .bench(("create_idempotent (existing, spl-token)", &ix4, &accs4))
         .bench(("create_idempotent (existing, token-2022)", &ix4b, &accs4b))
         .bench(("create (prefunded, spl-token)", &ix5, &accs5))
+        .bench((
+            "create (prefunded, spl-token, w/ rent account)",
+            &ix5_rent,
+            &accs5_rent,
+        ))
         .bench(("create (prefunded, token-2022)", &ix5b, &accs5b))
+        .bench((
+            "create (prefunded, token-2022, w/ rent account)",
+            &ix5b_rent,
+            &accs5b_rent,
+        ))
         .bench((
             "recover_nested (owner=spl-token, nested=spl-token)",
             &ix6,

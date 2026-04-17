@@ -1,5 +1,11 @@
 {
   "name": "spl-associated-token-account",
   "private": true,
+  "devDependencies": {
+    "codama": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=v20.0.0"
+  },
   "packageManager": "pnpm@9.15.4"
 }

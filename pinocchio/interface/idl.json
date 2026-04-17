@@ -1,23 +1,27 @@
 {
   "kind": "rootNode",
   "standard": "codama",
-  "version": "1.0.0",
+  "version": "1.6.0",
   "program": {
     "kind": "programNode",
     "name": "pinocchioAssociatedTokenAccountInterface",
     "publicKey": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
     "version": "0.1.0",
+    "docs": [],
     "accounts": [],
     "instructions": [
       {
         "kind": "instructionNode",
         "name": "create",
+        "docs": [],
+        "optionalAccountStrategy": "omitted",
         "accounts": [
           {
             "kind": "instructionAccountNode",
             "name": "funder",
             "isWritable": true,
             "isSigner": true,
+            "isOptional": false,
             "docs": [
               "Funding account (must be a system account)"
             ]
@@ -27,6 +31,7 @@
             "name": "associatedTokenAccount",
             "isWritable": true,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Associated token account address to be created"
             ]
@@ -36,6 +41,7 @@
             "name": "wallet",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Wallet address for the new associated token account"
             ]
@@ -45,6 +51,7 @@
             "name": "mint",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "The token mint for the new associated token account"
             ]
@@ -54,6 +61,7 @@
             "name": "systemProgram",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "System program"
             ],
@@ -67,9 +75,24 @@
             "name": "tokenProgram",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "SPL Token program"
             ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "rentSysvar",
+            "isWritable": false,
+            "isSigner": false,
+            "isOptional": true,
+            "docs": [
+              "Optional rent sysvar"
+            ],
+            "defaultValue": {
+              "kind": "publicKeyValueNode",
+              "publicKey": "SysvarRent111111111111111111111111111111111"
+            }
           }
         ],
         "arguments": [
@@ -77,6 +100,7 @@
             "kind": "instructionArgumentNode",
             "name": "discriminator",
             "defaultValueStrategy": "omitted",
+            "docs": [],
             "type": {
               "kind": "numberTypeNode",
               "format": "u8",
@@ -99,12 +123,15 @@
       {
         "kind": "instructionNode",
         "name": "createIdempotent",
+        "docs": [],
+        "optionalAccountStrategy": "omitted",
         "accounts": [
           {
             "kind": "instructionAccountNode",
             "name": "funder",
             "isWritable": true,
             "isSigner": true,
+            "isOptional": false,
             "docs": [
               "Funding account (must be a system account)"
             ]
@@ -114,6 +141,7 @@
             "name": "associatedTokenAccount",
             "isWritable": true,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Associated token account address to be created"
             ]
@@ -123,6 +151,7 @@
             "name": "wallet",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Wallet address for the new associated token account"
             ]
@@ -132,6 +161,7 @@
             "name": "mint",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "The token mint for the new associated token account"
             ]
@@ -141,6 +171,7 @@
             "name": "systemProgram",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "System program"
             ],
@@ -154,9 +185,24 @@
             "name": "tokenProgram",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "SPL Token program"
             ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "rentSysvar",
+            "isWritable": false,
+            "isSigner": false,
+            "isOptional": true,
+            "docs": [
+              "Optional rent sysvar"
+            ],
+            "defaultValue": {
+              "kind": "publicKeyValueNode",
+              "publicKey": "SysvarRent111111111111111111111111111111111"
+            }
           }
         ],
         "arguments": [
@@ -164,6 +210,7 @@
             "kind": "instructionArgumentNode",
             "name": "discriminator",
             "defaultValueStrategy": "omitted",
+            "docs": [],
             "type": {
               "kind": "numberTypeNode",
               "format": "u8",
@@ -186,12 +233,15 @@
       {
         "kind": "instructionNode",
         "name": "recoverNested",
+        "docs": [],
+        "optionalAccountStrategy": "omitted",
         "accounts": [
           {
             "kind": "instructionAccountNode",
             "name": "nestedAssociatedTokenAccount",
             "isWritable": true,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Nested associated token account, must be owned by `owner_associated_token_account`"
             ]
@@ -201,6 +251,7 @@
             "name": "nestedMint",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Token mint for the nested associated token account"
             ]
@@ -210,6 +261,7 @@
             "name": "destinationAssociatedTokenAccount",
             "isWritable": true,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Wallet's associated token account"
             ]
@@ -219,6 +271,7 @@
             "name": "ownerAssociatedTokenAccount",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Owner associated token account address, must be owned by `wallet`"
             ]
@@ -228,6 +281,7 @@
             "name": "ownerMint",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Token mint for the owner associated token account"
             ]
@@ -237,6 +291,7 @@
             "name": "wallet",
             "isWritable": true,
             "isSigner": true,
+            "isOptional": false,
             "docs": [
               "Wallet address for the owner associated token account"
             ]
@@ -246,6 +301,7 @@
             "name": "ownerTokenProgram",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": false,
             "docs": [
               "Token program for the owner mint"
             ]
@@ -266,6 +322,7 @@
             "kind": "instructionArgumentNode",
             "name": "discriminator",
             "defaultValueStrategy": "omitted",
+            "docs": [],
             "type": {
               "kind": "numberTypeNode",
               "format": "u8",
@@ -291,10 +348,12 @@
       {
         "kind": "pdaNode",
         "name": "associatedTokenPda",
+        "docs": [],
         "seeds": [
           {
             "kind": "variablePdaSeedNode",
             "name": "wallet",
+            "docs": [],
             "type": {
               "kind": "publicKeyTypeNode"
             }
@@ -302,6 +361,7 @@
           {
             "kind": "variablePdaSeedNode",
             "name": "tokenProgram",
+            "docs": [],
             "type": {
               "kind": "publicKeyTypeNode"
             }
@@ -309,6 +369,7 @@
           {
             "kind": "variablePdaSeedNode",
             "name": "mint",
+            "docs": [],
             "type": {
               "kind": "publicKeyTypeNode"
             }
@@ -316,6 +377,7 @@
         ]
       }
     ],
+    "events": [],
     "errors": [
       {
         "kind": "errorNode",

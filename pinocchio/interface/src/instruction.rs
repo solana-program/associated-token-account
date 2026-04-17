@@ -17,6 +17,7 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` The token mint for the new associated token account
     ///   4. `[]` System program
     ///   5. `[]` SPL Token program
+    ///   6. `[]` Optional rent sysvar
     #[cfg_attr(
         feature = "codama",
         codama(account(
@@ -37,7 +38,13 @@ pub enum AssociatedTokenAccountInstruction {
             docs = "System program",
             default_value = program("system")
         )),
-        codama(account(name = "token_program", docs = "SPL Token program"))
+        codama(account(name = "token_program", docs = "SPL Token program")),
+        codama(account(
+            name = "rent_sysvar",
+            optional,
+            default_value = sysvar("rent"),
+            docs = "Optional rent sysvar"
+        ))
     )]
     Create,
     /// Creates an associated token account for the given wallet address and
@@ -50,6 +57,7 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` The token mint for the new associated token account
     ///   4. `[]` System program
     ///   5. `[]` SPL Token program
+    ///   6. `[]` Optional rent sysvar
     #[cfg_attr(
         feature = "codama",
         codama(account(
@@ -70,7 +78,13 @@ pub enum AssociatedTokenAccountInstruction {
             docs = "System program",
             default_value = program("system")
         )),
-        codama(account(name = "token_program", docs = "SPL Token program"))
+        codama(account(name = "token_program", docs = "SPL Token program")),
+        codama(account(
+            name = "rent_sysvar",
+            optional,
+            default_value = sysvar("rent"),
+            docs = "Optional rent sysvar"
+        ))
     )]
     CreateIdempotent,
     /// Transfers from and closes a nested associated token account: an

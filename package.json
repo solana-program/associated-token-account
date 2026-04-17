@@ -2,6 +2,7 @@
   "name": "spl-associated-token-account",
   "private": true,
   "devDependencies": {
+    "@codama/renderers-rust": "3.0.0",
     "codama": "^1.6.0"
   },
   "engines": {

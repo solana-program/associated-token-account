@@ -21,7 +21,7 @@ cargo-nightly:
 	cargo $(nightly) $(ARGS)
 
 generate-clients:
-	@echo "No JavaScript clients to generate"
+	pnpm codama run --all
 
 generate-idl-%:
 	@cargo install --locked --version =0.9.0 codama-cli

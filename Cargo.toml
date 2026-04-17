@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["interface", "program", "mollusk_harness", "pinocchio/interface", "pinocchio/program"]
+members = [
+    "clients/rust",
+    "interface",
+    "mollusk_harness",
+    "pinocchio/interface",
+    "pinocchio/program",
+    "program",
+]
 
 [workspace.metadata.spellcheck]
 config = "scripts/spellcheck.toml"

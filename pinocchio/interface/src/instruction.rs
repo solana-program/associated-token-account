@@ -20,6 +20,7 @@ pub enum AssociatedTokenAccountInstruction {
     ///   6. `[]` Optional rent sysvar
     #[cfg_attr(
         feature = "codama",
+        codama(optional_account_strategy = omitted),
         codama(account(
             name = "funder",
             signer,
@@ -60,6 +61,7 @@ pub enum AssociatedTokenAccountInstruction {
     ///   6. `[]` Optional rent sysvar
     #[cfg_attr(
         feature = "codama",
+        codama(optional_account_strategy = omitted),
         codama(account(
             name = "funder",
             signer,
@@ -110,6 +112,7 @@ pub enum AssociatedTokenAccountInstruction {
     ///      the owner mint's token program
     #[cfg_attr(
         feature = "codama",
+        codama(optional_account_strategy = omitted),
         codama(account(
             name = "nested_associated_token_account",
             writable,

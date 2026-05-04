@@ -3885,6 +3885,7 @@ version = "1.0.0"
 dependencies = [
  "mollusk-svm",
  "mollusk-svm-programs-token",
+ "pinocchio-associated-token-account-interface",
  "solana-account 4.3.0",
  "solana-instruction",
  "solana-program-error",
@@ -3892,8 +3893,8 @@ dependencies = [
  "solana-program-pack",
  "solana-pubkey 4.2.0",
  "solana-rent 4.1.0",
+ "solana-sdk-ids",
  "solana-system-interface 3.2.0",
- "solana-sysvar 3.1.1",
  "spl-associated-token-account-interface 2.0.0",
  "spl-token-2022-interface",
  "spl-token-interface",

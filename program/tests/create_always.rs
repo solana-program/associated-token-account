@@ -24,11 +24,7 @@ fn create_rejects_existing_ata(token_program_id: Pubkey) {
         wallet,
         mint,
         token_program_id,
-        CreateAtaInstructionType::Create {
-            bump: None,
-            account_len: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::Create,
     );
 
     harness

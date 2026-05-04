@@ -12,7 +12,6 @@
       {
         "kind": "instructionNode",
         "name": "create",
-        "optionalAccountStrategy": "omitted",
         "accounts": [
           {
             "kind": "instructionAccountNode",
@@ -71,20 +70,6 @@
             "docs": [
               "SPL Token program"
             ]
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "rentSysvar",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": true,
-            "docs": [
-              "Optional rent sysvar"
-            ],
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "SysvarRent111111111111111111111111111111111"
-            }
           }
         ],
         "arguments": [
@@ -114,7 +99,6 @@
       {
         "kind": "instructionNode",
         "name": "createIdempotent",
-        "optionalAccountStrategy": "omitted",
         "accounts": [
           {
             "kind": "instructionAccountNode",
@@ -173,20 +157,6 @@
             "docs": [
               "SPL Token program"
             ]
-          },
-          {
-            "kind": "instructionAccountNode",
-            "name": "rentSysvar",
-            "isWritable": false,
-            "isSigner": false,
-            "isOptional": true,
-            "docs": [
-              "Optional rent sysvar"
-            ],
-            "defaultValue": {
-              "kind": "publicKeyValueNode",
-              "publicKey": "SysvarRent111111111111111111111111111111111"
-            }
           }
         ],
         "arguments": [
@@ -315,9 +285,160 @@
             "offset": 0
           }
         ]
+      },
+      {
+        "kind": "instructionNode",
+        "name": "createWithArgs",
+        "accounts": [
+          {
+            "kind": "instructionAccountNode",
+            "name": "funder",
+            "isWritable": true,
+            "isSigner": true,
+            "docs": [
+              "Funding account (must be a system account)"
+            ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "associatedTokenAccount",
+            "isWritable": true,
+            "isSigner": false,
+            "docs": [
+              "Associated token account address to be created"
+            ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "wallet",
+            "isWritable": false,
+            "isSigner": false,
+            "docs": [
+              "Wallet address for the new associated token account"
+            ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "mint",
+            "isWritable": false,
+            "isSigner": false,
+            "docs": [
+              "The token mint for the new associated token account"
+            ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "systemProgram",
+            "isWritable": false,
+            "isSigner": false,
+            "docs": [
+              "System program"
+            ],
+            "defaultValue": {
+              "kind": "publicKeyValueNode",
+              "publicKey": "11111111111111111111111111111111"
+            }
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "tokenProgram",
+            "isWritable": false,
+            "isSigner": false,
+            "docs": [
+              "SPL Token program"
+            ]
+          },
+          {
+            "kind": "instructionAccountNode",
+            "name": "rentSysvar",
+            "isWritable": false,
+            "isSigner": false,
+            "docs": [
+              "Rent sysvar"
+            ],
+            "defaultValue": {
+              "kind": "publicKeyValueNode",
+              "publicKey": "SysvarRent111111111111111111111111111111111"
+            }
+          }
+        ],
+        "arguments": [
+          {
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "defaultValueStrategy": "omitted",
+            "type": {
+              "kind": "numberTypeNode",
+              "format": "u8",
+              "endian": "le"
+            },
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 3
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "mode",
+            "type": {
+              "kind": "definedTypeLinkNode",
+              "name": "createMode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "bump",
+            "type": {
+              "kind": "numberTypeNode",
+              "format": "u8",
+              "endian": "le"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "accountLen",
+            "type": {
+              "kind": "numberTypeNode",
+              "format": "u64",
+              "endian": "le"
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ]
       }
     ],
-    "definedTypes": [],
+    "definedTypes": [
+      {
+        "kind": "definedTypeNode",
+        "name": "createMode",
+        "type": {
+          "kind": "enumTypeNode",
+          "variants": [
+            {
+              "kind": "enumEmptyVariantTypeNode",
+              "name": "always",
+              "discriminator": 0
+            },
+            {
+              "kind": "enumEmptyVariantTypeNode",
+              "name": "idempotent",
+              "discriminator": 1
+            }
+          ],
+          "size": {
+            "kind": "numberTypeNode",
+            "format": "u8",
+            "endian": "le"
+          }
+        }
+      }
+    ],
     "pdas": [
       {
         "kind": "pdaNode",

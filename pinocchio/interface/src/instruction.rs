@@ -1,7 +1,7 @@
 //! Instruction types for the Associated Token Account program.
 
 #[cfg(feature = "codama")]
-use codama_macros::CodamaInstructions;
+use codama_macros::{CodamaInstructions, CodamaType};
 
 /// Instructions supported by the `AssociatedTokenAccount` program
 #[repr(u8)]
@@ -17,10 +17,8 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` The token mint for the new associated token account
     ///   4. `[]` System program
     ///   5. `[]` SPL Token program
-    ///   6. `[]` Optional rent sysvar
     #[cfg_attr(
         feature = "codama",
-        codama(optional_account_strategy = omitted),
         codama(account(
             name = "funder",
             signer,
@@ -39,13 +37,7 @@ pub enum AssociatedTokenAccountInstruction {
             docs = "System program",
             default_value = program("system")
         )),
-        codama(account(name = "token_program", docs = "SPL Token program")),
-        codama(account(
-            name = "rent_sysvar",
-            optional,
-            default_value = sysvar("rent"),
-            docs = "Optional rent sysvar"
-        ))
+        codama(account(name = "token_program", docs = "SPL Token program"))
     )]
     Create,
     /// Creates an associated token account for the given wallet address and
@@ -58,10 +50,8 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` The token mint for the new associated token account
     ///   4. `[]` System program
     ///   5. `[]` SPL Token program
-    ///   6. `[]` Optional rent sysvar
     #[cfg_attr(
         feature = "codama",
-        codama(optional_account_strategy = omitted),
         codama(account(
             name = "funder",
             signer,
@@ -80,13 +70,7 @@ pub enum AssociatedTokenAccountInstruction {
             docs = "System program",
             default_value = program("system")
         )),
-        codama(account(name = "token_program", docs = "SPL Token program")),
-        codama(account(
-            name = "rent_sysvar",
-            optional,
-            default_value = sysvar("rent"),
-            docs = "Optional rent sysvar"
-        ))
+        codama(account(name = "token_program", docs = "SPL Token program"))
     )]
     CreateIdempotent,
     /// Transfers from and closes a nested associated token account: an
@@ -154,23 +138,89 @@ pub enum AssociatedTokenAccountInstruction {
         ))
     )]
     RecoverNested,
+    /// Creates an associated token account for the given wallet address and
+    /// token mint. Requires optimization arguments to lower CU usage.
+    ///
+    ///   0. `[writeable,signer]` Funding account (must be a system account)
+    ///   1. `[writeable]` Associated token account address to be created
+    ///   2. `[]` Wallet address for the new associated token account
+    ///   3. `[]` The token mint for the new associated token account
+    ///   4. `[]` System program
+    ///   5. `[]` SPL Token program
+    ///   6. `[]` Rent sysvar
+    #[cfg_attr(
+        feature = "codama",
+        codama(account(
+            name = "funder",
+            signer,
+            writable,
+            docs = "Funding account (must be a system account)"
+        )),
+        codama(account(
+            name = "associated_token_account",
+            writable,
+            docs = "Associated token account address to be created"
+        )),
+        codama(account(name = "wallet", docs = "Wallet address for the new associated token account")),
+        codama(account(name = "mint", docs = "The token mint for the new associated token account")),
+        codama(account(
+            name = "system_program",
+            docs = "System program",
+            default_value = program("system")
+        )),
+        codama(account(name = "token_program", docs = "SPL Token program")),
+        codama(account(
+            name = "rent_sysvar",
+            default_value = sysvar("rent"),
+            docs = "Rent sysvar"
+        ))
+    )]
+    CreateWithArgs {
+        /// Selects whether behaves like `Create` or `CreateIdempotent`.
+        mode: CreateMode,
+        /// The ATA PDA bump seed.
+        bump: u8,
+        /// The account data length for the new ATA.
+        account_len: u64,
+    },
 }
 
-impl TryFrom<u8> for AssociatedTokenAccountInstruction {
+impl From<AssociatedTokenAccountInstruction> for u8 {
+    fn from(value: AssociatedTokenAccountInstruction) -> Self {
+        match value {
+            AssociatedTokenAccountInstruction::Create => 0,
+            AssociatedTokenAccountInstruction::CreateIdempotent => 1,
+            AssociatedTokenAccountInstruction::RecoverNested => 2,
+            AssociatedTokenAccountInstruction::CreateWithArgs { .. } => 3,
+        }
+    }
+}
+
+/// Specify when to create the associated token account.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "codama", derive(CodamaType))]
+pub enum CreateMode {
+    /// Always try to create the associated token account.
+    Always = 0,
+    /// Only try to create the associated token account if non-existent.
+    Idempotent = 1,
+}
+
+impl TryFrom<u8> for CreateMode {
     type Error = ();
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(Self::Create),
-            1 => Ok(Self::CreateIdempotent),
-            2 => Ok(Self::RecoverNested),
+            0 => Ok(Self::Always),
+            1 => Ok(Self::Idempotent),
             _ => Err(()),
         }
     }
 }
 
-impl From<AssociatedTokenAccountInstruction> for u8 {
-    fn from(value: AssociatedTokenAccountInstruction) -> Self {
+impl From<CreateMode> for u8 {
+    fn from(value: CreateMode) -> Self {
         value as u8
     }
 }

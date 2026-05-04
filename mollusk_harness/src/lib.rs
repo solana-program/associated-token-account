@@ -1,5 +1,6 @@
 use {
     mollusk_svm::{Mollusk, MolluskContext, result::Check},
+    pinocchio_associated_token_account_interface::instruction::CreateMode,
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
@@ -8,7 +9,6 @@ use {
     solana_pubkey::Pubkey,
     solana_rent::Rent,
     solana_system_interface::program as system_program,
-    solana_sysvar::rent,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_token_2022_interface::{extension::ExtensionType, state::Account as Token2022Account},
     spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
@@ -58,29 +58,19 @@ fn add_token_program_by_name(
 }
 
 /// The type of ATA creation instruction to build.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum CreateAtaInstructionType {
-    /// The standard `Create` instruction, which can optionally include a bump seed and account length.
-    Create {
-        bump: Option<u8>,
-        account_len: Option<u16>,
-        rent_sysvar_via_account: bool,
+    /// The standard `Create` instruction.
+    #[default]
+    Create,
+    /// The `CreateIdempotent` instruction.
+    CreateIdempotent,
+    /// The p-ATA-only `CreateWithArgs` instruction.
+    CreateWithArgs {
+        mode: CreateMode,
+        bump: u8,
+        account_len: u64,
     },
-    /// The `CreateIdempotent` instruction, which can optionally include a bump seed.
-    CreateIdempotent {
-        bump: Option<u8>,
-        rent_sysvar_via_account: bool,
-    },
-}
-
-impl Default for CreateAtaInstructionType {
-    fn default() -> Self {
-        Self::Create {
-            bump: None,
-            account_len: None,
-            rent_sysvar_via_account: false,
-        }
-    }
 }
 
 /// Calculate the expected account length for a Token-2022 account with `ImmutableOwner` extension
@@ -576,10 +566,7 @@ impl AtaTestHarness {
             wallet,
             mint,
             self.token_program_id,
-            CreateAtaInstructionType::CreateIdempotent {
-                bump: None,
-                rent_sysvar_via_account: false,
-            },
+            CreateAtaInstructionType::CreateIdempotent,
         );
 
         // Replace the ATA address with the wrong account address
@@ -648,23 +635,15 @@ impl AtaTestHarness {
 /// Encodes the instruction data payload for ATA creation-related instructions.
 pub fn encode_create_ata_instruction_data(instruction_type: &CreateAtaInstructionType) -> Vec<u8> {
     match instruction_type {
-        CreateAtaInstructionType::Create {
-            bump, account_len, ..
+        CreateAtaInstructionType::Create => vec![0],
+        CreateAtaInstructionType::CreateIdempotent => vec![1],
+        CreateAtaInstructionType::CreateWithArgs {
+            mode,
+            bump,
+            account_len,
         } => {
-            let mut data = vec![0]; // Discriminator for Create
-            if let Some(b) = bump {
-                data.push(*b);
-                if let Some(len) = account_len {
-                    data.extend_from_slice(&len.to_le_bytes());
-                }
-            }
-            data
-        }
-        CreateAtaInstructionType::CreateIdempotent { bump, .. } => {
-            let mut data = vec![1]; // Discriminator for CreateIdempotent
-            if let Some(b) = bump {
-                data.push(*b);
-            }
+            let mut data = vec![3, u8::from(*mode), *bump];
+            data.extend_from_slice(&account_len.to_le_bytes());
             data
         }
     }
@@ -680,17 +659,6 @@ pub fn build_create_ata_instruction(
     token_program: Pubkey,
     instruction_type: CreateAtaInstructionType,
 ) -> Instruction {
-    let include_rent_sysvar = match instruction_type {
-        CreateAtaInstructionType::Create {
-            rent_sysvar_via_account,
-            ..
-        }
-        | CreateAtaInstructionType::CreateIdempotent {
-            rent_sysvar_via_account,
-            ..
-        } => rent_sysvar_via_account,
-    };
-
     let mut accounts = vec![
         AccountMeta::new(payer, true),
         AccountMeta::new(ata_address, false),
@@ -699,8 +667,14 @@ pub fn build_create_ata_instruction(
         AccountMeta::new_readonly(system_program::id(), false),
         AccountMeta::new_readonly(token_program, false),
     ];
-    if include_rent_sysvar {
-        accounts.push(AccountMeta::new_readonly(rent::id(), false));
+    if matches!(
+        &instruction_type,
+        CreateAtaInstructionType::CreateWithArgs { .. }
+    ) {
+        accounts.push(AccountMeta::new_readonly(
+            solana_sdk_ids::sysvar::rent::id(),
+            false,
+        ));
     }
 
     Instruction {

@@ -1,25 +1,25 @@
-#### 2026-05-04 02:13:22.324528 UTC
+#### 2026-05-12 22:54:18.923148 UTC
 
 Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
 
 | Name | CUs | Delta |
 |------|------|-------|
 | create (spl-token) | 3221 | -2 |
-| create_with_args (spl-token) | 3156 | - new - |
+| create_with_args (spl-token) | 3169 | - new - |
 | create (token-2022) | 5264 | -3 |
-| create_with_args (token-2022) | 5200 | - new - |
-| create_idempotent (new, spl-token) | 4315 | -3 |
-| create_with_args_idempotent (new, spl-token) | 4250 | - new - |
-| create_idempotent (new, token-2022) | 5635 | -3 |
-| create_with_args_idempotent (new, token-2022) | 5570 | - new - |
+| create_with_args (token-2022) | 5213 | - new - |
+| create_idempotent (new, spl-token) | 4314 | -4 |
+| create_with_args_idempotent (new, spl-token) | 4263 | - new - |
+| create_idempotent (new, token-2022) | 5634 | -4 |
+| create_with_args_idempotent (new, token-2022) | 5583 | - new - |
 | create_idempotent (existing, spl-token) | 561 | -3 |
-| create_with_args_idempotent (existing, spl-token) | 581 | - new - |
+| create_with_args_idempotent (existing, spl-token) | 593 | - new - |
 | create_idempotent (existing, token-2022) | 1647 | -3 |
-| create_with_args_idempotent (existing, token-2022) | 1667 | - new - |
+| create_with_args_idempotent (existing, token-2022) | 1679 | - new - |
 | create (prefunded, spl-token) | 3221 | -2 |
-| create_with_args (prefunded, spl-token) | 3156 | - new - |
+| create_with_args (prefunded, spl-token) | 3169 | - new - |
 | create (prefunded, token-2022) | 5264 | -3 |
-| create_with_args (prefunded, token-2022) | 5200 | - new - |
+| create_with_args (prefunded, token-2022) | 5213 | - new - |
 | recover_nested (owner=spl-token, nested=spl-token) | 5243 | -2 |
 | recover_nested (owner=token-2022, nested=token-2022) | 7107 | -2 |
 | recover_nested (owner=spl-token, nested=token-2022) | 9663 | -2 |

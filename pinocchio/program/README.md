@@ -10,5 +10,5 @@ reduce compute usage. Plus, it includes a number of additional improvements.
 
 - `no_std` crate
 - Fully compatible with instruction and account layout of SPL Associated Token Account
-- Adds a p-ATA-only `CreateWithArgs` instruction with required `mode`, `bump`, `account_len`, and rent sysvar inputs
+- Adds a p-ATA-only `CreateWithArgs` instruction with optional `bump`, `account_len`, and rent sysvar inputs
 - Minimized CU usage

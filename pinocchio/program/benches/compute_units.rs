@@ -39,7 +39,7 @@ fn create_associated_token_account_with_args(
         &ata_program_id(),
         token_program_id,
     );
-    let mut data = vec![3, u8::from(mode), bump];
+    let mut data = vec![3, u8::from(mode), 1, bump, 1];
     data.extend_from_slice(&account_len.to_le_bytes());
 
     Instruction {

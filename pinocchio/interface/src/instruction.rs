@@ -139,7 +139,7 @@ pub enum AssociatedTokenAccountInstruction {
     )]
     RecoverNested,
     /// Creates an associated token account for the given wallet address and
-    /// token mint. Requires optimization arguments to lower CU usage.
+    /// token mint. Accepts optional optimization arguments to lower CU usage.
     ///
     ///   0. `[writeable,signer]` Funding account (must be a system account)
     ///   1. `[writeable]` Associated token account address to be created
@@ -147,9 +147,10 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` The token mint for the new associated token account
     ///   4. `[]` System program
     ///   5. `[]` SPL Token program
-    ///   6. `[]` Rent sysvar
+    ///   6. `[]` Optional rent sysvar
     #[cfg_attr(
         feature = "codama",
+        codama(optional_account_strategy = omitted),
         codama(account(
             name = "funder",
             signer,
@@ -171,17 +172,18 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(name = "token_program", docs = "SPL Token program")),
         codama(account(
             name = "rent_sysvar",
+            optional,
             default_value = sysvar("rent"),
-            docs = "Rent sysvar"
+            docs = "Optional rent sysvar"
         ))
     )]
     CreateWithArgs {
         /// Selects whether behaves like `Create` or `CreateIdempotent`.
         mode: CreateMode,
         /// The ATA PDA bump seed.
-        bump: u8,
+        bump: Option<u8>,
         /// The account data length for the new ATA.
-        account_len: u64,
+        account_len: Option<u64>,
     },
 }
 

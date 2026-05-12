@@ -68,8 +68,9 @@ pub enum CreateAtaInstructionType {
     /// The p-ATA-only `CreateWithArgs` instruction.
     CreateWithArgs {
         mode: CreateMode,
-        bump: u8,
-        account_len: u64,
+        bump: Option<u8>,
+        account_len: Option<u64>,
+        rent_sysvar: bool,
     },
 }
 
@@ -641,9 +642,20 @@ pub fn encode_create_ata_instruction_data(instruction_type: &CreateAtaInstructio
             mode,
             bump,
             account_len,
+            ..
         } => {
-            let mut data = vec![3, u8::from(*mode), *bump];
-            data.extend_from_slice(&account_len.to_le_bytes());
+            let mut data = vec![3, u8::from(*mode)];
+            match bump {
+                Some(bump) => data.extend_from_slice(&[1, *bump]),
+                None => data.push(0),
+            }
+            match account_len {
+                Some(account_len) => {
+                    data.push(1);
+                    data.extend_from_slice(&account_len.to_le_bytes());
+                }
+                None => data.push(0),
+            }
             data
         }
     }
@@ -669,7 +681,10 @@ pub fn build_create_ata_instruction(
     ];
     if matches!(
         &instruction_type,
-        CreateAtaInstructionType::CreateWithArgs { .. }
+        CreateAtaInstructionType::CreateWithArgs {
+            rent_sysvar: true,
+            ..
+        }
     ) {
         accounts.push(AccountMeta::new_readonly(
             solana_sdk_ids::sysvar::rent::id(),

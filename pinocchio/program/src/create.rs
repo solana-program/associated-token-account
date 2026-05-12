@@ -11,16 +11,15 @@ use {
     pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
 };
 
-type Bump = u8;
-type AccountLen = u64;
-
 #[inline(always)]
 pub(crate) fn process_create_associated_token_account(
     program_id: &Address,
     accounts: &mut [AccountView],
     create_mode: CreateMode,
+    accept_rent_sysvar: bool,
     // TODO: Use in later PRs
-    hints: Option<(Bump, AccountLen)>,
+    _bump_hint: Option<u8>,
+    _account_len_hint: Option<u64>,
 ) -> ProgramResult {
     let [
         payer,
@@ -35,15 +34,12 @@ pub(crate) fn process_create_associated_token_account(
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    let rent_sysvar = match hints {
-        // `CreateWithArgs` requires rent sysvar
-        Some(_) => Some(
-            remaining
-                .first()
-                .ok_or(ProgramError::NotEnoughAccountKeys)?,
-        ),
+    let rent_sysvar = if accept_rent_sysvar {
+        // `CreateWithArgs` accepts rent as an optional account
+        remaining.first()
+    } else {
         // `Create` / `CreateIdempotent` ignore trailing accounts
-        None => None,
+        None
     };
 
     let (associated_token_address, bump_seed) = AssociatedTokenPda::derive_address_and_bump_seed(

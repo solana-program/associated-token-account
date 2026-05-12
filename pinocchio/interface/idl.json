@@ -289,6 +289,7 @@
       {
         "kind": "instructionNode",
         "name": "createWithArgs",
+        "optionalAccountStrategy": "omitted",
         "accounts": [
           {
             "kind": "instructionAccountNode",
@@ -353,8 +354,9 @@
             "name": "rentSysvar",
             "isWritable": false,
             "isSigner": false,
+            "isOptional": true,
             "docs": [
-              "Rent sysvar"
+              "Optional rent sysvar"
             ],
             "defaultValue": {
               "kind": "publicKeyValueNode",
@@ -389,18 +391,34 @@
             "kind": "instructionArgumentNode",
             "name": "bump",
             "type": {
-              "kind": "numberTypeNode",
-              "format": "u8",
-              "endian": "le"
+              "kind": "optionTypeNode",
+              "item": {
+                "kind": "numberTypeNode",
+                "format": "u8",
+                "endian": "le"
+              },
+              "prefix": {
+                "kind": "numberTypeNode",
+                "format": "u8",
+                "endian": "le"
+              }
             }
           },
           {
             "kind": "instructionArgumentNode",
             "name": "accountLen",
             "type": {
-              "kind": "numberTypeNode",
-              "format": "u64",
-              "endian": "le"
+              "kind": "optionTypeNode",
+              "item": {
+                "kind": "numberTypeNode",
+                "format": "u64",
+                "endian": "le"
+              },
+              "prefix": {
+                "kind": "numberTypeNode",
+                "format": "u8",
+                "endian": "le"
+              }
             }
           }
         ],

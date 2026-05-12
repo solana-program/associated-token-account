@@ -2,7 +2,7 @@ use {
     mollusk_svm_result::Check,
     pinocchio_associated_token_account_interface::instruction::CreateMode,
     solana_address::Address,
-    solana_instruction::{AccountMeta, Instruction},
+    solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
     solana_program_pack::Pack,
     spl_associated_token_account_interface::address::get_associated_token_address_and_bump_seed,
@@ -11,14 +11,10 @@ use {
         token_2022_immutable_owner_account_len, token_2022_immutable_owner_rent_exempt_balance,
         token_account_rent_exempt_balance,
     },
-    test_case::{test_case, test_matrix},
+    test_case::test_matrix,
 };
 
-fn create_with_args_instruction_with_account_len(
-    harness: &mut AtaTestHarness,
-    mode: CreateMode,
-    account_len: u64,
-) -> Instruction {
+fn expected_bump(harness: &AtaTestHarness) -> u8 {
     let wallet = harness.wallet.unwrap();
     let mint = harness.mint.unwrap();
     let (_, bump) = get_associated_token_address_and_bump_seed(
@@ -27,12 +23,7 @@ fn create_with_args_instruction_with_account_len(
         &spl_associated_token_account_interface::program::id(),
         &harness.token_program_id,
     );
-
-    harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
-        mode,
-        bump,
-        account_len,
-    })
+    bump
 }
 
 fn expected_account_len(token_program_id: &Address) -> usize {
@@ -51,65 +42,66 @@ fn expected_rent_exempt_balance(token_program_id: &Address) -> u64 {
     }
 }
 
-#[test_case(vec![3, 0, 254, 165, 0, 0, 0, 0, 0, 0], ProgramError::InvalidInstructionData; "truncated")]
-#[test_case(vec![3, 0, 254, 165, 0, 0, 0, 0, 0, 0, 0, 0], ProgramError::InvalidInstructionData; "extra_byte")]
-#[test_case(vec![3, 2, 254, 165, 0, 0, 0, 0, 0, 0, 0], ProgramError::InvalidInstructionData; "invalid_mode")]
-fn create_with_args_rejects_non_canonical_payload(data: Vec<u8>, expected_error: ProgramError) {
-    let token_program_id = spl_token_interface::id();
+#[test_matrix([spl_token_interface::id(), spl_token_2022_interface::id()])]
+fn create_with_args_idempotent_accepts_existing_ata(token_program_id: Address) {
     let mut harness =
         AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)
             .with_wallet_and_mint(1_000_000, 6);
-    let mut instruction = create_with_args_instruction_with_account_len(
-        &mut harness,
-        CreateMode::Always,
-        expected_account_len(&token_program_id) as u64,
-    );
-    instruction.data = data;
+    let wallet = harness.wallet.unwrap();
+    harness.insert_token_account_at_ata_address(wallet);
+
+    let instruction =
+        harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
+            mode: CreateMode::Idempotent,
+            bump: None,
+            account_len: None,
+            rent_sysvar: false,
+        });
 
     harness
         .ctx
-        .process_and_validate_instruction(&instruction, &[Check::err(expected_error)]);
+        .process_and_validate_instruction(&instruction, &[Check::success()]);
 }
 
-#[test_matrix(
-    [spl_token_interface::id(), spl_token_2022_interface::id()],
-    [CreateMode::Always, CreateMode::Idempotent]
-)]
-fn create_with_args_rejects_missing_rent_account(token_program_id: Address, mode: CreateMode) {
+#[test_matrix([spl_token_interface::id(), spl_token_2022_interface::id()])]
+fn create_with_args_always_rejects_existing_ata(token_program_id: Address) {
     let mut harness =
         AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)
             .with_wallet_and_mint(1_000_000, 6);
-    let mut instruction = create_with_args_instruction_with_account_len(
-        &mut harness,
-        mode,
-        expected_account_len(&token_program_id) as u64,
-    );
-    instruction.accounts.truncate(6);
+    let wallet = harness.wallet.unwrap();
+    harness.insert_token_account_at_ata_address(wallet);
 
-    harness.ctx.process_and_validate_instruction(
-        &instruction,
-        &[Check::err(ProgramError::NotEnoughAccountKeys)],
-    );
+    let instruction =
+        harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
+            mode: CreateMode::Always,
+            bump: None,
+            account_len: None,
+            rent_sysvar: false,
+        });
+
+    harness
+        .ctx
+        .process_and_validate_instruction(&instruction, &[Check::err(ProgramError::IllegalOwner)]);
 }
 
 #[test_matrix(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
     [CreateMode::Always, CreateMode::Idempotent]
 )]
-fn create_with_args_requires_rent_at_expected_account_position(
-    token_program_id: Address,
-    mode: CreateMode,
-) {
+fn create_with_args_rejects_wrong_rent_account(token_program_id: Address, mode: CreateMode) {
     let mut harness =
         AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)
             .with_wallet_and_mint(1_000_000, 6);
     let incorrect_rent_sysvar = Address::new_unique();
+    let bump = expected_bump(&harness);
 
-    let mut instruction = create_with_args_instruction_with_account_len(
-        &mut harness,
-        mode,
-        expected_account_len(&token_program_id) as u64,
-    );
+    let mut instruction =
+        harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
+            mode,
+            bump: Some(bump),
+            account_len: Some(expected_account_len(&token_program_id) as u64),
+            rent_sysvar: true,
+        });
     let rent_sysvar = instruction.accounts[6].pubkey;
     instruction.accounts[6] = AccountMeta::new_readonly(incorrect_rent_sysvar, false);
     instruction
@@ -124,17 +116,38 @@ fn create_with_args_requires_rent_at_expected_account_position(
 
 #[test_matrix(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
-    [CreateMode::Always, CreateMode::Idempotent]
+    [CreateMode::Always, CreateMode::Idempotent],
+    [false, true],
+    [false, true],
+    [false, true]
 )]
-fn create_with_args_accepts_fresh_account(token_program_id: Address, mode: CreateMode) {
+fn create_with_args_accepts_optional_inputs(
+    token_program_id: Address,
+    mode: CreateMode,
+    bump: bool,
+    account_len: bool,
+    rent_sysvar: bool,
+) {
     let mut harness =
         AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)
             .with_wallet_and_mint(1_000_000, 6);
-    let instruction = create_with_args_instruction_with_account_len(
-        &mut harness,
-        mode,
-        expected_account_len(&token_program_id) as u64,
-    );
+    let bump = if bump {
+        Some(expected_bump(&harness))
+    } else {
+        None
+    };
+    let account_len = if account_len {
+        Some(expected_account_len(&token_program_id) as u64)
+    } else {
+        None
+    };
+    let instruction =
+        harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
+            mode,
+            bump,
+            account_len,
+            rent_sysvar,
+        });
     let ata_address = harness.ata_address.unwrap();
 
     harness.ctx.process_and_validate_instruction(
@@ -162,12 +175,15 @@ fn create_with_args_ignores_trailing_accounts_after_rent(
         AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)
             .with_wallet_and_mint(1_000_000, 6);
     let trailing_account = Address::new_unique();
+    let bump = expected_bump(&harness);
 
-    let mut instruction = create_with_args_instruction_with_account_len(
-        &mut harness,
-        mode,
-        expected_account_len(&token_program_id) as u64,
-    );
+    let mut instruction =
+        harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
+            mode,
+            bump: Some(bump),
+            account_len: Some(expected_account_len(&token_program_id) as u64),
+            rent_sysvar: true,
+        });
     instruction
         .accounts
         .push(AccountMeta::new_readonly(trailing_account, false));

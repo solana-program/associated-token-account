@@ -17,8 +17,7 @@ pub(crate) fn process_create_associated_token_account(
     accounts: &mut [AccountView],
     create_mode: CreateMode,
     accept_rent_sysvar: bool,
-    // TODO: Use in later PRs
-    _bump_hint: Option<u8>,
+    bump_hint: Option<u8>,
     _account_len_hint: Option<u32>,
 ) -> ProgramResult {
     let [
@@ -42,13 +41,25 @@ pub(crate) fn process_create_associated_token_account(
         None
     };
 
-    let (associated_token_address, bump_seed) = AssociatedTokenPda::derive_address_and_bump_seed(
-        program_id,
-        wallet.address(),
-        token_program.address(),
-        mint.address(),
-    );
-    if associated_token_address != *associated_token_account.address() {
+    let (derived_ata_addr, bump_seed) = match bump_hint {
+        Some(bump) => (
+            AssociatedTokenPda::derive_address_with_bump_hint(
+                program_id,
+                wallet.address(),
+                token_program.address(),
+                mint.address(),
+                bump,
+            )?,
+            bump,
+        ),
+        None => AssociatedTokenPda::derive_address_and_bump_seed(
+            program_id,
+            wallet.address(),
+            token_program.address(),
+            mint.address(),
+        ),
+    };
+    if derived_ata_addr != *associated_token_account.address() {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -70,6 +81,13 @@ pub(crate) fn process_create_associated_token_account(
                     }
                     if token_account.mint() != mint.address() {
                         return Err(ProgramError::InvalidAccountData);
+                    }
+                    // `derive_address_with_bump_hint()` rejects higher off-curve bumps but
+                    // doesn't check whether the hinted bump itself is off-curve. Create paths
+                    // validate that through `invoke_signed()`, but this no-op path returns early,
+                    // so check it here.
+                    if bump_hint.is_some() && derived_ata_addr.is_on_curve() {
+                        return Err(ProgramError::InvalidSeeds);
                     }
                     // Confirmed `CreateIdempotent` no-op
                     return Ok(());

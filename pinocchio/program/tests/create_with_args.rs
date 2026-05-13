@@ -1,11 +1,13 @@
+mod common;
+
 use {
+    common::expected_bump,
     mollusk_svm_result::Check,
     pinocchio_associated_token_account_interface::instruction::CreateMode,
     solana_address::Address,
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
     solana_program_pack::Pack,
-    spl_associated_token_account_interface::address::get_associated_token_address_and_bump_seed,
     spl_associated_token_account_mollusk_harness::{
         AtaProgram, AtaTestHarness, CreateAtaInstructionType,
         token_2022_immutable_owner_account_len, token_2022_immutable_owner_rent_exempt_balance,
@@ -13,18 +15,6 @@ use {
     },
     test_case::test_matrix,
 };
-
-fn expected_bump(harness: &AtaTestHarness) -> u8 {
-    let wallet = harness.wallet.unwrap();
-    let mint = harness.mint.unwrap();
-    let (_, bump) = get_associated_token_address_and_bump_seed(
-        &wallet,
-        &mint,
-        &spl_associated_token_account_interface::program::id(),
-        &harness.token_program_id,
-    );
-    bump
-}
 
 fn expected_account_len(token_program_id: &Address) -> usize {
     if *token_program_id == spl_token_2022_interface::id() {

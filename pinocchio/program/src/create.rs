@@ -4,27 +4,22 @@ use {
         AccountView, Address, ProgramResult, cpi::Signer, error::ProgramError, instruction::seeds,
     },
     pinocchio_associated_token_account_interface::{
-        error::AssociatedTokenAccountError, pda::AssociatedTokenPda,
+        error::AssociatedTokenAccountError, instruction::CreateMode, pda::AssociatedTokenPda,
     },
     pinocchio_system_prefund::instructions::CreateAccountAllowPrefund,
     pinocchio_token::instructions::InitializeAccount3,
     pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
 };
 
-/// Specify when to create the associated token account.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CreateMode {
-    /// Always try to create the associated token account.
-    Always,
-    /// Only try to create the associated token account if non-existent.
-    Idempotent,
-}
-
 #[inline(always)]
 pub(crate) fn process_create_associated_token_account(
     program_id: &Address,
     accounts: &mut [AccountView],
     create_mode: CreateMode,
+    accept_rent_sysvar: bool,
+    // TODO: Use in later PRs
+    _bump_hint: Option<u8>,
+    _account_len_hint: Option<u64>,
 ) -> ProgramResult {
     let [
         payer,
@@ -38,7 +33,14 @@ pub(crate) fn process_create_associated_token_account(
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
-    let rent_sysvar = remaining.first();
+
+    let rent_sysvar = if accept_rent_sysvar {
+        // `CreateWithArgs` accepts rent as an optional account
+        remaining.first()
+    } else {
+        // `Create` / `CreateIdempotent` ignore trailing accounts
+        None
+    };
 
     let (associated_token_address, bump_seed) = AssociatedTokenPda::derive_address_and_bump_seed(
         program_id,

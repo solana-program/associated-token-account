@@ -2,6 +2,7 @@ use {
     mollusk_svm::Mollusk,
     mollusk_svm_bencher::MolluskComputeUnitBencher,
     mollusk_svm_programs_token::{token, token2022},
+    pinocchio_associated_token_account_interface::instruction::CreateMode,
     solana_account::Account,
     solana_address::Address,
     solana_instruction::{AccountMeta, Instruction},
@@ -9,26 +10,51 @@ use {
     solana_program_pack::Pack,
     solana_system_interface::program as system_program,
     spl_associated_token_account_interface::{
-        address::get_associated_token_address_with_program_id,
+        address::{
+            get_associated_token_address_and_bump_seed,
+            get_associated_token_address_with_program_id,
+        },
         instruction::{
             create_associated_token_account, create_associated_token_account_idempotent,
         },
         program::id as ata_program_id,
     },
+    spl_token_2022_interface::extension::ExtensionType,
     spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
     std::path::PathBuf,
 };
 
-fn with_rent_account(
-    mut instruction: Instruction,
-    mut accounts: Vec<(Address, Account)>,
-    rent_sysvar: &(Address, Account),
-) -> (Instruction, Vec<(Address, Account)>) {
-    instruction
-        .accounts
-        .push(AccountMeta::new_readonly(rent_sysvar.0, false));
-    accounts.push(rent_sysvar.clone());
-    (instruction, accounts)
+fn create_associated_token_account_with_args(
+    funding_address: &Address,
+    wallet_address: &Address,
+    token_mint_address: &Address,
+    token_program_id: &Address,
+    rent_sysvar: &Address,
+    mode: CreateMode,
+    account_len: u64,
+) -> Instruction {
+    let (associated_account_address, bump) = get_associated_token_address_and_bump_seed(
+        wallet_address,
+        token_mint_address,
+        &ata_program_id(),
+        token_program_id,
+    );
+    let mut data = vec![3, u8::from(mode), 1, bump, 1];
+    data.extend_from_slice(&account_len.to_le_bytes());
+
+    Instruction {
+        program_id: ata_program_id(),
+        accounts: vec![
+            AccountMeta::new(*funding_address, true),
+            AccountMeta::new(associated_account_address, false),
+            AccountMeta::new_readonly(*wallet_address, false),
+            AccountMeta::new_readonly(*token_mint_address, false),
+            AccountMeta::new_readonly(system_program::id(), false),
+            AccountMeta::new_readonly(*token_program_id, false),
+            AccountMeta::new_readonly(*rent_sysvar, false),
+        ],
+        data,
+    }
 }
 
 fn token_account(program_id: &Address, mint: Address, owner: Address, amount: u64) -> Account {
@@ -185,6 +211,11 @@ fn main() {
     let token_mint_account = token::create_account_for_mint(mint_data);
     let t22_mint = Address::new_unique();
     let t22_mint_account = token2022::create_account_for_mint(mint_data);
+    let token_account_len = TokenAccount::LEN as u64;
+    let t22_account_len = ExtensionType::try_calculate_account_len::<
+        spl_token_2022_interface::state::Account,
+    >(&[ExtensionType::ImmutableOwner])
+    .unwrap() as u64;
 
     // Bench 1: create (spl-token)
     let wallet1 = Address::new_unique();
@@ -203,7 +234,17 @@ fn main() {
         system_account.clone(),
         spl_token_account.clone(),
     ];
-    let (ix1_rent, accs1_rent) = with_rent_account(ix1.clone(), accs1.clone(), &rent_sysvar);
+    let ix1_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet1,
+        &token_mint,
+        &spl_token_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Always,
+        token_account_len,
+    );
+    let mut accs1_create_with_args = accs1.clone();
+    accs1_create_with_args.push(rent_sysvar.clone());
 
     // Bench 2: create (token-2022)
     let wallet2 = Address::new_unique();
@@ -226,7 +267,17 @@ fn main() {
         system_account.clone(),
         t22_account.clone(),
     ];
-    let (ix2_rent, accs2_rent) = with_rent_account(ix2.clone(), accs2.clone(), &rent_sysvar);
+    let ix2_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet2,
+        &t22_mint,
+        &spl_token_2022_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Always,
+        t22_account_len,
+    );
+    let mut accs2_create_with_args = accs2.clone();
+    accs2_create_with_args.push(rent_sysvar.clone());
 
     // Bench 3: create_idempotent (new, spl-token)
     let wallet3 = Address::new_unique();
@@ -249,7 +300,17 @@ fn main() {
         system_account.clone(),
         spl_token_account.clone(),
     ];
-    let (ix3_rent, accs3_rent) = with_rent_account(ix3.clone(), accs3.clone(), &rent_sysvar);
+    let ix3_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet3,
+        &token_mint,
+        &spl_token_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Idempotent,
+        token_account_len,
+    );
+    let mut accs3_create_with_args = accs3.clone();
+    accs3_create_with_args.push(rent_sysvar.clone());
 
     // Bench 4: create_idempotent (new, token-2022)
     let wallet3b = Address::new_unique();
@@ -272,7 +333,17 @@ fn main() {
         system_account.clone(),
         t22_account.clone(),
     ];
-    let (ix3b_rent, accs3b_rent) = with_rent_account(ix3b.clone(), accs3b.clone(), &rent_sysvar);
+    let ix3b_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet3b,
+        &t22_mint,
+        &spl_token_2022_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Idempotent,
+        t22_account_len,
+    );
+    let mut accs3b_create_with_args = accs3b.clone();
+    accs3b_create_with_args.push(rent_sysvar.clone());
 
     // Bench 5: create_idempotent (existing, spl-token)
     let wallet4 = Address::new_unique();
@@ -305,6 +376,17 @@ fn main() {
         system_account.clone(),
         spl_token_account.clone(),
     ];
+    let ix4_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet4,
+        &token_mint,
+        &spl_token_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Idempotent,
+        token_account_len,
+    );
+    let mut accs4_create_with_args = accs4.clone();
+    accs4_create_with_args.push(rent_sysvar.clone());
 
     // Bench 6: create_idempotent (existing, token-2022)
     let wallet4b = Address::new_unique();
@@ -337,6 +419,17 @@ fn main() {
         system_account.clone(),
         t22_account.clone(),
     ];
+    let ix4b_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet4b,
+        &t22_mint,
+        &spl_token_2022_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Idempotent,
+        t22_account_len,
+    );
+    let mut accs4b_create_with_args = accs4b.clone();
+    accs4b_create_with_args.push(rent_sysvar.clone());
 
     // Bench 7: create (prefunded, spl-token)
     let wallet5 = Address::new_unique();
@@ -346,7 +439,7 @@ fn main() {
         &spl_token_interface::id(),
     );
     let spl_prefund_lamports = solana_rent::Rent::default()
-        .minimum_balance(TokenAccount::LEN)
+        .minimum_balance(token_account_len as usize)
         .saturating_sub(1);
     let ix5 =
         create_associated_token_account(&payer, &wallet5, &token_mint, &spl_token_interface::id());
@@ -361,7 +454,17 @@ fn main() {
         system_account.clone(),
         spl_token_account.clone(),
     ];
-    let (ix5_rent, accs5_rent) = with_rent_account(ix5.clone(), accs5.clone(), &rent_sysvar);
+    let ix5_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet5,
+        &token_mint,
+        &spl_token_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Always,
+        token_account_len,
+    );
+    let mut accs5_create_with_args = accs5.clone();
+    accs5_create_with_args.push(rent_sysvar.clone());
 
     // Bench 8: create (prefunded, token-2022)
     let wallet5b = Address::new_unique();
@@ -371,12 +474,7 @@ fn main() {
         &spl_token_2022_interface::id(),
     );
     let t22_prefund_lamports = solana_rent::Rent::default()
-        .minimum_balance(
-            spl_token_2022_interface::extension::ExtensionType::try_calculate_account_len::<
-                spl_token_2022_interface::state::Account,
-            >(&[spl_token_2022_interface::extension::ExtensionType::ImmutableOwner])
-            .unwrap(),
-        )
+        .minimum_balance(t22_account_len as usize)
         .saturating_sub(1);
     let ix5b = create_associated_token_account(
         &payer,
@@ -395,7 +493,17 @@ fn main() {
         system_account.clone(),
         t22_account.clone(),
     ];
-    let (ix5b_rent, accs5b_rent) = with_rent_account(ix5b.clone(), accs5b.clone(), &rent_sysvar);
+    let ix5b_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet5b,
+        &t22_mint,
+        &spl_token_2022_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Always,
+        t22_account_len,
+    );
+    let mut accs5b_create_with_args = accs5b.clone();
+    accs5b_create_with_args.push(rent_sysvar.clone());
 
     // Benches 11-14: recover_nested
     let (ix6, accs6) = recover_nested_case(
@@ -438,41 +546,51 @@ fn main() {
     MolluskComputeUnitBencher::new(mollusk)
         .bench(("create (spl-token)", &ix1, &accs1))
         .bench((
-            "create (spl-token, w/ rent account)",
-            &ix1_rent,
-            &accs1_rent,
+            "create_with_args (spl-token)",
+            &ix1_create_with_args,
+            &accs1_create_with_args,
         ))
         .bench(("create (token-2022)", &ix2, &accs2))
         .bench((
-            "create (token-2022, w/ rent account)",
-            &ix2_rent,
-            &accs2_rent,
+            "create_with_args (token-2022)",
+            &ix2_create_with_args,
+            &accs2_create_with_args,
         ))
         .bench(("create_idempotent (new, spl-token)", &ix3, &accs3))
         .bench((
-            "create_idempotent (new, spl-token, w/ rent account)",
-            &ix3_rent,
-            &accs3_rent,
+            "create_with_args_idempotent (new, spl-token)",
+            &ix3_create_with_args,
+            &accs3_create_with_args,
         ))
         .bench(("create_idempotent (new, token-2022)", &ix3b, &accs3b))
         .bench((
-            "create_idempotent (new, token-2022, w/ rent account)",
-            &ix3b_rent,
-            &accs3b_rent,
+            "create_with_args_idempotent (new, token-2022)",
+            &ix3b_create_with_args,
+            &accs3b_create_with_args,
         ))
         .bench(("create_idempotent (existing, spl-token)", &ix4, &accs4))
+        .bench((
+            "create_with_args_idempotent (existing, spl-token)",
+            &ix4_create_with_args,
+            &accs4_create_with_args,
+        ))
         .bench(("create_idempotent (existing, token-2022)", &ix4b, &accs4b))
+        .bench((
+            "create_with_args_idempotent (existing, token-2022)",
+            &ix4b_create_with_args,
+            &accs4b_create_with_args,
+        ))
         .bench(("create (prefunded, spl-token)", &ix5, &accs5))
         .bench((
-            "create (prefunded, spl-token, w/ rent account)",
-            &ix5_rent,
-            &accs5_rent,
+            "create_with_args (prefunded, spl-token)",
+            &ix5_create_with_args,
+            &accs5_create_with_args,
         ))
         .bench(("create (prefunded, token-2022)", &ix5b, &accs5b))
         .bench((
-            "create (prefunded, token-2022, w/ rent account)",
-            &ix5b_rent,
-            &accs5b_rent,
+            "create_with_args (prefunded, token-2022)",
+            &ix5b_create_with_args,
+            &accs5b_create_with_args,
         ))
         .bench((
             "recover_nested (owner=spl-token, nested=spl-token)",

@@ -38,10 +38,7 @@ fn idempotent_rejects_non_token_owned_canonical_ata(token_program_id: Pubkey) {
         wallet,
         mint,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent {
-            bump: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     harness
@@ -75,10 +72,7 @@ fn idempotent_rejects_uninitialized_token_owned_canonical_ata(token_program_id: 
         wallet,
         mint,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent {
-            bump: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     harness
@@ -112,10 +106,7 @@ fn idempotent_rejects_invalid_data_token_owned_canonical_ata(token_program_id: P
         wallet,
         mint,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent {
-            bump: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     harness
@@ -145,10 +136,7 @@ fn idempotent_rejects_packed_uninitialized_token_owned_canonical_ata(token_progr
         wallet,
         harness.mint.unwrap(),
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent {
-            bump: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     // Zeroing the account state byte defeats the idempotent fast-path (unpack
@@ -174,10 +162,7 @@ fn idempotent_rejects_wrong_owner(token_program_id: Pubkey) {
         harness.wallet.unwrap(),
         harness.mint.unwrap(),
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent {
-            bump: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     harness
@@ -207,10 +192,7 @@ fn idempotent_rejects_wrong_mint(token_program_id: Pubkey) {
         wallet,
         mint,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent {
-            bump: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     harness.ctx.process_and_validate_instruction(
@@ -234,10 +216,7 @@ fn idempotent_accepts_preexisting_valid_ata(token_program_id: Pubkey) {
         wallet,
         mint,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent {
-            bump: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     harness.ctx.process_and_validate_instruction(
@@ -277,10 +256,7 @@ fn idempotent_accepts_frozen_ata(token_program_id: Pubkey) {
         wallet,
         mint,
         token_program_id,
-        CreateAtaInstructionType::CreateIdempotent {
-            bump: None,
-            rent_sysvar_via_account: false,
-        },
+        CreateAtaInstructionType::CreateIdempotent,
     );
 
     harness.ctx.process_and_validate_instruction(

@@ -4,10 +4,11 @@ A `pinocchio`-based Associated Token Account program.
 
 ## Overview
 
-pinocchio-associated-token-account-program (p-ata) is a drop-in replacement for SPL ATA. Following in the footsteps of 
+pinocchio-associated-token-account-program (p-ata) is a drop-in replacement for SPL ATA. Following in the footsteps of
 [p-token](https://github.com/solana-program/token/tree/main/pinocchio), it uses pinocchio instead of solana-program to
 reduce compute usage. Plus, it includes a number of additional improvements.
 
 - `no_std` crate
 - Fully compatible with instruction and account layout of SPL Associated Token Account
+- Adds a p-ATA-only `CreateWithArgs` instruction with optional `bump`, `account_len`, and rent sysvar inputs
 - Minimized CU usage

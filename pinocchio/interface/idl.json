@@ -401,7 +401,7 @@
             "name": "accountLen",
             "type": {
               "kind": "numberTypeNode",
-              "format": "u64",
+              "format": "u32",
               "endian": "le"
             }
           }

@@ -71,7 +71,7 @@ pub enum CreateAtaInstructionType {
     CreateWithArgs {
         mode: CreateMode,
         bump: Option<u8>,
-        account_len: Option<u64>,
+        account_len: Option<u32>,
         rent_sysvar: bool,
     },
 }

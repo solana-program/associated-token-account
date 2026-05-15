@@ -99,7 +99,7 @@ fn create_with_args_rejects_wrong_rent_account(token_program_id: Address, mode: 
         harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
             mode,
             bump: Some(bump),
-            account_len: Some(expected_account_len(&token_program_id) as u64),
+            account_len: Some(expected_account_len(&token_program_id) as u32),
             rent_sysvar: true,
         });
     let rent_sysvar = instruction.accounts[6].pubkey;
@@ -137,7 +137,7 @@ fn create_with_args_accepts_optional_inputs(
         None
     };
     let account_len = if account_len {
-        Some(expected_account_len(&token_program_id) as u64)
+        Some(expected_account_len(&token_program_id) as u32)
     } else {
         None
     };
@@ -181,7 +181,7 @@ fn create_with_args_ignores_trailing_accounts_after_rent(
         harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
             mode,
             bump: Some(bump),
-            account_len: Some(expected_account_len(&token_program_id) as u64),
+            account_len: Some(expected_account_len(&token_program_id) as u32),
             rent_sysvar: true,
         });
     instruction

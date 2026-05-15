@@ -34,7 +34,7 @@ fn create_associated_token_account_with_args(
     token_program_id: &Address,
     rent_sysvar: &Address,
     mode: CreateMode,
-    account_len: u64,
+    account_len: u32,
 ) -> Instruction {
     let (associated_account_address, bump) = get_associated_token_address_and_bump_seed(
         wallet_address,
@@ -218,11 +218,11 @@ fn main() {
     let token_mint_account = token::create_account_for_mint(mint_data);
     let t22_mint = Address::new_unique();
     let t22_mint_account = token2022::create_account_for_mint(mint_data);
-    let token_account_len = TokenAccount::LEN as u64;
+    let token_account_len = TokenAccount::LEN as u32;
     let t22_account_len = ExtensionType::try_calculate_account_len::<
         spl_token_2022_interface::state::Account,
     >(&[ExtensionType::ImmutableOwner])
-    .unwrap() as u64;
+    .unwrap() as u32;
 
     // Bench 1: create (spl-token)
     let wallet1 = Address::new_unique();

@@ -5,7 +5,7 @@ use codama_macros::{CodamaInstructions, CodamaType};
 use {
     pinocchio::error::ProgramError,
     solana_nullable::{MaybeNull, Nullable},
-    solana_zero_copy::unaligned::U64,
+    solana_zero_copy::unaligned::U32,
     wincode::{SchemaRead, SchemaWrite},
 };
 
@@ -191,7 +191,7 @@ pub enum AssociatedTokenAccountInstruction {
         #[cfg_attr(feature = "codama", codama(type = number(u8)))]
         bump: MaybeNull<BumpSeedHint>,
         /// The account data length for the new ATA.
-        #[cfg_attr(feature = "codama", codama(type = number(u64)))]
+        #[cfg_attr(feature = "codama", codama(type = number(u32)))]
         account_len: MaybeNull<AccountLenHint>,
     },
 }
@@ -251,23 +251,23 @@ impl From<BumpSeedHint> for u8 {
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, PartialEq, SchemaRead, SchemaWrite)]
 #[wincode(assert_zero_copy)]
-pub struct AccountLenHint(U64);
+pub struct AccountLenHint(U32);
 
 impl AccountLenHint {
-    pub const fn new(value: u64) -> Option<Self> {
+    pub const fn new(value: u32) -> Option<Self> {
         if value == 0 {
             None
         } else {
-            Some(Self(U64::from_primitive(value)))
+            Some(Self(U32::from_primitive(value)))
         }
     }
 }
 
 impl Nullable for AccountLenHint {
-    const NONE: Self = Self(U64::from_primitive(0));
+    const NONE: Self = Self(U32::from_primitive(0));
 }
 
-impl From<AccountLenHint> for u64 {
+impl From<AccountLenHint> for u32 {
     fn from(value: AccountLenHint) -> Self {
         value.0.into()
     }
@@ -310,7 +310,7 @@ mod tests {
                 bump: MaybeNull::from(BumpSeedHint::NONE),
                 account_len: MaybeNull::from(AccountLenHint::NONE),
             },
-            [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [3, 0, 0, 0, 0, 0, 0],
         );
         assert_wire(
             AssociatedTokenAccountInstruction::CreateWithArgs {
@@ -318,27 +318,27 @@ mod tests {
                 bump: BumpSeedHint::new(253).unwrap().into(),
                 account_len: MaybeNull::from(AccountLenHint::NONE),
             },
-            [3, 1, 253, 0, 0, 0, 0, 0, 0, 0, 0],
+            [3, 1, 253, 0, 0, 0, 0],
         );
         assert_wire(
             AssociatedTokenAccountInstruction::CreateWithArgs {
                 mode: CreateMode::Always,
                 bump: MaybeNull::from(BumpSeedHint::NONE),
-                account_len: AccountLenHint::new(u64::from_le_bytes([1, 2, 3, 4, 5, 6, 7, 8]))
+                account_len: AccountLenHint::new(u32::from_le_bytes([1, 2, 3, 4]))
                     .unwrap()
                     .into(),
             },
-            [3, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8],
+            [3, 0, 0, 1, 2, 3, 4],
         );
         assert_wire(
             AssociatedTokenAccountInstruction::CreateWithArgs {
                 mode: CreateMode::Idempotent,
                 bump: BumpSeedHint::new(253).unwrap().into(),
-                account_len: AccountLenHint::new(u64::from_le_bytes([1, 2, 3, 4, 5, 6, 7, 8]))
+                account_len: AccountLenHint::new(u32::from_le_bytes([1, 2, 3, 4]))
                     .unwrap()
                     .into(),
             },
-            [3, 1, 253, 1, 2, 3, 4, 5, 6, 7, 8],
+            [3, 1, 253, 1, 2, 3, 4],
         );
     }
 
@@ -353,16 +353,16 @@ mod tests {
     #[test]
     fn instruction_parser_rejects_non_canonical_payloads() {
         let cases: &[&[u8]] = &[
-            &[4],                                  // unknown discriminator
-            &[0, 0],                               // trailing byte after Create
-            &[1, 9, 9],                            // trailing bytes after CreateIdempotent
-            &[2, 0],                               // trailing byte after RecoverNested
-            &[3],                                  // missing CreateWithArgs mode
-            &[3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],    // invalid CreateWithArgs mode
-            &[3, 0],                               // missing bump hint
-            &[3, 0, 0],                            // missing account_len hint
-            &[3, 0, 0, 0, 0, 0, 0, 0, 0, 0],       // truncated account_len hint
-            &[3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // trailing byte after CreateWithArgs
+            &[4],                      // unknown discriminator
+            &[0, 0],                   // trailing byte after Create
+            &[1, 9, 9],                // trailing bytes after CreateIdempotent
+            &[2, 0],                   // trailing byte after RecoverNested
+            &[3],                      // missing CreateWithArgs mode
+            &[3, 2, 0, 0, 0, 0, 0],    // invalid CreateWithArgs mode
+            &[3, 0],                   // missing bump hint
+            &[3, 0, 0],                // missing account_len hint
+            &[3, 0, 0, 0, 0, 0],       // truncated account_len hint
+            &[3, 0, 0, 0, 0, 0, 0, 0], // trailing byte after CreateWithArgs
         ];
 
         for data in cases {

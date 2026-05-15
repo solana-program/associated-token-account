@@ -19,7 +19,7 @@ pub(crate) fn process_create_associated_token_account(
     accept_rent_sysvar: bool,
     // TODO: Use in later PRs
     _bump_hint: Option<u8>,
-    _account_len_hint: Option<u64>,
+    _account_len_hint: Option<u32>,
 ) -> ProgramResult {
     let [
         payer,

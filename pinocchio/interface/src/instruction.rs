@@ -230,7 +230,7 @@ pub struct BumpSeedHint(u8);
 
 impl BumpSeedHint {
     /// Reserving `0` keeps the optional bump hint as a single zero-copy byte in the wire format,
-    /// without an extra option tag. A PDA bump of `0` is valid but very unlikely. The tradeoff
+    /// without an extra option tag. A PDA bump of `0` is valid but very unlikely. The trade-off
     /// is that it forfeits the bump-hint optimization for that rare case.
     pub const fn new(value: u8) -> Option<Self> {
         if value == 0 { None } else { Some(Self(value)) }

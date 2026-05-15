@@ -199,14 +199,11 @@ pub enum AssociatedTokenAccountInstruction {
 impl AssociatedTokenAccountInstruction {
     #[inline(always)]
     pub fn try_from_bytes(instruction_data: &[u8]) -> Result<Self, ProgramError> {
-        match instruction_data {
-            [] | [0] => Ok(Self::Create),
-            [1] => Ok(Self::CreateIdempotent),
-            [2] => Ok(Self::RecoverNested),
-            [3, ..] => wincode::deserialize_exact(instruction_data)
-                .map_err(|_| ProgramError::InvalidInstructionData),
-            _ => Err(ProgramError::InvalidInstructionData),
+        if instruction_data.is_empty() {
+            return Ok(Self::Create);
         }
+        wincode::deserialize_exact(instruction_data)
+            .map_err(|_| ProgramError::InvalidInstructionData)
     }
 }
 

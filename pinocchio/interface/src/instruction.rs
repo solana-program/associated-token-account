@@ -2,10 +2,17 @@
 
 #[cfg(feature = "codama")]
 use codama_macros::{CodamaInstructions, CodamaType};
+use {
+    pinocchio::error::ProgramError,
+    solana_nullable::{MaybeNull, Nullable},
+    solana_zero_copy::unaligned::U64,
+    wincode::{SchemaRead, SchemaWrite},
+};
 
 /// Instructions supported by the `AssociatedTokenAccount` program
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, SchemaRead, SchemaWrite)]
+#[wincode(tag_encoding = "u8")]
 #[cfg_attr(feature = "codama", derive(CodamaInstructions))]
 pub enum AssociatedTokenAccountInstruction {
     /// Creates an associated token account for the given wallet address and
@@ -181,26 +188,32 @@ pub enum AssociatedTokenAccountInstruction {
         /// Selects whether behaves like `Create` or `CreateIdempotent`.
         mode: CreateMode,
         /// The ATA PDA bump seed.
-        bump: Option<u8>,
+        #[cfg_attr(feature = "codama", codama(type = number(u8)))]
+        bump: MaybeNull<BumpSeedHint>,
         /// The account data length for the new ATA.
-        account_len: Option<u64>,
+        #[cfg_attr(feature = "codama", codama(type = number(u64)))]
+        account_len: MaybeNull<AccountLenHint>,
     },
 }
 
-impl From<AssociatedTokenAccountInstruction> for u8 {
-    fn from(value: AssociatedTokenAccountInstruction) -> Self {
-        match value {
-            AssociatedTokenAccountInstruction::Create => 0,
-            AssociatedTokenAccountInstruction::CreateIdempotent => 1,
-            AssociatedTokenAccountInstruction::RecoverNested => 2,
-            AssociatedTokenAccountInstruction::CreateWithArgs { .. } => 3,
+impl AssociatedTokenAccountInstruction {
+    #[inline(always)]
+    pub fn try_from_bytes(instruction_data: &[u8]) -> Result<Self, ProgramError> {
+        match instruction_data {
+            [] | [0] => Ok(Self::Create),
+            [1] => Ok(Self::CreateIdempotent),
+            [2] => Ok(Self::RecoverNested),
+            [3, ..] => wincode::deserialize_exact(instruction_data)
+                .map_err(|_| ProgramError::InvalidInstructionData),
+            _ => Err(ProgramError::InvalidInstructionData),
         }
     }
 }
 
 /// Specify when to create the associated token account.
 #[repr(u8)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, SchemaRead, SchemaWrite)]
+#[wincode(tag_encoding = "u8")]
 #[cfg_attr(feature = "codama", derive(CodamaType))]
 pub enum CreateMode {
     /// Always try to create the associated token account.
@@ -209,38 +222,154 @@ pub enum CreateMode {
     Idempotent = 1,
 }
 
-impl TryFrom<u8> for CreateMode {
-    type Error = ();
+/// The ATA PDA bump seed hint. `0` is reserved as the null value.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, SchemaRead, SchemaWrite)]
+#[wincode(assert_zero_copy)]
+pub struct BumpSeedHint(u8);
 
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Self::Always),
-            1 => Ok(Self::Idempotent),
-            _ => Err(()),
+impl BumpSeedHint {
+    /// Reserving `0` keeps the optional bump hint as a single zero-copy byte in the wire format,
+    /// without an extra option tag. A PDA bump of `0` is valid but very unlikely. The tradeoff
+    /// is that it forfeits the bump-hint optimization for that rare case.
+    pub const fn new(value: u8) -> Option<Self> {
+        if value == 0 { None } else { Some(Self(value)) }
+    }
+}
+
+impl Nullable for BumpSeedHint {
+    const NONE: Self = Self(0);
+}
+
+impl From<BumpSeedHint> for u8 {
+    fn from(value: BumpSeedHint) -> Self {
+        value.0
+    }
+}
+
+/// The account data length hint for the new ATA. `0` is reserved as the null value.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, SchemaRead, SchemaWrite)]
+#[wincode(assert_zero_copy)]
+pub struct AccountLenHint(U64);
+
+impl AccountLenHint {
+    pub const fn new(value: u64) -> Option<Self> {
+        if value == 0 {
+            None
+        } else {
+            Some(Self(U64::from_primitive(value)))
         }
     }
 }
 
-impl From<CreateMode> for u8 {
-    fn from(value: CreateMode) -> Self {
-        value as u8
+impl Nullable for AccountLenHint {
+    const NONE: Self = Self(U64::from_primitive(0));
+}
+
+impl From<AccountLenHint> for u64 {
+    fn from(value: AccountLenHint) -> Self {
+        value.0.into()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::AssociatedTokenAccountInstruction;
+    use {
+        super::{AccountLenHint, AssociatedTokenAccountInstruction, BumpSeedHint, CreateMode},
+        pinocchio::error::ProgramError,
+        solana_nullable::{MaybeNull, Nullable},
+        wincode::Serialize,
+    };
+
+    fn assert_wire<const N: usize>(
+        instruction: AssociatedTokenAccountInstruction,
+        expected: [u8; N],
+    ) {
+        let mut bytes = [0; N];
+        AssociatedTokenAccountInstruction::serialize_into(bytes.as_mut_slice(), &instruction)
+            .unwrap();
+        assert_eq!(bytes, expected);
+        assert_eq!(
+            AssociatedTokenAccountInstruction::try_from_bytes(&expected).unwrap(),
+            instruction
+        );
+        let decoded: AssociatedTokenAccountInstruction =
+            wincode::deserialize_exact(&expected).unwrap();
+        assert_eq!(decoded, instruction);
+    }
 
     #[test]
-    fn discriminants_match_legacy_layout() {
-        assert_eq!(u8::from(AssociatedTokenAccountInstruction::Create), 0);
-        assert_eq!(
-            u8::from(AssociatedTokenAccountInstruction::CreateIdempotent),
-            1
+    fn instruction_wire_format_is_stable() {
+        assert_wire(AssociatedTokenAccountInstruction::Create, [0]);
+        assert_wire(AssociatedTokenAccountInstruction::CreateIdempotent, [1]);
+        assert_wire(AssociatedTokenAccountInstruction::RecoverNested, [2]);
+        assert_wire(
+            AssociatedTokenAccountInstruction::CreateWithArgs {
+                mode: CreateMode::Always,
+                bump: MaybeNull::from(BumpSeedHint::NONE),
+                account_len: MaybeNull::from(AccountLenHint::NONE),
+            },
+            [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         );
-        assert_eq!(
-            u8::from(AssociatedTokenAccountInstruction::RecoverNested),
-            2
+        assert_wire(
+            AssociatedTokenAccountInstruction::CreateWithArgs {
+                mode: CreateMode::Idempotent,
+                bump: BumpSeedHint::new(253).unwrap().into(),
+                account_len: MaybeNull::from(AccountLenHint::NONE),
+            },
+            [3, 1, 253, 0, 0, 0, 0, 0, 0, 0, 0],
         );
+        assert_wire(
+            AssociatedTokenAccountInstruction::CreateWithArgs {
+                mode: CreateMode::Always,
+                bump: MaybeNull::from(BumpSeedHint::NONE),
+                account_len: AccountLenHint::new(u64::from_le_bytes([1, 2, 3, 4, 5, 6, 7, 8]))
+                    .unwrap()
+                    .into(),
+            },
+            [3, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8],
+        );
+        assert_wire(
+            AssociatedTokenAccountInstruction::CreateWithArgs {
+                mode: CreateMode::Idempotent,
+                bump: BumpSeedHint::new(253).unwrap().into(),
+                account_len: AccountLenHint::new(u64::from_le_bytes([1, 2, 3, 4, 5, 6, 7, 8]))
+                    .unwrap()
+                    .into(),
+            },
+            [3, 1, 253, 1, 2, 3, 4, 5, 6, 7, 8],
+        );
+    }
+
+    #[test]
+    fn empty_instruction_data_remains_create() {
+        assert_eq!(
+            AssociatedTokenAccountInstruction::try_from_bytes(&[]).unwrap(),
+            AssociatedTokenAccountInstruction::Create
+        );
+    }
+
+    #[test]
+    fn instruction_parser_rejects_non_canonical_payloads() {
+        let cases: &[&[u8]] = &[
+            &[4],                                  // unknown discriminator
+            &[0, 0],                               // trailing byte after Create
+            &[1, 9, 9],                            // trailing bytes after CreateIdempotent
+            &[2, 0],                               // trailing byte after RecoverNested
+            &[3],                                  // missing CreateWithArgs mode
+            &[3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0],    // invalid CreateWithArgs mode
+            &[3, 0],                               // missing bump hint
+            &[3, 0, 0],                            // missing account_len hint
+            &[3, 0, 0, 0, 0, 0, 0, 0, 0, 0],       // truncated account_len hint
+            &[3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // trailing byte after CreateWithArgs
+        ];
+
+        for data in cases {
+            assert_eq!(
+                AssociatedTokenAccountInstruction::try_from_bytes(data),
+                Err(ProgramError::InvalidInstructionData)
+            );
+        }
     }
 }

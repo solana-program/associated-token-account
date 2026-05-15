@@ -2062,6 +2062,9 @@ dependencies = [
  "codama-macros",
  "pinocchio 0.10.2 (git+https://github.com/anza-xyz/pinocchio?rev=0ca7555836700b31dae01ef6da37ef66df1831b8)",
  "solana-address 2.6.0",
+ "solana-nullable",
+ "solana-zero-copy",
+ "wincode 0.5.4",
 ]
 
 [[package]]
@@ -2705,7 +2708,7 @@ dependencies = [
  "solana-program-error",
  "solana-sanitize",
  "solana-sha256-hasher",
- "wincode 0.5.1",
+ "wincode 0.5.4",
 ]
 
 [[package]]
@@ -3169,9 +3172,12 @@ dependencies = [
 
 [[package]]
 name = "solana-nullable"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da028344c595c7416769ff648d206de7962571291a4cea24c38a60b6f40d53bb"
+checksum = "a0f95d3028ef0f682bb174b77379c19d5dae2904a649f4a103fe29be7a139980"
+dependencies = [
+ "wincode 0.5.4",
+]
 
 [[package]]
 name = "solana-packet"
@@ -3780,9 +3786,12 @@ dependencies = [
 
 [[package]]
 name = "solana-zero-copy"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94f52dd8f733a13f6a18e55de83cf97c4c3f5fdf27ea3830bcff0b35313efcc2"
+checksum = "c5a91404c7de468dd80658cdb5d894ec803d1092ea6e2bfdf84eee6f07559c0d"
+dependencies = [
+ "wincode 0.5.4",
+]
 
 [[package]]
 name = "solana-zk-sdk"
@@ -3898,6 +3907,7 @@ dependencies = [
  "spl-associated-token-account-interface 2.0.0",
  "spl-token-2022-interface",
  "spl-token-interface",
+ "wincode 0.5.4",
 ]
 
 [[package]]
@@ -4459,9 +4469,9 @@ dependencies = [
 
 [[package]]
 name = "wincode"
-version = "0.5.1"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a61f8f0a55eb6cae5d7b7ad2eca536a944deb9722a948525181069064ecd1abc"
+checksum = "37095eb18dd6254c66217edc61a29d83d51f8818de8a2ffe88e4584ad73fb5f9"
 dependencies = [
  "pastey",
  "proc-macro2",
@@ -4472,9 +4482,9 @@ dependencies = [
 
 [[package]]
 name = "wincode-derive"
-version = "0.4.3"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fca057fc9a13dd19cdb64ef558635d43c42667c0afa1ae7915ea1fa66993fd1a"
+checksum = "e262d55d1261f31e2cfe49cc6385a421d14d99faa0526bbe3cc1bda0d3005c62"
 dependencies = [
  "darling",
  "proc-macro2",

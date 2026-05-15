@@ -391,34 +391,18 @@
             "kind": "instructionArgumentNode",
             "name": "bump",
             "type": {
-              "kind": "optionTypeNode",
-              "item": {
-                "kind": "numberTypeNode",
-                "format": "u8",
-                "endian": "le"
-              },
-              "prefix": {
-                "kind": "numberTypeNode",
-                "format": "u8",
-                "endian": "le"
-              }
+              "kind": "numberTypeNode",
+              "format": "u8",
+              "endian": "le"
             }
           },
           {
             "kind": "instructionArgumentNode",
             "name": "accountLen",
             "type": {
-              "kind": "optionTypeNode",
-              "item": {
-                "kind": "numberTypeNode",
-                "format": "u64",
-                "endian": "le"
-              },
-              "prefix": {
-                "kind": "numberTypeNode",
-                "format": "u8",
-                "endian": "le"
-              }
+              "kind": "numberTypeNode",
+              "format": "u64",
+              "endian": "le"
             }
           }
         ],

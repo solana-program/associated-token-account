@@ -24,6 +24,7 @@ solana-system-interface = { version = "3.2", features = ["bincode"] }
 spl-associated-token-account-interface = { version = "2.0", path = "../interface" }
 spl-token-interface = "2.0"
 spl-token-2022-interface = "2.1"
+wincode = "0.5.4"
 
 mollusk-svm = { version = "0.12.0-agave-4.0", git = "https://github.com/anza-xyz/mollusk", branch = "agave-4.0" }
 mollusk-svm-programs-token = { version = "0.12.0-agave-4.0", git = "https://github.com/anza-xyz/mollusk", branch = "agave-4.0" }

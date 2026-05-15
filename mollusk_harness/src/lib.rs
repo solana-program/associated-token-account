@@ -1,6 +1,8 @@
 use {
     mollusk_svm::{Mollusk, MolluskContext, result::Check},
-    pinocchio_associated_token_account_interface::instruction::CreateMode,
+    pinocchio_associated_token_account_interface::instruction::{
+        AccountLenHint, AssociatedTokenAccountInstruction, BumpSeedHint, CreateMode,
+    },
     solana_account::Account,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
@@ -635,30 +637,30 @@ impl AtaTestHarness {
 
 /// Encodes the instruction data payload for ATA creation-related instructions.
 pub fn encode_create_ata_instruction_data(instruction_type: &CreateAtaInstructionType) -> Vec<u8> {
-    match instruction_type {
-        CreateAtaInstructionType::Create => vec![0],
-        CreateAtaInstructionType::CreateIdempotent => vec![1],
+    let instruction = match instruction_type {
+        CreateAtaInstructionType::Create => AssociatedTokenAccountInstruction::Create,
+        CreateAtaInstructionType::CreateIdempotent => {
+            AssociatedTokenAccountInstruction::CreateIdempotent
+        }
         CreateAtaInstructionType::CreateWithArgs {
             mode,
             bump,
             account_len,
             ..
-        } => {
-            let mut data = vec![3, u8::from(*mode)];
-            match bump {
-                Some(bump) => data.extend_from_slice(&[1, *bump]),
-                None => data.push(0),
-            }
-            match account_len {
-                Some(account_len) => {
-                    data.push(1);
-                    data.extend_from_slice(&account_len.to_le_bytes());
-                }
-                None => data.push(0),
-            }
-            data
-        }
-    }
+        } => AssociatedTokenAccountInstruction::CreateWithArgs {
+            mode: *mode,
+            bump: bump
+                .and_then(BumpSeedHint::new)
+                .map(Into::into)
+                .unwrap_or_default(),
+            account_len: account_len
+                .and_then(AccountLenHint::new)
+                .map(Into::into)
+                .unwrap_or_default(),
+        },
+    };
+
+    wincode::serialize(&instruction).unwrap()
 }
 
 /// Build a create associated token account instruction with a given discriminator

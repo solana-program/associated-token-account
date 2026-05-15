@@ -1,6 +1,5 @@
 use {
     mollusk_svm_result::Check,
-    pinocchio_associated_token_account_interface::instruction::AssociatedTokenAccountInstruction,
     solana_address::Address,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
@@ -54,7 +53,7 @@ fn recover_nested_ix(
             AccountMeta::new_readonly(owner_token_program_id, false),
             AccountMeta::new_readonly(nested_token_program_id, false),
         ],
-        data: vec![u8::from(AssociatedTokenAccountInstruction::RecoverNested)],
+        data: vec![2],
     }
 }
 

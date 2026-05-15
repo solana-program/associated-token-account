@@ -17,6 +17,9 @@ codama = ["dep:codama", "dep:codama-macros"]
 codama = { version = "0.9.2", optional = true }
 codama-macros = { version = "0.9.1", optional = true }
 solana-address = { version = "2.6.0", features = ["curve25519", "decode"] }
+solana-nullable = { version = "1.1.1", features = ["wincode"] }
+solana-zero-copy = { version = "1.0.1", features = ["wincode"] }
+wincode = { version = "0.5.4", default-features = false, features = ["derive"] }
 
 # TODO: Waiting on pinocchio crate publish
 pinocchio = { version = "0.10.1", git = "https://github.com/anza-xyz/pinocchio", rev = "0ca7555836700b31dae01ef6da37ef66df1831b8", default-features = false, features = ["cpi"] }

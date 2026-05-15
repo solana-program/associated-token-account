@@ -19,6 +19,9 @@ use {
         },
         program::id as ata_program_id,
     },
+    spl_associated_token_account_mollusk_harness::{
+        CreateAtaInstructionType, encode_create_ata_instruction_data,
+    },
     spl_token_2022_interface::extension::ExtensionType,
     spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
     std::path::PathBuf,
@@ -39,8 +42,12 @@ fn create_associated_token_account_with_args(
         &ata_program_id(),
         token_program_id,
     );
-    let mut data = vec![3, u8::from(mode), 1, bump, 1];
-    data.extend_from_slice(&account_len.to_le_bytes());
+    let data = encode_create_ata_instruction_data(&CreateAtaInstructionType::CreateWithArgs {
+        mode,
+        bump: Some(bump),
+        account_len: Some(account_len),
+        rent_sysvar: true,
+    });
 
     Instruction {
         program_id: ata_program_id(),

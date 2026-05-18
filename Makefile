@@ -18,9 +18,6 @@ rust-toolchain-nightly:
 solana-cli-version:
 	@echo ${SOLANA_CLI_VERSION}
 
-platform-tools-version:
-	@echo ${PLATFORM_TOOLS_VERSION}
-
 cargo-nightly:
 	cargo $(nightly) $(ARGS)
 

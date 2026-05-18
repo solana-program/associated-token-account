@@ -1,3 +1,30 @@
+#### 2026-05-18 15:30:22.312729 UTC
+
+Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
+
+| Name | CUs | Delta |
+|------|------|-------|
+| create (spl-token) | 3210 | +3 |
+| create_with_args (spl-token) | 3150 | +3 |
+| create (token-2022) | 5248 | +3 |
+| create_with_args (token-2022) | 5187 | +3 |
+| create_idempotent (new, spl-token) | 4299 | +1 |
+| create_with_args_idempotent (new, spl-token) | 4240 | +3 |
+| create_idempotent (new, token-2022) | 5613 | +1 |
+| create_with_args_idempotent (new, token-2022) | 5553 | +3 |
+| create_idempotent (existing, spl-token) | 551 | +3 |
+| create_with_args_idempotent (existing, spl-token) | 572 | +5 |
+| create_idempotent (existing, token-2022) | 1637 | +3 |
+| create_with_args_idempotent (existing, token-2022) | 1658 | +5 |
+| create (prefunded, spl-token) | 3210 | +3 |
+| create_with_args (prefunded, spl-token) | 3150 | +3 |
+| create (prefunded, token-2022) | 5248 | +3 |
+| create_with_args (prefunded, token-2022) | 5187 | +3 |
+| recover_nested (owner=spl-token, nested=spl-token) | 5192 | -- |
+| recover_nested (owner=token-2022, nested=token-2022) | 7056 | -- |
+| recover_nested (owner=spl-token, nested=token-2022) | 9612 | -- |
+| recover_nested (owner=token-2022, nested=spl-token) | 5562 | -- |
+
 #### 2026-05-16 09:50:42.971998 UTC
 
 Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)

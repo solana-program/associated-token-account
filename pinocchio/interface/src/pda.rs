@@ -1,6 +1,6 @@
 //! Address derivation helpers for Associated Token Account program-derived addresses.
 
-use solana_address::Address;
+use pinocchio::{Address, error::ProgramError};
 
 #[cfg_attr(feature = "codama", derive(codama::CodamaPda))]
 #[cfg_attr(
@@ -53,5 +53,39 @@ impl AssociatedTokenPda {
             token_mint_address,
         )
         .0
+    }
+
+    /// Derives the associated token account address for a caller-supplied bump.
+    ///
+    /// This rejects non-canonical bumps by verifying that no higher bump produces an
+    /// off-curve PDA. Note: it does not verify that the supplied bump itself is off-curve.
+    /// Callers must either rely on a subsequent signed PDA invocation to reject an
+    /// on-curve address or manually check `is_on_curve()` before accepting the derived
+    /// address.
+    pub fn derive_address_with_bump_hint(
+        program_id: &Address,
+        wallet_address: &Address,
+        token_program_id: &Address,
+        token_mint_address: &Address,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
+        let seeds = [
+            wallet_address.as_ref(),
+            token_program_id.as_ref(),
+            token_mint_address.as_ref(),
+        ];
+
+        if bump < u8::MAX {
+            #[allow(clippy::arithmetic_side_effects)]
+            for higher_bump in (bump + 1)..=u8::MAX {
+                let higher_bump_addr =
+                    Address::derive_address(&seeds, Some(higher_bump), program_id);
+                if !higher_bump_addr.is_on_curve() {
+                    return Err(ProgramError::InvalidSeeds);
+                }
+            }
+        }
+
+        Ok(Address::derive_address(&seeds, Some(bump), program_id))
     }
 }

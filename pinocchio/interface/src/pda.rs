@@ -1,6 +1,6 @@
 //! Address derivation helpers for Associated Token Account program-derived addresses.
 
-use {pinocchio::error::ProgramError, solana_address::Address};
+use pinocchio::{Address, error::ProgramError};
 
 #[cfg_attr(feature = "codama", derive(codama::CodamaPda))]
 #[cfg_attr(
@@ -75,8 +75,9 @@ impl AssociatedTokenPda {
             token_mint_address.as_ref(),
         ];
 
-        if let Some(first_higher_bump) = bump.checked_add(1) {
-            for higher_bump in first_higher_bump..=u8::MAX {
+        if bump < u8::MAX {
+            #[allow(clippy::arithmetic_side_effects)]
+            for higher_bump in (bump + 1)..=u8::MAX {
                 let higher_bump_addr =
                     Address::derive_address(&seeds, Some(higher_bump), program_id);
                 if !higher_bump_addr.is_on_curve() {

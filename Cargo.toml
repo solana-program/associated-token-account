@@ -2,6 +2,19 @@
 resolver = "2"
 members = ["interface", "program", "mollusk_harness", "pinocchio/interface", "pinocchio/program"]
 
+[workspace.dependencies]
+# TODO: Waiting on PR #349 to merge and then be released: https://github.com/anza-xyz/pinocchio/pull/349.
+#       We need StateWithExtensions API from that PR.
+pinocchio = { version = "0.11.2", git = "https://github.com/anza-xyz/pinocchio", rev = "4992a8be006c899d125bd2cd5f9eaab6ef6a2884" }
+pinocchio-token-2022 = { version = "0.3.1", git = "https://github.com/anza-xyz/pinocchio", rev = "4992a8be006c899d125bd2cd5f9eaab6ef6a2884" }
+
+# TODO: Requires bumping to mollusk beta due to dependency requirements on token-2022-interface v3.1.
+#       It needs solana-instruction v3.4 while mollusk v0.13 requires solana-instruction <3.4.
+mollusk-svm = { git = "https://github.com/anza-xyz/mollusk", branch = "4.1-beta" }
+mollusk-svm-bencher = { git = "https://github.com/anza-xyz/mollusk", branch = "4.1-beta" }
+mollusk-svm-programs-token = { git = "https://github.com/anza-xyz/mollusk", branch = "4.1-beta" }
+mollusk-svm-result = { git = "https://github.com/anza-xyz/mollusk", branch = "4.1-beta" }
+
 [workspace.metadata.spellcheck]
 config = "scripts/spellcheck.toml"
 

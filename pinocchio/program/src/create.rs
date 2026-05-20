@@ -1,5 +1,5 @@
 use {
-    crate::{batch::batch_init_and_lock_owner, size::get_account_data_size},
+    crate::{batch::batch_init_and_lock_owner, size::get_token_2022_account_data_size},
     pinocchio::{
         AccountView, Address, ProgramResult, cpi::Signer, error::ProgramError, instruction::seeds,
     },
@@ -18,7 +18,7 @@ pub(crate) fn process_create_associated_token_account(
     create_mode: CreateMode,
     accept_rent_sysvar: bool,
     bump_hint: Option<u8>,
-    _account_len_hint: Option<u32>,
+    account_len_hint: Option<u32>,
 ) -> ProgramResult {
     let [
         payer,
@@ -100,7 +100,20 @@ pub(crate) fn process_create_associated_token_account(
         return Err(ProgramError::IllegalOwner);
     }
 
-    let account_len = get_account_data_size(mint, token_program)?;
+    let is_spl_token = *token_program.address() == pinocchio_token::ID;
+    let account_len = if is_spl_token {
+        TokenAccount::BASE_LEN as u64
+    } else if *token_program.address() == pinocchio_token_2022::ID {
+        // Undersized accounts fail during initialization and excessive sizes fail
+        // through rent/system account-size limits.
+        if let Some(account_len_hint) = account_len_hint {
+            account_len_hint as u64
+        } else {
+            get_token_2022_account_data_size(mint, token_program)?
+        }
+    } else {
+        return Err(ProgramError::IncorrectProgramId);
+    };
 
     // Create the PDA (handles pre-funded accounts)
     let bump_ref = &[bump_seed];
@@ -121,7 +134,7 @@ pub(crate) fn process_create_associated_token_account(
     .invoke_signed(&[signer])?;
 
     // If token-2022, lock the owner field
-    if *token_program.address() != pinocchio_token::ID {
+    if !is_spl_token {
         batch_init_and_lock_owner(
             token_program.address(),
             associated_token_account,

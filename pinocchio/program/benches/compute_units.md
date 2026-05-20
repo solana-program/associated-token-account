@@ -1,3 +1,31 @@
+#### 2026-05-19 22:40:12.433847 UTC
+
+Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
+
+| Name | CUs | Delta |
+|------|------|-------|
+| create (spl-token) | 3201 | -7 |
+| create_with_args (spl-token) | 3010 | -3 |
+| create (token-2022) | 5250 | +4 |
+| create_with_args (token-2022) | 5053 | +2 |
+| create_idempotent (new, spl-token) | 4289 | -11 |
+| create_with_args_idempotent (new, spl-token) | 4103 | -3 |
+| create_idempotent (new, token-2022) | 5614 | +1 |
+| create_with_args_idempotent (new, token-2022) | 5422 | +2 |
+| create_idempotent (existing, spl-token) | 548 | -- |
+| create_with_args_idempotent (existing, spl-token) | 606 | +1 |
+| create_idempotent (existing, token-2022) | 1634 | -- |
+| create_with_args_idempotent (existing, token-2022) | 1695 | +1 |
+| create (prefunded, spl-token) | 3201 | -7 |
+| create_with_args (prefunded, spl-token) | 3010 | -3 |
+| create (prefunded, token-2022) | 5250 | +4 |
+| create_with_args (prefunded, token-2022) | 5053 | +2 |
+| create_with_args (token-2022 extended mint) | 5869 | -2,545 |
+| recover_nested (owner=spl-token, nested=spl-token) | 5191 | -- |
+| recover_nested (owner=token-2022, nested=token-2022) | 7055 | -- |
+| recover_nested (owner=spl-token, nested=token-2022) | 9611 | -- |
+| recover_nested (owner=token-2022, nested=spl-token) | 5561 | -- |
+
 #### 2026-05-19 02:45:39.155444 UTC
 
 Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
@@ -20,6 +48,7 @@ Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agav
 | create_with_args (prefunded, spl-token) | 3013 | -134 |
 | create (prefunded, token-2022) | 5246 | +1 |
 | create_with_args (prefunded, token-2022) | 5051 | -133 |
+| create_with_args (token-2022 extended mint) | 8414 | - new - |
 | recover_nested (owner=spl-token, nested=spl-token) | 5191 | -1 |
 | recover_nested (owner=token-2022, nested=token-2022) | 7055 | -1 |
 | recover_nested (owner=spl-token, nested=token-2022) | 9611 | -1 |

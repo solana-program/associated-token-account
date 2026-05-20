@@ -23,33 +23,23 @@ const TLV_HEADER_LEN: usize = 4;
 const TOKEN_2022_BASE_ACCOUNT_DATA_SIZE: u64 =
     TokenAccount::BASE_LEN as u64 + ACCOUNT_TYPE_SIZE as u64 + TLV_HEADER_LEN as u64;
 
-/// Get the required account data size for an ATA with the `ImmutableOwner` extension.
-/// Short-circuits for the two common cases (SPL Token, Token-2022 with no mint
-/// extensions) and falls back to a `GetAccountDataSize` CPI for everything else.
+/// Get the required Token-2022 account data size when no account length hint was supplied.
+/// Short-circuits when size is known and falls back to `GetAccountDataSize` CPI for
+/// everything else.
 #[inline(always)]
-pub(crate) fn get_account_data_size(
+pub(crate) fn get_token_2022_account_data_size(
     mint: &AccountView,
     token_program: &AccountView,
 ) -> Result<u64, ProgramError> {
-    // SPL Token accounts are always exactly 165 bytes.
-    if *token_program.address() == pinocchio_token::ID {
-        return Ok(TokenAccount::BASE_LEN as u64);
+    // Associated token accounts for Token-2022 always enable `ImmutableOwner`.
+    // If the mint is exactly Mint::BASE_LEN, it has no mint extensions. In that case,
+    // the new account only needs the base token account layout plus the
+    // zero-length `ImmutableOwner` extension.
+    if mint.data_len() == Mint::BASE_LEN {
+        return Ok(TOKEN_2022_BASE_ACCOUNT_DATA_SIZE);
     }
 
-    if *token_program.address() == pinocchio_token_2022::ID {
-        // Associated token accounts for Token-2022 always enable `ImmutableOwner`.
-        // If the mint is exactly Mint::BASE_LEN, it has no mint extensions. In that case,
-        // the new account only needs the base token account layout plus the
-        // zero-length `ImmutableOwner` extension.
-        if mint.data_len() == Mint::BASE_LEN {
-            return Ok(TOKEN_2022_BASE_ACCOUNT_DATA_SIZE);
-        }
-
-        return get_account_data_size_cpi(mint, token_program);
-    }
-
-    // Only SPL Token and Token-2022 are allowed
-    Err(ProgramError::IncorrectProgramId)
+    get_account_data_size_cpi(mint, token_program)
 }
 
 fn get_account_data_size_cpi(

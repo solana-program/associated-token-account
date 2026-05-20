@@ -22,7 +22,13 @@ use {
     spl_associated_token_account_mollusk_harness::{
         CreateAtaInstructionType, encode_create_ata_instruction_data,
     },
-    spl_token_2022_interface::extension::ExtensionType,
+    spl_token_2022_interface::{
+        extension::{
+            BaseStateWithExtensionsMut, ExtensionType, StateWithExtensionsMut,
+            transfer_fee::TransferFeeConfig,
+        },
+        state::Mint as Token2022Mint,
+    },
     spl_token_interface::state::{Account as TokenAccount, AccountState, Mint},
     std::path::PathBuf,
 };
@@ -223,7 +229,6 @@ fn main() {
         spl_token_2022_interface::state::Account,
     >(&[ExtensionType::ImmutableOwner])
     .unwrap() as u32;
-
     // Bench 1: create (spl-token)
     let wallet1 = Address::new_unique();
     let ata1 = get_associated_token_address_with_program_id(
@@ -512,7 +517,66 @@ fn main() {
     let mut accs5b_create_with_args = accs5b.clone();
     accs5b_create_with_args.push(rent_sysvar.clone());
 
-    // Benches 11-14: recover_nested
+    let t22_extended_mint = Address::new_unique();
+    let t22_extended_mint_space = ExtensionType::try_calculate_account_len::<Token2022Mint>(&[
+        ExtensionType::TransferFeeConfig,
+    ])
+    .unwrap();
+    let mut t22_extended_mint_data = vec![0; t22_extended_mint_space];
+    let mut state =
+        StateWithExtensionsMut::<Token2022Mint>::unpack_uninitialized(&mut t22_extended_mint_data)
+            .unwrap();
+    state.init_extension::<TransferFeeConfig>(true).unwrap();
+    state.base = Token2022Mint {
+        mint_authority: COption::Some(mint_authority),
+        supply: 1_000_000,
+        decimals: 6,
+        is_initialized: true,
+        freeze_authority: COption::None,
+    };
+    state.pack_base();
+    state.init_account_type().unwrap();
+    let t22_extended_mint_account = Account {
+        lamports: solana_rent::Rent::default().minimum_balance(t22_extended_mint_space),
+        data: t22_extended_mint_data,
+        owner: spl_token_2022_interface::id(),
+        executable: false,
+        rent_epoch: 0,
+    };
+    let wallet2_extended = Address::new_unique();
+    let ata2_extended = get_associated_token_address_with_program_id(
+        &wallet2_extended,
+        &t22_extended_mint,
+        &spl_token_2022_interface::id(),
+    );
+    let accs2_extended = vec![
+        (payer, payer_account.clone()),
+        (ata2_extended, Account::default()),
+        (
+            wallet2_extended,
+            Account::new(1_000_000, 0, &system_program::id()),
+        ),
+        (t22_extended_mint, t22_extended_mint_account.clone()),
+        system_account.clone(),
+        t22_account.clone(),
+    ];
+    let ix2_extended_create_with_args = create_associated_token_account_with_args(
+        &payer,
+        &wallet2_extended,
+        &t22_extended_mint,
+        &spl_token_2022_interface::id(),
+        &rent_sysvar.0,
+        CreateMode::Always,
+        ExtensionType::try_calculate_account_len::<spl_token_2022_interface::state::Account>(&[
+            ExtensionType::ImmutableOwner,
+            ExtensionType::TransferFeeAmount,
+        ])
+        .unwrap() as u32,
+    );
+    let mut accs2_extended_create_with_args = accs2_extended.clone();
+    accs2_extended_create_with_args.push(rent_sysvar.clone());
+
+    // recover_nested benches
     let (ix6, accs6) = recover_nested_case(
         Address::new_from_array([1; 32]),
         Address::new_from_array([2; 32]),
@@ -598,6 +662,11 @@ fn main() {
             "create_with_args (prefunded, token-2022)",
             &ix5b_create_with_args,
             &accs5b_create_with_args,
+        ))
+        .bench((
+            "create_with_args (token-2022 extended mint)",
+            &ix2_extended_create_with_args,
+            &accs2_extended_create_with_args,
         ))
         .bench((
             "recover_nested (owner=spl-token, nested=spl-token)",

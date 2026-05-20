@@ -27,7 +27,7 @@ const TOKEN_2022_BASE_ACCOUNT_DATA_SIZE: u64 =
 /// Short-circuits when size is known and falls back to `GetAccountDataSize` CPI for
 /// everything else.
 #[inline(always)]
-pub(crate) fn get_t22_account_data_size(
+pub(crate) fn get_token_2022_account_data_size(
     mint: &AccountView,
     token_program: &AccountView,
 ) -> Result<u64, ProgramError> {

@@ -1,5 +1,5 @@
 use {
-    crate::{batch::batch_init_and_lock_owner, size::get_t22_account_data_size},
+    crate::{batch::batch_init_and_lock_owner, size::get_token_2022_account_data_size},
     pinocchio::{
         AccountView, Address, ProgramResult, cpi::Signer, error::ProgramError, instruction::seeds,
     },
@@ -109,7 +109,7 @@ pub(crate) fn process_create_associated_token_account(
         if let Some(account_len_hint) = account_len_hint {
             account_len_hint as u64
         } else {
-            get_t22_account_data_size(mint, token_program)?
+            get_token_2022_account_data_size(mint, token_program)?
         }
     } else {
         return Err(ProgramError::IncorrectProgramId);

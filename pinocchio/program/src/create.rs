@@ -6,7 +6,7 @@ use {
     pinocchio_associated_token_account_interface::{
         error::AssociatedTokenAccountError, instruction::CreateMode, pda::AssociatedTokenPda,
     },
-    pinocchio_system_prefund::instructions::CreateAccountAllowPrefund,
+    pinocchio_system::instructions::CreateAccountAllowPrefund,
     pinocchio_token::instructions::InitializeAccount3,
     pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
 };

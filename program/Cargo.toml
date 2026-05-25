@@ -28,7 +28,7 @@ solana-system-interface = { version = "3.2", features = ["bincode"] }
 solana-sysvar = "3.1"
 spl-associated-token-account-interface = { version = "2.0.0", path = "../interface", features = ["borsh"] }
 spl-token-interface = "2.0.0"
-spl-token-2022-interface = "3.0.0"
+spl-token-2022-interface = "3.0.1"
 thiserror = "2.0"
 
 [dev-dependencies]

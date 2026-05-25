@@ -43,7 +43,7 @@ solana-rent = "4.1.0"
 solana-system-interface = "3.2.0"
 spl-associated-token-account-interface = { path = "../../interface" }
 spl-associated-token-account-mollusk-harness = { path = "../../mollusk_harness" }
-spl-token-2022-interface = "3.0.0"
+spl-token-2022-interface = "3.0.1"
 spl-token-interface = "2.0.0"
 test-case = "3.3.1"
 

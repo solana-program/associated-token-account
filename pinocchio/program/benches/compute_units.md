@@ -1,31 +1,31 @@
-#### 2026-05-21 14:37:59.007330 UTC
+#### 2026-05-28 05:20:27.943776 UTC
 
 Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
 
 | Name | CUs | Delta |
 |------|------|-------|
-| create (spl-token) | 3083 | -- |
+| create (spl-token) | 3081 | -2 |
 | create_with_args (spl-token) | 2891 | -- |
-| create (token-2022) | 5132 | -- |
+| create (token-2022) | 5160 | +28 |
 | create_with_args (token-2022) | 4934 | -- |
-| create_idempotent (new, spl-token) | 4171 | -- |
+| create_idempotent (new, spl-token) | 4172 | +1 |
 | create_with_args_idempotent (new, spl-token) | 3984 | -- |
-| create_idempotent (new, token-2022) | 5496 | -- |
+| create_idempotent (new, token-2022) | 5527 | +31 |
 | create_with_args_idempotent (new, token-2022) | 5303 | -- |
-| create_idempotent (existing, spl-token) | 548 | -- |
-| create_with_args_idempotent (existing, spl-token) | 606 | -- |
-| create_idempotent (existing, token-2022) | 1634 | -- |
-| create_with_args_idempotent (existing, token-2022) | 1695 | -- |
-| create (prefunded, spl-token) | 3083 | -- |
+| create_idempotent (existing, spl-token) | 529 | -19 |
+| create_with_args_idempotent (existing, spl-token) | 590 | -16 |
+| create_idempotent (existing, token-2022) | 1615 | -19 |
+| create_with_args_idempotent (existing, token-2022) | 1679 | -16 |
+| create (prefunded, spl-token) | 3081 | -2 |
 | create_with_args (prefunded, spl-token) | 2891 | -- |
-| create (prefunded, token-2022) | 5132 | -- |
+| create (prefunded, token-2022) | 5160 | +28 |
 | create_with_args (prefunded, token-2022) | 4934 | -- |
-| create (token-2022 known mint) | 6063 | -2,549 |
+| create (token-2022 known mint) | 6164 | -2,448 |
 | create_with_args (token-2022 extended mint) | 5750 | -- |
-| recover_nested (owner=spl-token, nested=spl-token) | 5191 | -- |
-| recover_nested (owner=token-2022, nested=token-2022) | 7055 | -- |
-| recover_nested (owner=spl-token, nested=token-2022) | 9611 | -- |
-| recover_nested (owner=token-2022, nested=spl-token) | 5561 | -- |
+| recover_nested (owner=spl-token, nested=spl-token) | 5151 | -40 |
+| recover_nested (owner=token-2022, nested=token-2022) | 7015 | -40 |
+| recover_nested (owner=spl-token, nested=token-2022) | 9571 | -40 |
+| recover_nested (owner=token-2022, nested=spl-token) | 5521 | -40 |
 
 #### 2026-05-21 08:39:23.395979 UTC
 

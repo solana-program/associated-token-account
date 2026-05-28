@@ -8,7 +8,7 @@ use {
     },
     pinocchio_system::instructions::CreateAccountAllowPrefund,
     pinocchio_token::instructions::InitializeAccount3,
-    pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
+    pinocchio_token_2022::state::{Account as TokenAccount, AccountState, StateWithExtensions},
 };
 
 #[inline(always)]
@@ -71,7 +71,7 @@ pub(crate) fn process_create_associated_token_account(
         let ata_data = associated_token_account.try_borrow()?;
         // Preexisting ATA must be parsable as a token account
         if let Ok(token_account_ext) = StateWithExtensions::<TokenAccount>::from_bytes(&ata_data) {
-            let token_account = token_account_ext.base();
+            let token_account = &token_account_ext.base;
             // Preexisting ATA cannot be in the uninitialized state
             if let Ok(account_state) = token_account.state() {
                 if account_state != AccountState::Uninitialized {

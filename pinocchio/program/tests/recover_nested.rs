@@ -3,8 +3,9 @@ use {
     solana_address::Address,
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
-    spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
-    spl_associated_token_account_mollusk_harness::{AtaProgram, AtaTestHarness},
+    spl_associated_token_account_mollusk_harness::{
+        build_recover_nested_instruction, AtaProgram, AtaTestHarness,
+    },
     spl_token_2022_interface::{extension::StateWithExtensionsOwned, state::Account},
     test_case::test_case,
 };
@@ -18,43 +19,6 @@ struct RecoverNestedSetup {
     nested_mint: Address,
     nested_ata: Address,
     destination_ata: Address,
-}
-
-// TODO: Need to add to token-program sdk
-fn recover_nested_ix(
-    wallet: Address,
-    owner_mint: Address,
-    nested_mint: Address,
-    owner_token_program_id: Address,
-    nested_token_program_id: Address,
-) -> Instruction {
-    let owner_associated_account_address =
-        get_associated_token_address_with_program_id(&wallet, &owner_mint, &owner_token_program_id);
-    let destination_associated_account_address = get_associated_token_address_with_program_id(
-        &wallet,
-        &nested_mint,
-        &nested_token_program_id,
-    );
-    let nested_associated_account_address = get_associated_token_address_with_program_id(
-        &owner_associated_account_address,
-        &nested_mint,
-        &nested_token_program_id,
-    );
-
-    Instruction {
-        program_id: spl_associated_token_account_interface::program::id(),
-        accounts: vec![
-            AccountMeta::new(nested_associated_account_address, false),
-            AccountMeta::new_readonly(nested_mint, false),
-            AccountMeta::new(destination_associated_account_address, false),
-            AccountMeta::new_readonly(owner_associated_account_address, false),
-            AccountMeta::new_readonly(owner_mint, false),
-            AccountMeta::new(wallet, true),
-            AccountMeta::new_readonly(owner_token_program_id, false),
-            AccountMeta::new_readonly(nested_token_program_id, false),
-        ],
-        data: vec![2],
-    }
 }
 
 // Build a nested ATA layout where the owner and nested accounts can be under
@@ -109,73 +73,12 @@ fn recover_nested_setup(
     }
 }
 
-#[test]
-fn fail_missing_extra_account_when_programs_differ() {
-    let owner_token_program_id = spl_token_interface::id();
-    let nested_token_program_id = spl_token_2022_interface::id();
-    let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
-
-    let mut recover_instruction = recover_nested_ix(
-        setup.wallet,
-        setup.owner_mint,
-        setup.nested_mint,
-        owner_token_program_id,
-        nested_token_program_id,
-    );
-
-    // Drop the optional nested token program account
-    recover_instruction.accounts.truncate(7);
-
-    setup.harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::InvalidSeeds)],
-    );
-}
-
-#[test]
-fn fail_wrong_nested_token_program_account() {
-    let owner_token_program_id = spl_token_interface::id();
-    let nested_token_program_id = spl_token_2022_interface::id();
-    let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
-
-    let mut recover_instruction = recover_nested_ix(
-        setup.wallet,
-        setup.owner_mint,
-        setup.nested_mint,
-        owner_token_program_id,
-        nested_token_program_id,
-    );
-
-    // Point the nested token program account at the owner program to break PDA derivation
-    recover_instruction.accounts[7].pubkey = owner_token_program_id;
-
-    setup.harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::InvalidSeeds)],
-    );
-}
-
-#[test_case(spl_token_interface::id(), spl_token_interface::id())]
-#[test_case(spl_token_interface::id(), spl_token_2022_interface::id())]
-#[test_case(spl_token_2022_interface::id(), spl_token_interface::id())]
-#[test_case(spl_token_2022_interface::id(), spl_token_2022_interface::id())]
-fn success_mixed_token_programs(owner_token_program_id: Address, nested_token_program_id: Address) {
-    let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
-
+fn assert_recover_nested_success(setup: RecoverNestedSetup, recover_instruction: Instruction) {
     let pre_wallet_lamports = {
         let store = setup.harness.ctx.account_store.borrow();
         store.get(&setup.wallet).unwrap().lamports
     };
     let nested_lamports = setup.harness.get_account(setup.nested_ata).lamports;
-
-    let recover_instruction = recover_nested_ix(
-        setup.wallet,
-        setup.owner_mint,
-        setup.nested_mint,
-        owner_token_program_id,
-        nested_token_program_id,
-    );
-    assert_eq!(recover_instruction.accounts.len(), 8);
 
     setup.harness.ctx.process_and_validate_instruction(
         &recover_instruction,
@@ -197,4 +100,100 @@ fn success_mixed_token_programs(owner_token_program_id: Address, nested_token_pr
             .amount,
         TEST_MINT_AMOUNT
     );
+}
+
+#[test]
+fn fail_missing_extra_account_when_programs_differ() {
+    let owner_token_program_id = spl_token_interface::id();
+    let nested_token_program_id = spl_token_2022_interface::id();
+    let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
+
+    let mut recover_instruction = build_recover_nested_instruction(
+        setup.wallet,
+        setup.owner_mint,
+        setup.nested_mint,
+        owner_token_program_id,
+        nested_token_program_id,
+        &[],
+    );
+
+    // Drop the optional nested token program account
+    recover_instruction.accounts.truncate(7);
+
+    setup.harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::InvalidSeeds)],
+    );
+}
+
+#[test]
+fn fail_wrong_nested_token_program_account() {
+    let owner_token_program_id = spl_token_interface::id();
+    let nested_token_program_id = spl_token_2022_interface::id();
+    let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
+
+    let mut recover_instruction = build_recover_nested_instruction(
+        setup.wallet,
+        setup.owner_mint,
+        setup.nested_mint,
+        owner_token_program_id,
+        nested_token_program_id,
+        &[],
+    );
+
+    // Point the nested token program account at the owner program to break PDA derivation
+    recover_instruction.accounts[7].pubkey = owner_token_program_id;
+
+    setup.harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::InvalidSeeds)],
+    );
+}
+
+#[test]
+fn fail_single_signer_wallet_with_unsupported_trailing_token_program() {
+    let owner_token_program_id = spl_token_interface::id();
+    let nested_token_program_id = spl_token_interface::id();
+    let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
+
+    let mut recover_instruction = build_recover_nested_instruction(
+        setup.wallet,
+        setup.owner_mint,
+        setup.nested_mint,
+        owner_token_program_id,
+        nested_token_program_id,
+        &[],
+    );
+
+    // Append an unsupported trailing program. The builder omits the optional
+    // 8th account when programs match, so we add it here to exercise the
+    // single-signer fall-through that always treats position 7 as the nested
+    // token program.
+    recover_instruction
+        .accounts
+        .push(AccountMeta::new_readonly(Address::new_unique(), false));
+
+    setup.harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::InvalidSeeds)],
+    );
+}
+
+#[test_case(spl_token_interface::id(), spl_token_interface::id())]
+#[test_case(spl_token_interface::id(), spl_token_2022_interface::id())]
+#[test_case(spl_token_2022_interface::id(), spl_token_interface::id())]
+#[test_case(spl_token_2022_interface::id(), spl_token_2022_interface::id())]
+fn success_mixed_token_programs(owner_token_program_id: Address, nested_token_program_id: Address) {
+    let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
+
+    let recover_instruction = build_recover_nested_instruction(
+        setup.wallet,
+        setup.owner_mint,
+        setup.nested_mint,
+        owner_token_program_id,
+        nested_token_program_id,
+        &[],
+    );
+
+    assert_recover_nested_success(setup, recover_instruction);
 }

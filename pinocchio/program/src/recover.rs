@@ -6,9 +6,10 @@ use {
         error::AssociatedTokenAccountError, pda::AssociatedTokenPda,
     },
     pinocchio_log::log,
+    pinocchio_token::{instructions::MAX_MULTISIG_SIGNERS, state::Multisig as TokenMultisig},
     pinocchio_token_2022::{
         instructions::{CloseAccount, TransferChecked},
-        state::{Mint, StateWithExtensions, TokenAccount},
+        state::{Mint, Multisig as Token2022Multisig, StateWithExtensions, TokenAccount},
     },
 };
 
@@ -59,8 +60,10 @@ pub(crate) fn process_recover_nested(
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    // Optional to specify nested token program if different from owner one
-    let nested_token_program = remaining.first().unwrap_or(owner_token_program);
+    // Optional to specify nested token program if different from owner one. Any
+    // remaining accounts after that are used as wallet multisig signer accounts.
+    let (nested_token_program, wallet_signer_accounts) =
+        split_nested_token_program(owner_token_program, wallet, remaining);
 
     // `owner_ata` must be the canonical ATA for wallet & `owner_token_mint`
     let (derived_owner_ata, bump_seed) = AssociatedTokenPda::derive_address_and_bump_seed(
@@ -99,11 +102,9 @@ pub(crate) fn process_recover_nested(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // Only the wallet holder can trigger recovery
-    if !wallet.is_signer() {
-        log!("Wallet of the owner associated token account must sign");
-        return Err(ProgramError::MissingRequiredSignature);
-    }
+    // Only the wallet holder can trigger recovery. If the wallet is a token
+    // multisig account, enough configured multisig signer accounts must sign.
+    authorize_wallet(wallet, wallet_signer_accounts)?;
 
     // The owner mint must belong to the token program we will CPI into
     if !owner_token_mint.owned_by(owner_token_program.address()) {
@@ -186,4 +187,128 @@ pub(crate) fn process_recover_nested(
         token_program: nested_token_program.address(),
     }
     .invoke_signed(&[Signer::from(&seeds)])
+}
+
+#[inline(always)]
+fn split_nested_token_program<'a>(
+    owner_token_program: &'a AccountView,
+    wallet: &AccountView,
+    remaining: &'a [AccountView],
+) -> (&'a AccountView, &'a [AccountView]) {
+    match remaining.split_first() {
+        Some((nested_token_program, remaining))
+            if !is_token_multisig_wallet(wallet)
+                || is_supported_token_program(nested_token_program) =>
+        {
+            (nested_token_program, remaining)
+        }
+        _ => (owner_token_program, remaining),
+    }
+}
+
+#[inline(always)]
+fn is_supported_token_program(account: &AccountView) -> bool {
+    // This disambiguates the optional nested token program from multisig
+    // signer accounts for token-multisig wallets. Multisig calls with an
+    // explicit nested token program currently support the two SPL token IDs.
+    *account.address() == pinocchio_token::ID || *account.address() == pinocchio_token_2022::ID
+}
+
+#[inline(always)]
+fn is_token_multisig_wallet(wallet: &AccountView) -> bool {
+    wallet.data_len() == TokenMultisig::LEN
+        && (wallet.owned_by(&pinocchio_token::ID) || wallet.owned_by(&pinocchio_token_2022::ID))
+}
+
+#[inline(always)]
+fn authorize_wallet(wallet: &AccountView, signer_accounts: &[AccountView]) -> ProgramResult {
+    if is_token_multisig_wallet(wallet) {
+        if wallet.owned_by(&pinocchio_token::ID) {
+            let multisig = TokenMultisig::from_account_view(wallet)?;
+            return authorize_token_multisig_wallet(&multisig, signer_accounts);
+        }
+
+        if wallet.owned_by(&pinocchio_token_2022::ID) {
+            let multisig = Token2022Multisig::from_account_view(wallet)?;
+            return authorize_token_2022_multisig_wallet(&multisig, signer_accounts);
+        }
+    }
+
+    if wallet.is_signer() {
+        return Ok(());
+    }
+
+    log!("Wallet of the owner associated token account must sign");
+    Err(ProgramError::MissingRequiredSignature)
+}
+
+#[inline(always)]
+fn authorize_token_multisig_wallet(
+    multisig: &TokenMultisig,
+    signer_accounts: &[AccountView],
+) -> ProgramResult {
+    let required_signers = multisig.required_signers() as usize;
+    let signers_len = multisig.signers_len();
+    validate_multisig_wallet(multisig.is_initialized(), required_signers, signers_len)?;
+    authorize_multisig_signers(required_signers, multisig.signers(), signer_accounts)
+}
+
+#[inline(always)]
+fn authorize_token_2022_multisig_wallet(
+    multisig: &Token2022Multisig,
+    signer_accounts: &[AccountView],
+) -> ProgramResult {
+    let required_signers = multisig.required_signers() as usize;
+    let signers_len = multisig.signers_len();
+    validate_multisig_wallet(multisig.is_initialized(), required_signers, signers_len)?;
+    authorize_multisig_signers(required_signers, multisig.signers(), signer_accounts)
+}
+
+#[inline(always)]
+fn validate_multisig_wallet(
+    is_initialized: bool,
+    required_signers: usize,
+    signers_len: usize,
+) -> ProgramResult {
+    if !is_initialized
+        || required_signers == 0
+        || required_signers > signers_len
+        || signers_len > MAX_MULTISIG_SIGNERS
+    {
+        log!("Invalid multisig wallet account");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    Ok(())
+}
+
+#[inline(always)]
+fn authorize_multisig_signers(
+    required_signers: usize,
+    multisig_signers: &[Address],
+    signer_accounts: &[AccountView],
+) -> ProgramResult {
+    // Mirrors SPL Token Processor::validate_owner, adapted to AccountView.
+    let mut matched_signers = [false; MAX_MULTISIG_SIGNERS];
+    let mut matched_count = 0usize;
+
+    for signer_account in signer_accounts {
+        for (index, multisig_signer) in multisig_signers.iter().enumerate() {
+            if !matched_signers[index] && multisig_signer == signer_account.address() {
+                if !signer_account.is_signer() {
+                    return Err(ProgramError::MissingRequiredSignature);
+                }
+
+                matched_signers[index] = true;
+                matched_count = matched_count.saturating_add(1);
+                if matched_count >= required_signers {
+                    return Ok(());
+                }
+                break;
+            }
+        }
+    }
+
+    log!("Not enough multisig signers for wallet");
+    Err(ProgramError::MissingRequiredSignature)
 }

@@ -97,10 +97,13 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` Owner associated token account address, must be owned by `5`
     ///   4. `[]` Token mint for the owner associated token account
     ///   5. `[writeable, signer]` Wallet address for the owner associated token
-    ///      account
+    ///      account. If multisig, not a signer.
     ///   6. `[]` Token program for the owner mint
     ///   7. `[]` Optional token program for the nested mint, if different from
-    ///      the owner mint's token program
+    ///      the owner mint's token program. Required when the wallet is a
+    ///      multisig.
+    ///   8. `..8+M` `[signer]` M multisig signer accounts that authorize the
+    ///      wallet
     #[cfg_attr(
         feature = "codama",
         codama(optional_account_strategy = omitted),
@@ -129,9 +132,9 @@ pub enum AssociatedTokenAccountInstruction {
         )),
         codama(account(
             name = "wallet",
-            signer,
+            signer = "either",
             writable,
-            docs = "Wallet address for the owner associated token account"
+            docs = "Wallet address for the owner associated token account. If multisig, not a signer."
         )),
         codama(account(
             name = "owner_token_program",
@@ -141,7 +144,7 @@ pub enum AssociatedTokenAccountInstruction {
             name = "nested_token_program",
             optional,
             docs = "Optional token program for the nested mint, if different from the owner \
-                    mint's token program"
+                    mint's token program. Required when the wallet is a multisig."
         ))
     )]
     RecoverNested,

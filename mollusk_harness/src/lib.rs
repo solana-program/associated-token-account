@@ -471,13 +471,14 @@ impl AtaTestHarness {
         owner_mint: Pubkey,
         nested_mint: Pubkey,
     ) -> solana_instruction::Instruction {
-        let wallet = self.wallet.as_ref().expect("Wallet must be set");
-
-        spl_associated_token_account_interface::instruction::recover_nested(
+        let wallet = *self.wallet.as_ref().expect("Wallet must be set");
+        build_recover_nested_instruction(
             wallet,
-            &owner_mint,
-            &nested_mint,
-            &self.token_program_id,
+            owner_mint,
+            nested_mint,
+            self.token_program_id,
+            self.token_program_id,
+            &[],
         )
     }
 
@@ -698,6 +699,55 @@ pub fn build_create_ata_instruction(
         program_id: ata_program_id,
         accounts,
         data: encode_create_ata_instruction_data(&instruction_type),
+    }
+}
+
+pub fn build_recover_nested_instruction(
+    wallet: Pubkey,
+    owner_mint: Pubkey,
+    nested_mint: Pubkey,
+    owner_token_program_id: Pubkey,
+    nested_token_program_id: Pubkey,
+    multisig_signers: &[&Pubkey],
+) -> Instruction {
+    let wallet_is_signer = multisig_signers.is_empty();
+    let owner_ata =
+        get_associated_token_address_with_program_id(&wallet, &owner_mint, &owner_token_program_id);
+    let destination_ata = get_associated_token_address_with_program_id(
+        &wallet,
+        &nested_mint,
+        &nested_token_program_id,
+    );
+    let nested_ata = get_associated_token_address_with_program_id(
+        &owner_ata,
+        &nested_mint,
+        &nested_token_program_id,
+    );
+
+    let mut accounts = vec![
+        AccountMeta::new(nested_ata, false),
+        AccountMeta::new_readonly(nested_mint, false),
+        AccountMeta::new(destination_ata, false),
+        AccountMeta::new_readonly(owner_ata, false),
+        AccountMeta::new_readonly(owner_mint, false),
+        AccountMeta::new(wallet, wallet_is_signer),
+        AccountMeta::new_readonly(owner_token_program_id, false),
+    ];
+
+    if owner_token_program_id != nested_token_program_id {
+        accounts.push(AccountMeta::new_readonly(nested_token_program_id, false));
+    }
+
+    accounts.extend(
+        multisig_signers
+            .iter()
+            .map(|s| AccountMeta::new_readonly(**s, true)),
+    );
+
+    Instruction {
+        program_id: spl_associated_token_account_interface::program::id(),
+        accounts,
+        data: vec![2],
     }
 }
 

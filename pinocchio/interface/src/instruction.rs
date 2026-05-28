@@ -97,10 +97,14 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` Owner associated token account address, must be owned by `5`
     ///   4. `[]` Token mint for the owner associated token account
     ///   5. `[writeable, signer]` Wallet address for the owner associated token
-    ///      account
+    ///      account, or an initialized SPL Token / Token-2022 multisig account
+    ///      authorized by trailing signer accounts
     ///   6. `[]` Token program for the owner mint
     ///   7. `[]` Optional token program for the nested mint, if different from
     ///      the owner mint's token program
+    ///   8. .. Optional multisig signer accounts for `5`; required when `5` is
+    ///      a multisig account and ignored otherwise. If account `7` is omitted,
+    ///      multisig signer accounts begin at account `7`.
     #[cfg_attr(
         feature = "codama",
         codama(optional_account_strategy = omitted),
@@ -131,7 +135,8 @@ pub enum AssociatedTokenAccountInstruction {
             name = "wallet",
             signer,
             writable,
-            docs = "Wallet address for the owner associated token account"
+            docs = "Wallet address for the owner associated token account, or an initialized \
+                    SPL Token / Token-2022 multisig account authorized by trailing signer accounts"
         )),
         codama(account(
             name = "owner_token_program",

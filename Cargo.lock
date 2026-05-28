@@ -1650,7 +1650,7 @@ dependencies = [
  "solana-pubkey 4.1.0",
  "solana-rent 3.1.0",
  "spl-associated-token-account-interface 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "spl-token-interface",
+ "spl-token-interface 2.0.0",
 ]
 
 [[package]]
@@ -1942,7 +1942,7 @@ dependencies = [
  "spl-associated-token-account-interface 2.0.0",
  "spl-associated-token-account-mollusk-harness",
  "spl-token-2022-interface",
- "spl-token-interface",
+ "spl-token-interface 3.0.0",
  "test-case",
 ]
 
@@ -3524,7 +3524,7 @@ dependencies = [
  "spl-associated-token-account-interface 2.0.0",
  "spl-associated-token-account-mollusk-harness",
  "spl-token-2022-interface",
- "spl-token-interface",
+ "spl-token-interface 3.0.0",
  "test-case",
  "thiserror 2.0.18",
 ]
@@ -3567,7 +3567,7 @@ dependencies = [
  "solana-system-interface 3.1.0",
  "spl-associated-token-account-interface 2.0.0",
  "spl-token-2022-interface",
- "spl-token-interface",
+ "spl-token-interface 3.0.0",
  "wincode",
 ]
 
@@ -3681,6 +3681,26 @@ name = "spl-token-interface"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c564ac05a7c8d8b12e988a37d82695b5ba4db376d07ea98bc4882c81f96c7f3"
+dependencies = [
+ "arrayref",
+ "bytemuck",
+ "num-derive",
+ "num-traits",
+ "num_enum",
+ "solana-instruction",
+ "solana-program-error",
+ "solana-program-option",
+ "solana-program-pack",
+ "solana-pubkey 3.0.0",
+ "solana-sdk-ids",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "spl-token-interface"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7143c4e676984047a400e2fbd7ac29a1659f2b1b52b897cfde19316b562e4589"
 dependencies = [
  "arrayref",
  "bytemuck",

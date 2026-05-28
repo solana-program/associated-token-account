@@ -26,4 +26,4 @@ solana-system-interface = { version = "3.1", features = ["bincode"] }
 spl-associated-token-account-interface = { version = "2.0", path = "../interface" }
 spl-token-interface = "2.0"
 spl-token-2022-interface = "3.0"
-wincode = "0.5.4"
+wincode = "0.5.5"

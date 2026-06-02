@@ -12,8 +12,11 @@ borsh = ["dep:borsh"]
 
 [dependencies]
 borsh = { version = "1", optional = true, features = ["unstable__schema"] }
-solana-instruction = { version = "3.3.0", features = ["std"] }
-solana-pubkey = { version = "4.1.0", features = ["curve25519"] }
+num-derive = "0.4"
+num-traits = "0.2"
+solana-instruction = "3.3.0"
+solana-program-error = "3.0"
+solana-pubkey = { version = "4.1.0", default-features = false, features = ["curve25519"] }
 
 [dev-dependencies]
 solana-sdk-ids = "3.1.0"

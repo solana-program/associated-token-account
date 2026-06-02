@@ -1,10 +1,7 @@
 //! Program state processor
 
 use {
-    crate::{
-        error::AssociatedTokenAccountError,
-        tools::account::{create_pda_account, get_account_len},
-    },
+    crate::tools::account::{create_pda_account, get_account_len},
     borsh::BorshDeserialize,
     solana_account_info::{AccountInfo, next_account_info},
     solana_cpi::{invoke, invoke_signed},
@@ -16,7 +13,7 @@ use {
     solana_sysvar::Sysvar,
     spl_associated_token_account_interface::{
         address::get_associated_token_address_and_bump_seed_internal,
-        instruction::AssociatedTokenAccountInstruction,
+        error::AssociatedTokenAccountError, instruction::AssociatedTokenAccountInstruction,
     },
     spl_token_2022_interface::{
         extension::{ExtensionType, StateWithExtensions},

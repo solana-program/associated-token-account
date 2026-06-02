@@ -19,7 +19,7 @@ impl Error for AssociatedTokenAccountError {}
 impl fmt::Display for AssociatedTokenAccountError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            AssociatedTokenAccountError::InvalidOwner {} => {
+            AssociatedTokenAccountError::InvalidOwner => {
                 f.write_str("Associated token account owner does not match address derivation")
             }
         }

@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 pub mod address;
+pub mod error;
 pub mod instruction;
 
 /// Module defining the program id

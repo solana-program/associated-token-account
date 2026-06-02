@@ -3507,8 +3507,6 @@ version = "8.0.0"
 dependencies = [
  "borsh",
  "mollusk-svm",
- "num-derive",
- "num-traits",
  "solana-account-info",
  "solana-cpi",
  "solana-instruction",
@@ -3526,7 +3524,6 @@ dependencies = [
  "spl-token-2022-interface",
  "spl-token-interface",
  "test-case",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -3534,9 +3531,13 @@ name = "spl-associated-token-account-interface"
 version = "2.0.0"
 dependencies = [
  "borsh",
+ "num-derive",
+ "num-traits",
  "solana-instruction",
+ "solana-program-error",
  "solana-pubkey 4.1.0",
  "solana-sdk-ids",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

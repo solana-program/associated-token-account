@@ -8,38 +8,22 @@ use {
     pinocchio_log::log,
     pinocchio_token_2022::{
         instructions::GetAccountDataSize,
-        state::{ExtensionType, Mint, TokenAccount},
+        state::{ExtensionType, try_calculate_account_len_from_mint},
     },
 };
 
-/// Token-2022 account data size when the mint has no extensions.
-/// The only account extension is `ImmutableOwner` (zero-length value), so the
-/// total is `TokenAccount::BASE_LEN (165) + ACCOUNT_TYPE_SIZE (1) + TLV_HEADER_LEN (4)`.
-///
-/// Reference: https://github.com/anza-xyz/pinocchio/blob/0ca7555836700b31dae01ef6da37ef66df1831b8/programs/token-2022/src/state/extension/mod.rs#L29-L30
-const ACCOUNT_TYPE_SIZE: usize = 1;
-/// Reference: https://github.com/anza-xyz/pinocchio/blob/0ca7555836700b31dae01ef6da37ef66df1831b8/programs/token-2022/src/state/extension/mod.rs#L31
-const TLV_HEADER_LEN: usize = 4;
-const TOKEN_2022_BASE_ACCOUNT_DATA_SIZE: u64 =
-    TokenAccount::BASE_LEN as u64 + ACCOUNT_TYPE_SIZE as u64 + TLV_HEADER_LEN as u64;
-
-/// Get the required Token-2022 account data size when no account length hint was supplied.
-/// Short-circuits when size is known and falls back to `GetAccountDataSize` CPI for
-/// everything else.
+/// Get the required Token-2022 account data size when no account length hint
+/// was supplied. Attempts to computes the size locally first and falls back to
+/// `GetAccountDataSize` CPI for mints that have an extension this program doesn't recognize.
 #[inline(always)]
 pub(crate) fn get_token_2022_account_data_size(
     mint: &AccountView,
     token_program: &AccountView,
 ) -> Result<u64, ProgramError> {
-    // Associated token accounts for Token-2022 always enable `ImmutableOwner`.
-    // If the mint is exactly Mint::BASE_LEN, it has no mint extensions. In that case,
-    // the new account only needs the base token account layout plus the
-    // zero-length `ImmutableOwner` extension.
-    if mint.data_len() == Mint::BASE_LEN {
-        return Ok(TOKEN_2022_BASE_ACCOUNT_DATA_SIZE);
+    match try_calculate_account_len_from_mint(mint, &[ExtensionType::ImmutableOwner])? {
+        Some(len) => Ok(len as u64),
+        None => get_account_data_size_cpi(mint, token_program),
     }
-
-    get_account_data_size_cpi(mint, token_program)
 }
 
 fn get_account_data_size_cpi(

@@ -560,6 +560,12 @@ fn main() {
         system_account.clone(),
         t22_account.clone(),
     ];
+    let ix2_extended = create_associated_token_account(
+        &payer,
+        &wallet2_extended,
+        &t22_extended_mint,
+        &spl_token_2022_interface::id(),
+    );
     let ix2_extended_create_with_args = create_associated_token_account_with_args(
         &payer,
         &wallet2_extended,
@@ -662,6 +668,11 @@ fn main() {
             "create_with_args (prefunded, token-2022)",
             &ix5b_create_with_args,
             &accs5b_create_with_args,
+        ))
+        .bench((
+            "create (token-2022 known mint)",
+            &ix2_extended,
+            &accs2_extended,
         ))
         .bench((
             "create_with_args (token-2022 extended mint)",

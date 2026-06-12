@@ -734,7 +734,10 @@ pub fn build_recover_nested_instruction(
         AccountMeta::new_readonly(owner_token_program_id, false),
     ];
 
-    if owner_token_program_id != nested_token_program_id {
+    // The nested token program account is optional for a signing wallet, but
+    // multisig signer accounts always come after it, so a multisig wallet must
+    // pass it explicitly.
+    if owner_token_program_id != nested_token_program_id || !multisig_signers.is_empty() {
         accounts.push(AccountMeta::new_readonly(nested_token_program_id, false));
     }
 

@@ -4,7 +4,7 @@ use {
     solana_instruction::{AccountMeta, Instruction},
     solana_program_error::ProgramError,
     spl_associated_token_account_mollusk_harness::{
-        build_recover_nested_instruction, AtaProgram, AtaTestHarness,
+        AtaProgram, AtaTestHarness, build_recover_nested_instruction,
     },
     spl_token_2022_interface::{extension::StateWithExtensionsOwned, state::Account},
     test_case::test_case,
@@ -151,7 +151,7 @@ fn fail_wrong_nested_token_program_account() {
 }
 
 #[test]
-fn fail_single_signer_wallet_with_unsupported_trailing_token_program() {
+fn fail_trailing_account_that_is_not_a_token_program() {
     let owner_token_program_id = spl_token_interface::id();
     let nested_token_program_id = spl_token_interface::id();
     let setup = recover_nested_setup(owner_token_program_id, nested_token_program_id);
@@ -165,10 +165,9 @@ fn fail_single_signer_wallet_with_unsupported_trailing_token_program() {
         &[],
     );
 
-    // Append an unsupported trailing program. The builder omits the optional
-    // 8th account when programs match, so we add it here to exercise the
-    // single-signer fall-through that always treats position 7 as the nested
-    // token program.
+    // Position 7 is always parsed as the nested token program when present
+    // (multisig signer accounts only come after it), so an arbitrary account
+    // there breaks the nested ATA derivation.
     recover_instruction
         .accounts
         .push(AccountMeta::new_readonly(Address::new_unique(), false));

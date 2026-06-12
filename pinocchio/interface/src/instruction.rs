@@ -97,14 +97,14 @@ pub enum AssociatedTokenAccountInstruction {
     ///   3. `[]` Owner associated token account address, must be owned by `5`
     ///   4. `[]` Token mint for the owner associated token account
     ///   5. `[writeable, signer]` Wallet address for the owner associated token
-    ///      account, or an initialized SPL Token / Token-2022 multisig account
-    ///      authorized by trailing signer accounts
+    ///      account. An SPL Token / Token-2022 multisig wallet does not sign and
+    ///      is instead authorized by the signer accounts in `8.`
     ///   6. `[]` Token program for the owner mint
     ///   7. `[]` Optional token program for the nested mint, if different from
-    ///      the owner mint's token program
-    ///   8. .. Optional multisig signer accounts for `5`; required when `5` is
-    ///      a multisig account and ignored otherwise. If account `7` is omitted,
-    ///      multisig signer accounts begin at account `7`.
+    ///      the owner mint's token program. Required when the wallet is a
+    ///      multisig, even if equal to `6.`
+    ///   8. `..8+M` `[signer]` M multisig signer accounts that authorize the
+    ///      wallet when it is a multisig account
     #[cfg_attr(
         feature = "codama",
         codama(optional_account_strategy = omitted),
@@ -133,10 +133,11 @@ pub enum AssociatedTokenAccountInstruction {
         )),
         codama(account(
             name = "wallet",
-            signer,
+            signer = "either",
             writable,
-            docs = "Wallet address for the owner associated token account, or an initialized \
-                    SPL Token / Token-2022 multisig account authorized by trailing signer accounts"
+            docs = "Wallet address for the owner associated token account. An SPL Token / \
+                    Token-2022 multisig wallet does not sign and is instead authorized by \
+                    trailing multisig signer accounts"
         )),
         codama(account(
             name = "owner_token_program",
@@ -146,7 +147,8 @@ pub enum AssociatedTokenAccountInstruction {
             name = "nested_token_program",
             optional,
             docs = "Optional token program for the nested mint, if different from the owner \
-                    mint's token program"
+                    mint's token program. Required when the wallet is a multisig, even if equal \
+                    to the owner token program"
         ))
     )]
     RecoverNested,

@@ -8,7 +8,7 @@ use {
     },
     pinocchio_system::instructions::CreateAccountAllowPrefund,
     pinocchio_token::instructions::InitializeAccount3,
-    pinocchio_token_2022::state::{AccountState, StateWithExtensions, TokenAccount},
+    pinocchio_token_2022::state::{Account, AccountState, StateWithExtensions},
 };
 
 #[inline(always)]
@@ -70,16 +70,15 @@ pub(crate) fn process_create_associated_token_account(
     {
         let ata_data = associated_token_account.try_borrow()?;
         // Preexisting ATA must be parsable as a token account
-        if let Ok(token_account_ext) = StateWithExtensions::<TokenAccount>::from_bytes(&ata_data) {
-            let token_account = token_account_ext.base();
+        if let Ok(token_account) = StateWithExtensions::<Account>::from_bytes(&ata_data) {
             // Preexisting ATA cannot be in the uninitialized state
-            if let Ok(account_state) = token_account.state() {
+            if let Ok(account_state) = token_account.base.state() {
                 if account_state != AccountState::Uninitialized {
                     // Now that ATA is confirmed, it must match the wallet and mint supplied
-                    if token_account.owner() != wallet.address() {
+                    if token_account.base.owner() != wallet.address() {
                         return Err(AssociatedTokenAccountError::InvalidOwner.into());
                     }
-                    if token_account.mint() != mint.address() {
+                    if token_account.base.mint() != mint.address() {
                         return Err(ProgramError::InvalidAccountData);
                     }
                     // `derive_address_with_bump_hint()` rejects higher off-curve bumps but
@@ -102,7 +101,7 @@ pub(crate) fn process_create_associated_token_account(
 
     let is_spl_token = *token_program.address() == pinocchio_token::ID;
     let account_len = if is_spl_token {
-        TokenAccount::BASE_LEN as u64
+        Account::BASE_LEN as u64
     } else if *token_program.address() == pinocchio_token_2022::ID {
         // Undersized accounts fail during initialization and excessive sizes fail
         // through rent/system account-size limits.

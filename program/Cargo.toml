@@ -29,7 +29,7 @@ spl-token-interface = "2.0.0"
 spl-token-2022-interface = "3.0.1"
 
 [dev-dependencies]
-mollusk-svm = "0.13.1"
+mollusk-svm = { workspace = true }
 spl-associated-token-account-mollusk-harness = { version = "1.0.0", path = "../mollusk_harness" }
 solana-program-pack = "3.1"
 test-case = "3.3.1"

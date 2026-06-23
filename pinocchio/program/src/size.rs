@@ -1,14 +1,12 @@
 use {
-    pinocchio::{
-        AccountView,
-        cpi::{self, get_return_data},
-        error::ProgramError,
-        instruction::{InstructionAccount, InstructionView},
-    },
+    pinocchio::{AccountView, cpi::get_return_data, error::ProgramError},
     pinocchio_log::log,
     pinocchio_token_2022::{
         instructions::GetAccountDataSize,
-        state::{ExtensionType, Mint, TokenAccount},
+        state::{Account, ExtensionType, Mint},
+    },
+    spl_token_2022_interface::extension::{
+        ExtensionType as SplExtensionType, account_len::try_calculate_account_len_from_mint_data,
     },
 };
 
@@ -21,7 +19,7 @@ const ACCOUNT_TYPE_SIZE: usize = 1;
 /// Reference: https://github.com/anza-xyz/pinocchio/blob/0ca7555836700b31dae01ef6da37ef66df1831b8/programs/token-2022/src/state/extension/mod.rs#L31
 const TLV_HEADER_LEN: usize = 4;
 const TOKEN_2022_BASE_ACCOUNT_DATA_SIZE: u64 =
-    TokenAccount::BASE_LEN as u64 + ACCOUNT_TYPE_SIZE as u64 + TLV_HEADER_LEN as u64;
+    Account::BASE_LEN as u64 + ACCOUNT_TYPE_SIZE as u64 + TLV_HEADER_LEN as u64;
 
 /// Get the required Token-2022 account data size when no account length hint was supplied.
 /// Short-circuits when size is known and falls back to `GetAccountDataSize` CPI for
@@ -39,6 +37,14 @@ pub(crate) fn get_token_2022_account_data_size(
         return Ok(TOKEN_2022_BASE_ACCOUNT_DATA_SIZE);
     }
 
+    // Avoid the CPI when the mint data can be used to derive the account size locally.
+    // If there is failure, fallback to a normal CPI to the token program.
+    if let Ok(len) = mint.try_borrow().and_then(|mint_data| {
+        try_calculate_account_len_from_mint_data(&mint_data, &[SplExtensionType::ImmutableOwner])
+    }) {
+        return Ok(len as u64);
+    }
+
     get_account_data_size_cpi(mint, token_program)
 }
 
@@ -46,23 +52,14 @@ fn get_account_data_size_cpi(
     mint: &AccountView,
     token_program: &AccountView,
 ) -> Result<u64, ProgramError> {
-    let mint_address = mint.address();
     let token_program_address = token_program.address();
 
-    // TODO: pinocchio's `GetAccountDataSize` builder does not yet support `ImmutableOwner`
-    let mut get_account_data_size_ix = [0; 3];
-    get_account_data_size_ix[0] = GetAccountDataSize::DISCRIMINATOR;
-    get_account_data_size_ix[1..]
-        .copy_from_slice(&(ExtensionType::ImmutableOwner as u16).to_le_bytes());
-
-    cpi::invoke(
-        &InstructionView {
-            program_id: token_program_address,
-            accounts: &[InstructionAccount::readonly(mint_address)],
-            data: &get_account_data_size_ix,
-        },
-        &[mint],
-    )?;
+    GetAccountDataSize {
+        mint,
+        extensions: &[ExtensionType::ImmutableOwner],
+        token_program: token_program_address,
+    }
+    .invoke()?;
 
     get_return_data()
         .ok_or_else(|| {

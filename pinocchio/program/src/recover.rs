@@ -8,7 +8,7 @@ use {
     pinocchio_log::log,
     pinocchio_token_2022::{
         instructions::{CloseAccount, TransferChecked},
-        state::{Mint, StateWithExtensions, TokenAccount},
+        state::{Account, Mint, StateWithExtensions},
     },
 };
 
@@ -122,10 +122,10 @@ pub(crate) fn process_recover_nested(
     }
 
     let owner_account_data = owner_ata.try_borrow()?;
-    let owner_account = StateWithExtensions::<TokenAccount>::from_bytes(&owner_account_data)?;
+    let owner_account = StateWithExtensions::<Account>::from_bytes(&owner_account_data)?;
 
     // The wallet must actually control this ATA
-    if owner_account.base().owner() != wallet.address() {
+    if owner_account.base.owner() != wallet.address() {
         log!("Owner associated token account not owned by provided wallet");
         return Err(AssociatedTokenAccountError::InvalidOwner.into());
     }
@@ -138,10 +138,10 @@ pub(crate) fn process_recover_nested(
     }
 
     let nested_account_data = nested_ata.try_borrow()?;
-    let nested_account = StateWithExtensions::<TokenAccount>::from_bytes(&nested_account_data)?;
+    let nested_account = StateWithExtensions::<Account>::from_bytes(&nested_account_data)?;
 
     // Confirming this is genuinely a nested ATA, not an arbitrary token account
-    if nested_account.base().owner() != owner_ata.address() {
+    if nested_account.base.owner() != owner_ata.address() {
         log!("Nested associated token account not owned by provided associated token account");
         return Err(AssociatedTokenAccountError::InvalidOwner.into());
     }
@@ -154,8 +154,8 @@ pub(crate) fn process_recover_nested(
 
     let nested_mint_data = nested_token_mint.try_borrow()?;
     let nested_mint = StateWithExtensions::<Mint>::from_bytes(&nested_mint_data)?;
-    let amount = nested_account.base().amount();
-    let decimals = nested_mint.base().decimals();
+    let amount = nested_account.base.amount();
+    let decimals = nested_mint.base.decimals();
     drop(nested_account_data);
 
     let bump_ref = &[bump_seed];

@@ -1,3 +1,32 @@
+#### 2026-06-18 12:58:46.107241 UTC
+
+Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
+
+| Name | CUs | Delta |
+|------|------|-------|
+| create (spl-token) | 3086 | +3 |
+| create_with_args (spl-token) | 2894 | +3 |
+| create (token-2022) | 5134 | +2 |
+| create_with_args (token-2022) | 4937 | +3 |
+| create_idempotent (new, spl-token) | 4171 | -- |
+| create_with_args_idempotent (new, spl-token) | 3987 | +3 |
+| create_idempotent (new, token-2022) | 5495 | -1 |
+| create_with_args_idempotent (new, token-2022) | 5306 | +3 |
+| create_idempotent (existing, spl-token) | 531 | -17 |
+| create_with_args_idempotent (existing, spl-token) | 592 | -14 |
+| create_idempotent (existing, token-2022) | 1617 | -17 |
+| create_with_args_idempotent (existing, token-2022) | 1681 | -14 |
+| create (prefunded, spl-token) | 3086 | +3 |
+| create_with_args (prefunded, spl-token) | 2894 | +3 |
+| create (prefunded, token-2022) | 5134 | +2 |
+| create_with_args (prefunded, token-2022) | 4937 | +3 |
+| create (token-2022 known mint) | 6676 | -1,936 |
+| create_with_args (token-2022 extended mint) | 5753 | +3 |
+| recover_nested (owner=spl-token, nested=spl-token) | 5149 | -42 |
+| recover_nested (owner=token-2022, nested=token-2022) | 7013 | -42 |
+| recover_nested (owner=spl-token, nested=token-2022) | 9569 | -42 |
+| recover_nested (owner=token-2022, nested=spl-token) | 5519 | -42 |
+
 #### 2026-05-21 08:39:23.395979 UTC
 
 Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
@@ -20,6 +49,7 @@ Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agav
 | create_with_args (prefunded, spl-token) | 2891 | -119 |
 | create (prefunded, token-2022) | 5132 | -118 |
 | create_with_args (prefunded, token-2022) | 4934 | -119 |
+| create (token-2022 known mint) | 8612 | - new - |
 | create_with_args (token-2022 extended mint) | 5750 | -119 |
 | recover_nested (owner=spl-token, nested=spl-token) | 5191 | -- |
 | recover_nested (owner=token-2022, nested=token-2022) | 7055 | -- |

@@ -318,3 +318,28 @@ fn create_with_args_idempotent_accepts_existing_ata_with_canonical_bump_hint(
         .ctx
         .process_and_validate_instruction(&instruction, &[Check::success()]);
 }
+
+#[test_matrix([spl_token_interface::id(), spl_token_2022_interface::id()])]
+fn create_with_args_idempotent_accepts_existing_ata_with_wrong_bump_hint(
+    token_program_id: Address,
+) {
+    let mut harness =
+        AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)
+            .with_wallet_and_mint(1_000_000, 6);
+    let wallet = harness.wallet.unwrap();
+    let bump = expected_bump(&harness);
+    let wrong_bump = if bump == 1 { 2 } else { 1 };
+    harness.insert_token_account_at_ata_address(wallet);
+
+    let instruction =
+        harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
+            mode: CreateMode::Idempotent,
+            bump: Some(wrong_bump),
+            account_len: None,
+            rent_sysvar: false,
+        });
+
+    harness
+        .ctx
+        .process_and_validate_instruction(&instruction, &[Check::success()]);
+}

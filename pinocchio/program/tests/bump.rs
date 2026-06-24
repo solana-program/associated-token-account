@@ -328,7 +328,7 @@ fn create_with_args_idempotent_accepts_existing_ata_with_wrong_bump_hint(
             .with_wallet_and_mint(1_000_000, 6);
     let wallet = harness.wallet.unwrap();
     let bump = expected_bump(&harness);
-    let wrong_bump = if bump == 1 { 2 } else { 1 };
+    let wrong_bump = if bump == 255 { 254 } else { 255 };
     harness.insert_token_account_at_ata_address(wallet);
 
     let instruction =

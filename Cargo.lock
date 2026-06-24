@@ -3546,7 +3546,7 @@ dependencies = [
  "solana-program-error",
  "solana-program-pack",
  "solana-pubkey 4.2.0",
- "solana-rent 3.1.0",
+ "solana-rent 4.2.1",
  "solana-sdk-ids",
  "solana-system-interface",
  "solana-sysvar 3.1.1",

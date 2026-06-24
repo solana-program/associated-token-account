@@ -7,7 +7,7 @@ use {
         error::AssociatedTokenAccountError, instruction::CreateMode, pda::AssociatedTokenPda,
     },
     pinocchio_system::instructions::CreateAccountAllowPrefund,
-    pinocchio_token::instructions::InitializeAccount3,
+    pinocchio_token::instructions::{InitializeAccount, InitializeAccount3},
     pinocchio_token_2022::state::{Account, AccountState, StateWithExtensions},
 };
 
@@ -140,8 +140,11 @@ pub(crate) fn process_create_associated_token_account(
             mint,
             wallet.address(),
         )
+    } else if let Some(rent) = rent_sysvar {
+        // If rent account was supplied, save CUs by passing it into plain `InitializeAccount`.
+        // Performs slightly better than `InitializeAccount2` given we already have owner account.
+        InitializeAccount::new(associated_token_account, mint, wallet, rent).invoke()
     } else {
-        // If spl-token, just initialize
         InitializeAccount3::new(associated_token_account, mint, wallet.address()).invoke()
     }
 }

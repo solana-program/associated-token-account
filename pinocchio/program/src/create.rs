@@ -51,14 +51,25 @@ pub(crate) fn process_create_associated_token_account(
                     if token_account.base.mint() != mint.address() {
                         return Err(ProgramError::InvalidAccountData);
                     }
-                    // Passed bump hints are ignored in this codepath given they are not needed
-                    // in the idempotent+existing path w/ validation below
-                    let derived_ata_addr = AssociatedTokenPda::derive_address(
-                        program_id,
-                        wallet.address(),
-                        token_program.address(),
-                        mint.address(),
-                    );
+                    // Validate expected address, using bump hint if provided
+                    let derived_ata_addr = if let Some(bump) = bump_hint {
+                        Address::derive_address(
+                            &[
+                                wallet.address().as_array(),
+                                token_program.address().as_array(),
+                                mint.address().as_array(),
+                            ],
+                            Some(bump),
+                            program_id,
+                        )
+                    } else {
+                        AssociatedTokenPda::derive_address(
+                            program_id,
+                            wallet.address(),
+                            token_program.address(),
+                            mint.address(),
+                        )
+                    };
                     if derived_ata_addr != *associated_token_account.address() {
                         return Err(ProgramError::InvalidSeeds);
                     }

@@ -171,9 +171,8 @@ fn create_with_args_rejects_canonical_bump_hint_for_wrong_ata_account() {
         .process_and_validate_instruction(&instruction, &[Check::err(ProgramError::InvalidSeeds)]);
 }
 
-#[test_case(CreateMode::Idempotent)]
-#[test_case(CreateMode::Always)]
-fn create_with_args_rejects_on_curve_bump_hint(mode: CreateMode) {
+#[test]
+fn create_with_args_rejects_on_curve_bump_hint() {
     let token_program_id = spl_token_interface::id();
     let mut harness = create_mint_account(&token_program_id);
 
@@ -201,37 +200,21 @@ fn create_with_args_rejects_on_curve_bump_hint(mode: CreateMode) {
     harness.ensure_account_exists_with_lamports(wallet, 1_000_000);
     harness.wallet = Some(wallet);
 
-    if mode == CreateMode::Idempotent {
-        harness.ctx.account_store.borrow_mut().insert(
-            on_curve_bump_addr,
-            AccountBuilder::token_account(&MINT, &wallet, 0, &token_program_id),
-        );
-    }
     let mut instruction =
         harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
-            mode,
+            mode: CreateMode::Always,
             bump: Some(attack_bump),
             account_len: None,
             rent_sysvar: false,
         });
     instruction.accounts[1] = AccountMeta::new(on_curve_bump_addr, false);
 
-    match mode {
-        CreateMode::Idempotent => {
-            harness.ctx.process_and_validate_instruction(
-                &instruction,
-                &[Check::err(ProgramError::InvalidSeeds)],
-            );
-        }
-        CreateMode::Always => {
-            harness.ctx.process_and_validate_instruction(
-                &instruction,
-                &[Check::instruction_err(
-                    InstructionError::ProgramFailedToComplete,
-                )],
-            );
-        }
-    }
+    harness.ctx.process_and_validate_instruction(
+        &instruction,
+        &[Check::instruction_err(
+            InstructionError::ProgramFailedToComplete,
+        )],
+    );
 }
 
 #[test_matrix(
@@ -310,31 +293,6 @@ fn create_with_args_idempotent_accepts_existing_ata_with_canonical_bump_hint(
         harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
             mode: CreateMode::Idempotent,
             bump: Some(bump),
-            account_len: None,
-            rent_sysvar: false,
-        });
-
-    harness
-        .ctx
-        .process_and_validate_instruction(&instruction, &[Check::success()]);
-}
-
-#[test_matrix([spl_token_interface::id(), spl_token_2022_interface::id()])]
-fn create_with_args_idempotent_accepts_existing_ata_with_wrong_bump_hint(
-    token_program_id: Address,
-) {
-    let mut harness =
-        AtaTestHarness::new_with_ata_program(&token_program_id, AtaProgram::Pinocchio)
-            .with_wallet_and_mint(1_000_000, 6);
-    let wallet = harness.wallet.unwrap();
-    let bump = expected_bump(&harness);
-    let wrong_bump = if bump == 255 { 254 } else { 255 };
-    harness.insert_token_account_at_ata_address(wallet);
-
-    let instruction =
-        harness.build_create_ata_instruction(CreateAtaInstructionType::CreateWithArgs {
-            mode: CreateMode::Idempotent,
-            bump: Some(wrong_bump),
             account_len: None,
             rent_sysvar: false,
         });

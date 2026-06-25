@@ -1,4 +1,4 @@
-#### 2026-06-24 08:20:07.379346 UTC
+#### 2026-06-25 16:04:39.216202 UTC
 
 Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
 
@@ -13,9 +13,9 @@ Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agav
 | create_idempotent (new, token-2022) | 5496 | -- |
 | create_with_args_idempotent (new, token-2022) | 5295 | -10 |
 | create_idempotent (existing, spl-token) | 530 | -1 |
-| create_with_args_idempotent (existing, spl-token) | 548 | -44 |
+| create_with_args_idempotent (existing, spl-token) | 387 | -205 |
 | create_idempotent (existing, token-2022) | 1616 | -1 |
-| create_with_args_idempotent (existing, token-2022) | 1634 | -47 |
+| create_with_args_idempotent (existing, token-2022) | 387 | -1,294 |
 | create (prefunded, spl-token) | 3085 | -1 |
 | create_with_args (prefunded, spl-token) | 2831 | -11 |
 | create (prefunded, token-2022) | 5132 | -2 |

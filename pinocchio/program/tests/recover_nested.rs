@@ -270,6 +270,31 @@ fn fail_token_owned_non_multisig_must_sign() {
     );
 }
 
+#[test]
+fn fail_multisig_len_wallet_with_non_token_owner_must_sign() {
+    let owner_token_program_id = spl_token_interface::id();
+    let mut harness =
+        AtaTestHarness::new_with_ata_program(&owner_token_program_id, AtaProgram::Pinocchio);
+    let wallet = create_sized_wallet(&mut harness, Address::new_unique(), Multisig::LEN);
+    let setup = recover_nested_setup_for_wallet(
+        harness,
+        wallet,
+        owner_token_program_id,
+        owner_token_program_id,
+    );
+
+    let signer = Address::new_unique();
+    setup
+        .harness
+        .ensure_account_exists_with_lamports(signer, 1_000_000);
+    let recover_instruction = build_recover_instruction(&setup, &[&signer]);
+
+    setup.harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::MissingRequiredSignature)],
+    );
+}
+
 // =============== MULTISIG TESTS ===============
 
 fn create_multisig_wallet(
@@ -395,33 +420,6 @@ fn fail_missing_nested_token_program_account_with_signers() {
     );
 }
 
-#[test_case(spl_token_interface::id(), spl_token_2022_interface::id())]
-#[test_case(spl_token_2022_interface::id(), spl_token_interface::id())]
-fn fail_multisig_owned_by_other_token_program(
-    wallet_token_program_id: Address,
-    owner_token_program_id: Address,
-) {
-    let (setup, signers) = multisig_setup(
-        wallet_token_program_id,
-        owner_token_program_id,
-        owner_token_program_id,
-    );
-
-    let recover_instruction = build_recover_nested_instruction(
-        &setup.wallet,
-        &setup.owner_mint,
-        &setup.nested_mint,
-        &owner_token_program_id,
-        &owner_token_program_id,
-        &[&signers[0], &signers[1]],
-    );
-
-    setup.harness.ctx.process_and_validate_instruction(
-        &recover_instruction,
-        &[Check::err(ProgramError::MissingRequiredSignature)],
-    );
-}
-
 #[test_case(spl_token_interface::id())]
 #[test_case(spl_token_2022_interface::id())]
 fn fail_uninitialized_multisig_wallet(owner_token_program_id: Address) {
@@ -543,11 +541,16 @@ fn fail_invalid_multisig_signer_sets(case: InvalidMultisigSignerSet) {
 
 #[test_matrix(
     [spl_token_interface::id(), spl_token_2022_interface::id()],
+    [spl_token_interface::id(), spl_token_2022_interface::id()],
     [spl_token_interface::id(), spl_token_2022_interface::id()]
 )]
-fn success_multisig_wallet(owner_token_program_id: Address, nested_token_program_id: Address) {
+fn success_multisig_wallet(
+    wallet_token_program_id: Address,
+    owner_token_program_id: Address,
+    nested_token_program_id: Address,
+) {
     let (setup, signers) = multisig_setup(
-        owner_token_program_id,
+        wallet_token_program_id,
         owner_token_program_id,
         nested_token_program_id,
     );

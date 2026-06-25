@@ -103,7 +103,9 @@ pub(crate) fn process_recover_nested(
 
     // Multisig wallets are authorized by their configured signer accounts.
     // Other wallet accounts must sign directly.
-    if wallet.owned_by(owner_token_program.address()) && wallet.data_len() == Multisig::LEN {
+    if wallet.data_len() == Multisig::LEN
+        && (wallet.owned_by(&pinocchio_token::ID) || wallet.owned_by(&pinocchio_token_2022::ID))
+    {
         let wallet_signers = remaining.get(1..).unwrap_or_default();
         validate_multisig_wallet(wallet, wallet_signers)?;
     } else if !wallet.is_signer() {

@@ -53,6 +53,9 @@ pub(crate) fn process_create_associated_token_account(
                     }
                     // Validate expected address, using bump hint if provided
                     let derived_ata_addr = if let Some(bump) = bump_hint {
+                        // When a `bump` is provided, the address is derived directly without performing
+                        // an on-curve check, since the account already exists. An ATA cannot be created
+                        // with either a non-canonical bump or an on-curve address.
                         Address::derive_address(
                             &[
                                 wallet.address().as_array(),

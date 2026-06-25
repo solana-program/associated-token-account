@@ -7,11 +7,9 @@ use {
     },
     pinocchio_log::log,
     pinocchio_token_2022::{
-        instructions::{CloseAccount, TransferChecked},
-        state::{Account, Mint, StateWithExtensions},
+        instructions::{CloseAccount, MAX_MULTISIG_SIGNERS, TransferChecked},
+        state::{Account, Mint, Multisig, StateWithExtensions},
     },
-    solana_program_pack::Pack,
-    spl_token_2022_interface::{instruction::MAX_SIGNERS, state::Multisig},
 };
 
 /// Recovers tokens stuck in a "nested" ATA (one that was created by mistakenly using an ATA address
@@ -202,15 +200,19 @@ fn validate_multisig_wallet(
     signer_accounts: &[AccountView],
 ) -> ProgramResult {
     let wallet_data = wallet.try_borrow()?;
-    let multisig = Multisig::unpack(&wallet_data)?;
+    // SAFETY: Function called after wallet data length is confirmed to be
+    // `Multisig::LEN` and is owned by SPL Token or Token-2022.
+    let multisig = unsafe { Multisig::from_bytes_unchecked(&wallet_data) };
+    if !multisig.is_initialized() {
+        return Err(ProgramError::UninitializedAccount);
+    }
 
-    let mut num_signers: usize = 0;
-    let mut matched = [false; MAX_SIGNERS];
-    let signers = &multisig.signers[..usize::from(multisig.n)];
+    let mut num_signers: u8 = 0;
+    let mut matched = [false; MAX_MULTISIG_SIGNERS];
 
     // Count distinct configured signers that signed
     for signer_account in signer_accounts {
-        for (position, signer) in signers.iter().enumerate() {
+        for (position, signer) in multisig.signers().iter().enumerate() {
             // Match on address, skipping signers already credited
             if signer == signer_account.address() && !matched[position] {
                 // A matching account must have signed the transaction
@@ -226,7 +228,7 @@ fn validate_multisig_wallet(
     }
 
     // Reject unless the m-of-n threshold is met
-    if num_signers < usize::from(multisig.m) {
+    if num_signers < multisig.required_signers() {
         log!("Not enough multisig signers for wallet");
         return Err(ProgramError::MissingRequiredSignature);
     }

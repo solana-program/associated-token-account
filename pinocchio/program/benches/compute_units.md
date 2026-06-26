@@ -1,3 +1,32 @@
+#### 2026-06-25 16:04:39.216202 UTC
+
+Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)
+
+| Name | CUs | Delta |
+|------|------|-------|
+| create (spl-token) | 3085 | -1 |
+| create_with_args (spl-token) | 2831 | -11 |
+| create (token-2022) | 5132 | -2 |
+| create_with_args (token-2022) | 4925 | -11 |
+| create_idempotent (new, spl-token) | 4171 | -1 |
+| create_with_args_idempotent (new, spl-token) | 3925 | -10 |
+| create_idempotent (new, token-2022) | 5496 | -- |
+| create_with_args_idempotent (new, token-2022) | 5295 | -10 |
+| create_idempotent (existing, spl-token) | 530 | -1 |
+| create_with_args_idempotent (existing, spl-token) | 387 | -205 |
+| create_idempotent (existing, token-2022) | 1616 | -1 |
+| create_with_args_idempotent (existing, token-2022) | 387 | -1,294 |
+| create (prefunded, spl-token) | 3085 | -1 |
+| create_with_args (prefunded, spl-token) | 2831 | -11 |
+| create (prefunded, token-2022) | 5132 | -2 |
+| create_with_args (prefunded, token-2022) | 4925 | -11 |
+| create (token-2022 known mint) | 6674 | -2 |
+| create_with_args (token-2022 extended mint) | 5741 | -11 |
+| recover_nested (owner=spl-token, nested=spl-token) | 5148 | -1 |
+| recover_nested (owner=token-2022, nested=token-2022) | 7012 | -1 |
+| recover_nested (owner=spl-token, nested=token-2022) | 9568 | -1 |
+| recover_nested (owner=token-2022, nested=spl-token) | 5518 | -1 |
+
 #### 2026-06-23 17:03:10.291552 UTC
 
 Solana CLI Version: solana-cli 3.1.8 (src:2717084a; feat:1620780344, client:Agave)

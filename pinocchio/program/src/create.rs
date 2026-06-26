@@ -33,6 +33,56 @@ pub(crate) fn process_create_associated_token_account(
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
+    // For `CreateIdempotent`, if the ATA already exists and is valid, it's a no-op
+    if create_mode == CreateMode::Idempotent
+        // Preexisting ATA must already be owned by the requested token program
+        && associated_token_account.owned_by(token_program.address())
+    {
+        let ata_data = associated_token_account.try_borrow()?;
+        // Preexisting ATA must be parsable as a token account
+        if let Ok(token_account) = StateWithExtensions::<Account>::from_bytes(&ata_data) {
+            // Preexisting ATA cannot be in the uninitialized state
+            if let Ok(account_state) = token_account.base.state() {
+                if account_state != AccountState::Uninitialized {
+                    // Must match the wallet and mint supplied
+                    if token_account.base.owner() != wallet.address() {
+                        return Err(AssociatedTokenAccountError::InvalidOwner.into());
+                    }
+                    if token_account.base.mint() != mint.address() {
+                        return Err(ProgramError::InvalidAccountData);
+                    }
+                    // Validate expected address, using bump hint if provided
+                    let derived_ata_addr = if let Some(bump) = bump_hint {
+                        // When a `bump` is provided, the address is derived directly without performing
+                        // an on-curve check, since the account already exists. An ATA cannot be created
+                        // with either a non-canonical bump or an on-curve address.
+                        Address::derive_address(
+                            &[
+                                wallet.address().as_array(),
+                                token_program.address().as_array(),
+                                mint.address().as_array(),
+                            ],
+                            Some(bump),
+                            program_id,
+                        )
+                    } else {
+                        AssociatedTokenPda::derive_address(
+                            program_id,
+                            wallet.address(),
+                            token_program.address(),
+                            mint.address(),
+                        )
+                    };
+                    if derived_ata_addr != *associated_token_account.address() {
+                        return Err(ProgramError::InvalidSeeds);
+                    }
+                    // Confirmed `CreateIdempotent` no-op
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     let rent_sysvar = if accept_rent_sysvar {
         // `CreateWithArgs` accepts rent as an optional account
         remaining.first()
@@ -61,38 +111,6 @@ pub(crate) fn process_create_associated_token_account(
     };
     if derived_ata_addr != *associated_token_account.address() {
         return Err(ProgramError::InvalidSeeds);
-    }
-
-    // For `CreateIdempotent`, if the ATA already exists and is valid, it's a no-op
-    if create_mode == CreateMode::Idempotent
-        // Preexisting ATA must already be owned by the requested token program
-        && associated_token_account.owned_by(token_program.address())
-    {
-        let ata_data = associated_token_account.try_borrow()?;
-        // Preexisting ATA must be parsable as a token account
-        if let Ok(token_account) = StateWithExtensions::<Account>::from_bytes(&ata_data) {
-            // Preexisting ATA cannot be in the uninitialized state
-            if let Ok(account_state) = token_account.base.state() {
-                if account_state != AccountState::Uninitialized {
-                    // Now that ATA is confirmed, it must match the wallet and mint supplied
-                    if token_account.base.owner() != wallet.address() {
-                        return Err(AssociatedTokenAccountError::InvalidOwner.into());
-                    }
-                    if token_account.base.mint() != mint.address() {
-                        return Err(ProgramError::InvalidAccountData);
-                    }
-                    // `derive_address_with_bump_hint()` rejects higher off-curve bumps but
-                    // doesn't check whether the hinted bump itself is off-curve. Create paths
-                    // validate that through `invoke_signed()`, but this no-op path returns early,
-                    // so check it here.
-                    if bump_hint.is_some() && derived_ata_addr.is_on_curve() {
-                        return Err(ProgramError::InvalidSeeds);
-                    }
-                    // Confirmed `CreateIdempotent` no-op
-                    return Ok(());
-                }
-            }
-        }
     }
 
     if !associated_token_account.owned_by(&pinocchio_system::ID) {

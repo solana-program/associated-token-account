@@ -195,7 +195,6 @@ pub(crate) fn process_recover_nested(
 }
 
 #[inline(always)]
-#[allow(clippy::arithmetic_side_effects)]
 fn validate_multisig_wallet(
     wallet: &AccountView,
     signer_accounts: &[AccountView],
@@ -221,7 +220,7 @@ fn validate_multisig_wallet(
                     return Err(ProgramError::MissingRequiredSignature);
                 }
                 matched[position] = true;
-                num_signers += 1;
+                num_signers = num_signers.wrapping_add(1);
             }
         }
     }

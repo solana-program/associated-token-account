@@ -24,6 +24,11 @@ mod inline_spl_token {
 
 /// Derives the associated token account address for the given wallet address
 /// and token mint
+#[deprecated(
+    since = "2.1.0",
+    note = "Use `get_associated_token_address_with_program_id` instead. This function assumes the \
+            SPL Token program, which does not work for Token-2022 mints."
+)]
 pub fn get_associated_token_address(
     wallet_address: &Pubkey,
     token_mint_address: &Pubkey,

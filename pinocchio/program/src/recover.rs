@@ -7,8 +7,8 @@ use {
     },
     pinocchio_log::log,
     pinocchio_token_2022::{
-        instructions::{CloseAccount, TransferChecked},
-        state::{Account, Mint, StateWithExtensions},
+        instructions::{CloseAccount, MAX_MULTISIG_SIGNERS, TransferChecked},
+        state::{Account, Mint, Multisig, StateWithExtensions},
     },
 };
 
@@ -99,8 +99,14 @@ pub(crate) fn process_recover_nested(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // Only the wallet holder can trigger recovery
-    if !wallet.is_signer() {
+    // Multisig wallets are authorized by their configured signer accounts.
+    // Other wallet accounts must sign directly.
+    if wallet.data_len() == Multisig::LEN
+        && (wallet.owned_by(&pinocchio_token::ID) || wallet.owned_by(&pinocchio_token_2022::ID))
+    {
+        let wallet_signers = remaining.get(1..).unwrap_or_default();
+        validate_multisig_wallet(wallet, wallet_signers)?;
+    } else if !wallet.is_signer() {
         log!("Wallet of the owner associated token account must sign");
         return Err(ProgramError::MissingRequiredSignature);
     }
@@ -186,4 +192,44 @@ pub(crate) fn process_recover_nested(
         token_program: nested_token_program.address(),
     }
     .invoke_signed(&[Signer::from(&seeds)])
+}
+
+#[inline(always)]
+fn validate_multisig_wallet(
+    wallet: &AccountView,
+    signer_accounts: &[AccountView],
+) -> ProgramResult {
+    let wallet_data = wallet.try_borrow()?;
+    // SAFETY: Function called after wallet data length is confirmed to be
+    // `Multisig::LEN` and is owned by SPL Token or Token-2022.
+    let multisig = unsafe { Multisig::from_bytes_unchecked(&wallet_data) };
+    if !multisig.is_initialized() {
+        return Err(ProgramError::UninitializedAccount);
+    }
+
+    let mut num_signers: u8 = 0;
+    let mut matched = [false; MAX_MULTISIG_SIGNERS];
+
+    // Count distinct configured signers that signed
+    for signer_account in signer_accounts {
+        for (position, signer) in multisig.signers().iter().enumerate() {
+            // Match on address, skipping signers already credited
+            if signer == signer_account.address() && !matched[position] {
+                // A matching account must have signed the transaction
+                if !signer_account.is_signer() {
+                    return Err(ProgramError::MissingRequiredSignature);
+                }
+                matched[position] = true;
+                num_signers = num_signers.wrapping_add(1);
+            }
+        }
+    }
+
+    // Reject unless the m-of-n threshold is met
+    if num_signers < multisig.required_signers() {
+        log!("Not enough multisig signers for wallet");
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    Ok(())
 }

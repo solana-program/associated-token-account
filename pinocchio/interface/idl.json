@@ -237,9 +237,9 @@
             "kind": "instructionAccountNode",
             "name": "wallet",
             "isWritable": true,
-            "isSigner": true,
+            "isSigner": "either",
             "docs": [
-              "Wallet address for the owner associated token account"
+              "Wallet address for the owner associated token account. If multisig, not a signer."
             ]
           },
           {
@@ -258,7 +258,7 @@
             "isSigner": false,
             "isOptional": true,
             "docs": [
-              "Optional token program for the nested mint, if different from the owner mint's token program"
+              "Optional token program for the nested mint, if different from the owner mint's token program. Required when the wallet is a multisig."
             ]
           }
         ],

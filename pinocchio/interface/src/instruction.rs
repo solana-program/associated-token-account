@@ -91,6 +91,9 @@ pub enum AssociatedTokenAccountInstruction {
     /// created unintentionally, so this instruction should only be used to
     /// recover from errors.
     ///
+    /// Accounts expected by this instruction:
+    ///
+    ///   * Single owner
     ///   0. `[writeable]` Nested associated token account, must be owned by `3`
     ///   1. `[]` Token mint for the nested associated token account
     ///   2. `[writeable]` Wallet's associated token account
@@ -101,6 +104,19 @@ pub enum AssociatedTokenAccountInstruction {
     ///   6. `[]` Token program for the owner mint
     ///   7. `[]` Optional token program for the nested mint, if different from
     ///      the owner mint's token program
+    ///
+    ///   * Multisignature owner
+    ///   0. `[writeable]` Nested associated token account, must be owned by `3`
+    ///   1. `[]` Token mint for the nested associated token account
+    ///   2. `[writeable]` Wallet's associated token account
+    ///   3. `[]` Owner associated token account address, must be owned by `5`
+    ///   4. `[]` Token mint for the owner associated token account
+    ///   5. `[writeable]` Multisignature wallet address for the owner associated
+    ///      token account
+    ///   6. `[]` Token program for the owner mint
+    ///   7. `[]` Token program for the nested mint
+    ///   8. `..+M` `[signer]` M multisig signer accounts that authorize the
+    ///      wallet
     #[cfg_attr(
         feature = "codama",
         codama(optional_account_strategy = omitted),
@@ -129,9 +145,9 @@ pub enum AssociatedTokenAccountInstruction {
         )),
         codama(account(
             name = "wallet",
-            signer,
+            signer = "either",
             writable,
-            docs = "Wallet address for the owner associated token account"
+            docs = "Wallet address for the owner associated token account. If multisig, not a signer."
         )),
         codama(account(
             name = "owner_token_program",
@@ -141,7 +157,7 @@ pub enum AssociatedTokenAccountInstruction {
             name = "nested_token_program",
             optional,
             docs = "Optional token program for the nested mint, if different from the owner \
-                    mint's token program"
+                    mint's token program. Required when the wallet is a multisig."
         ))
     )]
     RecoverNested,

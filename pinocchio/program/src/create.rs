@@ -156,7 +156,8 @@ pub(crate) fn process_create_associated_token_account(
             token_program.address(),
             associated_token_account,
             mint,
-            wallet.address(),
+            wallet,
+            rent_sysvar,
         )
     } else if let Some(rent) = rent_sysvar {
         // If rent account was supplied, save CUs by passing it into plain `InitializeAccount`.

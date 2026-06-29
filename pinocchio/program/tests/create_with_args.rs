@@ -4,6 +4,7 @@ use {
     common::expected_bump,
     mollusk_svm_result::Check,
     pinocchio_associated_token_account_interface::instruction::CreateMode,
+    pinocchio_token::instructions::{Batch, InitializeAccount, InitializeImmutableOwner},
     solana_address::Address,
     solana_instruction::AccountMeta,
     solana_program_error::ProgramError,
@@ -31,6 +32,16 @@ fn expected_rent_exempt_balance(token_program_id: &Address) -> u64 {
         token_account_rent_exempt_balance()
     }
 }
+
+const TOKEN_2022_RENT_INIT_BATCH_DATA: &[u8] = &[
+    Batch::DISCRIMINATOR,
+    InitializeImmutableOwner::ACCOUNTS_LEN as u8,
+    InitializeImmutableOwner::DATA_LEN as u8,
+    InitializeImmutableOwner::DISCRIMINATOR,
+    InitializeAccount::ACCOUNTS_LEN as u8,
+    InitializeAccount::DATA_LEN as u8,
+    InitializeAccount::DISCRIMINATOR,
+];
 
 #[test_matrix([spl_token_interface::id(), spl_token_2022_interface::id()])]
 fn create_with_args_idempotent_accepts_existing_ata(token_program_id: Address) {
@@ -140,7 +151,7 @@ fn create_with_args_accepts_optional_inputs(
         });
     let ata_address = harness.ata_address.unwrap();
 
-    harness.ctx.process_and_validate_instruction(
+    let result = harness.ctx.process_and_validate_instruction(
         &instruction,
         &[
             Check::success(),
@@ -151,6 +162,12 @@ fn create_with_args_accepts_optional_inputs(
                 .build(),
         ],
     );
+
+    if token_program_id == spl_token_2022_interface::id() && rent_sysvar {
+        assert!(result.inner_instructions.iter().any(|inner_instruction| {
+            inner_instruction.instruction.data.as_slice() == TOKEN_2022_RENT_INIT_BATCH_DATA
+        }));
+    }
 }
 
 #[test_matrix(

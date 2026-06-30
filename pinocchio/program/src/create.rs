@@ -1,10 +1,15 @@
 use {
-    crate::{batch::batch_init_and_lock_owner, size::get_token_2022_account_data_size},
-    pinocchio::{
-        AccountView, Address, ProgramResult, cpi::Signer, error::ProgramError, instruction::seeds,
+    crate::{
+        batch::batch_init_and_lock_owner,
+        cold_error::{
+            illegal_owner, incorrect_program_id, invalid_account_data, invalid_owner,
+            invalid_seeds, not_enough_account_keys,
+        },
+        size::get_token_2022_account_data_size,
     },
+    pinocchio::{AccountView, Address, ProgramResult, cpi::Signer, instruction::seeds},
     pinocchio_associated_token_account_interface::{
-        error::AssociatedTokenAccountError, instruction::CreateMode, pda::AssociatedTokenPda,
+        instruction::CreateMode, pda::AssociatedTokenPda,
     },
     pinocchio_system::instructions::CreateAccountAllowPrefund,
     pinocchio_token::instructions::{InitializeAccount, InitializeAccount3},
@@ -30,7 +35,7 @@ pub(crate) fn process_create_associated_token_account(
         remaining @ ..,
     ] = accounts
     else {
-        return Err(ProgramError::NotEnoughAccountKeys);
+        return Err(not_enough_account_keys());
     };
 
     // For `CreateIdempotent`, if the ATA already exists and is valid, it's a no-op
@@ -46,10 +51,10 @@ pub(crate) fn process_create_associated_token_account(
                 if account_state != AccountState::Uninitialized {
                     // Must match the wallet and mint supplied
                     if token_account.base.owner() != wallet.address() {
-                        return Err(AssociatedTokenAccountError::InvalidOwner.into());
+                        return Err(invalid_owner());
                     }
                     if token_account.base.mint() != mint.address() {
-                        return Err(ProgramError::InvalidAccountData);
+                        return Err(invalid_account_data());
                     }
                     // Validate expected address, using bump hint if provided
                     let derived_ata_addr = if let Some(bump) = bump_hint {
@@ -74,7 +79,7 @@ pub(crate) fn process_create_associated_token_account(
                         )
                     };
                     if derived_ata_addr != *associated_token_account.address() {
-                        return Err(ProgramError::InvalidSeeds);
+                        return Err(invalid_seeds());
                     }
                     // Confirmed `CreateIdempotent` no-op
                     return Ok(());
@@ -110,11 +115,11 @@ pub(crate) fn process_create_associated_token_account(
         ),
     };
     if derived_ata_addr != *associated_token_account.address() {
-        return Err(ProgramError::InvalidSeeds);
+        return Err(invalid_seeds());
     }
 
     if !associated_token_account.owned_by(&pinocchio_system::ID) {
-        return Err(ProgramError::IllegalOwner);
+        return Err(illegal_owner());
     }
 
     let is_spl_token = *token_program.address() == pinocchio_token::ID;
@@ -129,7 +134,7 @@ pub(crate) fn process_create_associated_token_account(
             get_token_2022_account_data_size(mint, token_program)?
         }
     } else {
-        return Err(ProgramError::IncorrectProgramId);
+        return Err(incorrect_program_id());
     };
 
     // Create the PDA (handles pre-funded accounts)

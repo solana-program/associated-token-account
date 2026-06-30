@@ -13,6 +13,7 @@ pub mod tools;
     note = "Use `spl_associated_token_account_interface::address` instead and remove \
             `spl_associated_token_account` as a dependency"
 )]
+#[allow(deprecated)]
 pub use spl_associated_token_account_interface::address::{
     get_associated_token_address, get_associated_token_address_with_program_id,
 };
@@ -39,6 +40,7 @@ use {
     since = "1.0.5",
     note = "please use `instruction::create_associated_token_account` instead"
 )]
+#[allow(deprecated)]
 pub fn create_associated_token_account(
     funding_address: &Pubkey,
     wallet_address: &Pubkey,

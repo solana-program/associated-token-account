@@ -81,11 +81,16 @@ impl AssociatedTokenPda {
                 let higher_bump_addr =
                     Address::derive_address(&seeds, Some(higher_bump), program_id);
                 if !higher_bump_addr.is_on_curve() {
-                    return Err(ProgramError::InvalidSeeds);
+                    return Err(invalid_seeds());
                 }
             }
         }
 
         Ok(Address::derive_address(&seeds, Some(bump), program_id))
     }
+}
+
+#[cold]
+fn invalid_seeds() -> ProgramError {
+    ProgramError::InvalidSeeds
 }

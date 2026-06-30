@@ -1,6 +1,6 @@
 use {
     crate::{create::process_create_associated_token_account, recover::process_recover_nested},
-    pinocchio::{AccountView, Address, ProgramResult},
+    pinocchio::{AccountView, Address, ProgramResult, error::ProgramError},
     pinocchio_associated_token_account_interface::instruction::{
         AssociatedTokenAccountInstruction, CreateMode,
     },
@@ -12,7 +12,10 @@ pub fn process_instruction(
     accounts: &mut [AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    match AssociatedTokenAccountInstruction::try_from_bytes(instruction_data)? {
+    let instruction = AssociatedTokenAccountInstruction::try_from_bytes(instruction_data)
+        .map_err(instruction_error)?;
+
+    match instruction {
         AssociatedTokenAccountInstruction::Create => process_create_associated_token_account(
             program_id,
             accounts,
@@ -47,4 +50,9 @@ pub fn process_instruction(
             process_recover_nested(program_id, accounts)
         }
     }
+}
+
+#[cold]
+fn instruction_error(error: ProgramError) -> ProgramError {
+    error
 }

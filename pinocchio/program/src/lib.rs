@@ -5,6 +5,7 @@
 #![no_std]
 
 mod batch;
+mod cold_error;
 mod create;
 mod entrypoint;
 mod processor;

@@ -20,7 +20,7 @@ solana-msg = "3.1"
 solana-program-entrypoint = "3.1"
 solana-program-error = "3.0"
 solana-pubkey = { version = "4.1", default-features = false }
-solana-rent = "3.1"
+solana-rent = "4.2"
 solana-sdk-ids = "3.1"
 solana-system-interface = { version = "3.1", features = ["bincode"] }
 solana-sysvar = "3.1"

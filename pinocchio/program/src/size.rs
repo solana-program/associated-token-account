@@ -1,6 +1,9 @@
 use {
+    crate::cold_error::{
+        invalid_account_size_return_data_len, no_account_size_return_data,
+        unexpected_return_data_program,
+    },
     pinocchio::{AccountView, cpi::get_return_data, error::ProgramError},
-    pinocchio_log::log,
     pinocchio_token_2022::{
         instructions::GetAccountDataSize,
         state::{Account, ExtensionType, Mint},
@@ -62,23 +65,16 @@ fn get_account_data_size_cpi(
     .invoke()?;
 
     get_return_data()
-        .ok_or_else(|| {
-            log!("Error: token program returned no account size data");
-            ProgramError::InvalidInstructionData
-        })
+        .ok_or_else(no_account_size_return_data)
         .and_then(|return_data| {
             if return_data.program_id() != token_program_address {
-                log!("Error: return data came from unexpected program");
-                return Err(ProgramError::IncorrectProgramId);
+                return Err(unexpected_return_data_program());
             }
 
             let bytes = return_data.as_slice();
-            bytes.try_into().map(u64::from_le_bytes).map_err(|_| {
-                log!(
-                    "Error: invalid account size return data length: {}",
-                    bytes.len()
-                );
-                ProgramError::InvalidInstructionData
-            })
+            bytes
+                .try_into()
+                .map(u64::from_le_bytes)
+                .map_err(|_| invalid_account_size_return_data_len(bytes.len()))
         })
 }

@@ -1,11 +1,13 @@
 use {
-    pinocchio::{
-        AccountView, Address, ProgramResult, cpi::Signer, error::ProgramError, instruction::seeds,
+    crate::cold_error::{
+        destination_associated_address_mismatch, missing_required_signature,
+        nested_associated_address_mismatch, nested_ata_illegal_owner, nested_ata_invalid_owner,
+        nested_mint_illegal_owner, not_enough_account_keys, not_enough_multisig_signers,
+        owner_associated_address_mismatch, owner_ata_illegal_owner, owner_ata_invalid_owner,
+        owner_mint_illegal_owner, uninitialized_account, wallet_missing_required_signature,
     },
-    pinocchio_associated_token_account_interface::{
-        error::AssociatedTokenAccountError, pda::AssociatedTokenPda,
-    },
-    pinocchio_log::log,
+    pinocchio::{AccountView, Address, ProgramResult, cpi::Signer, instruction::seeds},
+    pinocchio_associated_token_account_interface::pda::AssociatedTokenPda,
     pinocchio_token_2022::{
         instructions::{CloseAccount, MAX_MULTISIG_SIGNERS, TransferChecked},
         state::{Account, Mint, Multisig, StateWithExtensions},
@@ -56,7 +58,7 @@ pub(crate) fn process_recover_nested(
         remaining @ ..,
     ] = accounts
     else {
-        return Err(ProgramError::NotEnoughAccountKeys);
+        return Err(not_enough_account_keys());
     };
 
     // Optional to specify nested token program if different from owner one
@@ -70,8 +72,7 @@ pub(crate) fn process_recover_nested(
         owner_token_mint.address(),
     );
     if derived_owner_ata != *owner_ata.address() {
-        log!("Error: Owner associated address does not match seed derivation");
-        return Err(ProgramError::InvalidSeeds);
+        return Err(owner_associated_address_mismatch());
     }
 
     // `nested_ata` must be derived from owner_ata as the "wallet".
@@ -83,8 +84,7 @@ pub(crate) fn process_recover_nested(
         nested_token_mint.address(),
     );
     if derived_nested_ata != *nested_ata.address() {
-        log!("Error: Nested associated address does not match seed derivation");
-        return Err(ProgramError::InvalidSeeds);
+        return Err(nested_associated_address_mismatch());
     }
 
     // `destination_ata` must be the wallet's correct ATA for the nested mint
@@ -95,8 +95,7 @@ pub(crate) fn process_recover_nested(
         nested_token_mint.address(),
     );
     if derived_destination_ata != *destination_ata.address() {
-        log!("Error: Destination associated address does not match seed derivation");
-        return Err(ProgramError::InvalidSeeds);
+        return Err(destination_associated_address_mismatch());
     }
 
     // Multisig wallets are authorized by their configured signer accounts.
@@ -107,24 +106,18 @@ pub(crate) fn process_recover_nested(
         let wallet_signers = remaining.get(1..).unwrap_or_default();
         validate_multisig_wallet(wallet, wallet_signers)?;
     } else if !wallet.is_signer() {
-        log!("Wallet of the owner associated token account must sign");
-        return Err(ProgramError::MissingRequiredSignature);
+        return Err(wallet_missing_required_signature());
     }
 
     // The owner mint must belong to the token program we will CPI into
     if !owner_token_mint.owned_by(owner_token_program.address()) {
-        log!("Owner mint not owned by provided token program");
-        return Err(ProgramError::IllegalOwner);
+        return Err(owner_mint_illegal_owner());
     }
 
     // The owner ATA must also belong to that token program so it can sign as
     // the nested account authority during the recovery CPIs
     if !owner_ata.owned_by(owner_token_program.address()) {
-        log!(
-            "Owner associated token account not owned by provided token program, recreate the \
-             owner associated token account first"
-        );
-        return Err(ProgramError::IllegalOwner);
+        return Err(owner_ata_illegal_owner());
     }
 
     let owner_account_data = owner_ata.try_borrow()?;
@@ -132,15 +125,13 @@ pub(crate) fn process_recover_nested(
 
     // The wallet must actually control this ATA
     if owner_account.base.owner() != wallet.address() {
-        log!("Owner associated token account not owned by provided wallet");
-        return Err(AssociatedTokenAccountError::InvalidOwner.into());
+        return Err(owner_ata_invalid_owner());
     }
     drop(owner_account_data);
 
     // The nested ATA must belong to the same token program so its balance can be transferred
     if !nested_ata.owned_by(nested_token_program.address()) {
-        log!("Nested associated token account not owned by provided token program");
-        return Err(ProgramError::IllegalOwner);
+        return Err(nested_ata_illegal_owner());
     }
 
     let nested_account_data = nested_ata.try_borrow()?;
@@ -148,14 +139,12 @@ pub(crate) fn process_recover_nested(
 
     // Confirming this is genuinely a nested ATA, not an arbitrary token account
     if nested_account.base.owner() != owner_ata.address() {
-        log!("Nested associated token account not owned by provided associated token account");
-        return Err(AssociatedTokenAccountError::InvalidOwner.into());
+        return Err(nested_ata_invalid_owner());
     }
 
     // The nested mint must match the token program
     if !nested_token_mint.owned_by(nested_token_program.address()) {
-        log!("Nested mint account not owned by provided token program");
-        return Err(ProgramError::IllegalOwner);
+        return Err(nested_mint_illegal_owner());
     }
 
     let nested_mint_data = nested_token_mint.try_borrow()?;
@@ -194,7 +183,7 @@ pub(crate) fn process_recover_nested(
     .invoke_signed(&[Signer::from(&seeds)])
 }
 
-#[inline(always)]
+#[cold]
 fn validate_multisig_wallet(
     wallet: &AccountView,
     signer_accounts: &[AccountView],
@@ -204,7 +193,7 @@ fn validate_multisig_wallet(
     // `Multisig::LEN` and is owned by SPL Token or Token-2022.
     let multisig = unsafe { Multisig::from_bytes_unchecked(&wallet_data) };
     if !multisig.is_initialized() {
-        return Err(ProgramError::UninitializedAccount);
+        return Err(uninitialized_account());
     }
 
     let mut num_signers: u8 = 0;
@@ -217,7 +206,7 @@ fn validate_multisig_wallet(
             if signer == signer_account.address() && !matched[position] {
                 // A matching account must have signed the transaction
                 if !signer_account.is_signer() {
-                    return Err(ProgramError::MissingRequiredSignature);
+                    return Err(missing_required_signature());
                 }
                 matched[position] = true;
                 num_signers = num_signers.wrapping_add(1);
@@ -227,8 +216,7 @@ fn validate_multisig_wallet(
 
     // Reject unless the m-of-n threshold is met
     if num_signers < multisig.required_signers() {
-        log!("Not enough multisig signers for wallet");
-        return Err(ProgramError::MissingRequiredSignature);
+        return Err(not_enough_multisig_signers());
     }
 
     Ok(())

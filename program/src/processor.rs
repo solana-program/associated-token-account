@@ -5,12 +5,12 @@ use {
     borsh::BorshDeserialize,
     solana_account_info::{AccountInfo, next_account_info},
     solana_cpi::{invoke, invoke_signed},
+    solana_get_sysvar::GetSysvar,
     solana_msg::msg,
     solana_program_error::{ProgramError, ProgramResult},
     solana_pubkey::Pubkey,
     solana_rent::Rent,
     solana_system_interface::program as system_program,
-    solana_sysvar::Sysvar,
     spl_associated_token_account_interface::{
         address::get_associated_token_address_and_bump_seed_internal,
         error::AssociatedTokenAccountError, instruction::AssociatedTokenAccountInstruction,

@@ -43,7 +43,7 @@ fn create_accepts_legacy_implicit_instruction(token_program_id: Pubkey) {
             instruction.data = vec![];
             instruction
                 .accounts
-                .push(AccountMeta::new_readonly(solana_sysvar::rent::id(), false));
+                .push(AccountMeta::new_readonly(solana_rent::sysvar::id(), false));
         },
     );
 }

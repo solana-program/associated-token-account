@@ -5,9 +5,9 @@
 #![no_std]
 
 mod batch;
-mod cold_error;
 mod create;
 mod entrypoint;
+mod error;
 mod processor;
 mod recover;
 mod size;

@@ -1,5 +1,5 @@
 use {
-    crate::cold_error::{
+    crate::error::{
         invalid_account_size_return_data_len, no_account_size_return_data,
         unexpected_return_data_program,
     },

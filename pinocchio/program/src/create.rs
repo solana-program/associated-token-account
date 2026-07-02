@@ -1,7 +1,7 @@
 use {
     crate::{
         batch::batch_init_and_lock_owner,
-        cold_error::{
+        error::{
             illegal_owner, incorrect_program_id, invalid_account_data, invalid_owner,
             invalid_seeds, not_enough_account_keys,
         },

@@ -1,5 +1,5 @@
 use {
-    crate::cold_error::{
+    crate::error::{
         destination_associated_address_mismatch, missing_required_signature,
         nested_associated_address_mismatch, nested_ata_illegal_owner, nested_ata_invalid_owner,
         nested_mint_illegal_owner, not_enough_account_keys, not_enough_multisig_signers,

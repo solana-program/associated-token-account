@@ -1816,7 +1816,7 @@ dependencies = [
 [[package]]
 name = "pinocchio"
 version = "0.11.2"
-source = "git+https://github.com/anza-xyz/pinocchio?rev=4992a8be006c899d125bd2cd5f9eaab6ef6a2884#4992a8be006c899d125bd2cd5f9eaab6ef6a2884"
+source = "git+https://github.com/febo/pinocchio-fork.git?branch=generic-token2022#346d0c6d65c17ae9f8abea959e864e5c56ef5835"
 dependencies = [
  "solana-account-view",
  "solana-address 2.6.1",
@@ -1850,7 +1850,7 @@ dependencies = [
  "pinocchio-associated-token-account-interface",
  "pinocchio-log",
  "pinocchio-system",
- "pinocchio-token",
+ "pinocchio-token 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pinocchio-token-2022",
  "solana-account",
  "solana-address 2.6.1",
@@ -1911,10 +1911,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "pinocchio-token"
+version = "0.6.0"
+source = "git+https://github.com/febo/pinocchio-fork.git?branch=generic-token2022#346d0c6d65c17ae9f8abea959e864e5c56ef5835"
+dependencies = [
+ "solana-account-view",
+ "solana-address 2.6.1",
+ "solana-instruction-view",
+ "solana-program-error",
+]
+
+[[package]]
 name = "pinocchio-token-2022"
 version = "0.3.1"
-source = "git+https://github.com/anza-xyz/pinocchio?rev=4992a8be006c899d125bd2cd5f9eaab6ef6a2884#4992a8be006c899d125bd2cd5f9eaab6ef6a2884"
+source = "git+https://github.com/febo/pinocchio-fork.git?branch=generic-token2022#346d0c6d65c17ae9f8abea959e864e5c56ef5835"
 dependencies = [
+ "pinocchio-token 0.6.0 (git+https://github.com/febo/pinocchio-fork.git?branch=generic-token2022)",
  "solana-account-view",
  "solana-address 2.6.1",
  "solana-instruction-view",

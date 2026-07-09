@@ -1,35 +1,16 @@
 use {
-    core::{mem::MaybeUninit, slice::from_raw_parts},
+    core::mem::MaybeUninit,
     pinocchio::{
         AccountView, Address, ProgramResult,
-        cpi::{CpiAccount, invoke_unchecked},
-        instruction::{InstructionAccount, InstructionView},
+        cpi::{CpiAccount, Signer},
+        instruction::InstructionAccount,
     },
-    pinocchio_token::instructions::{
-        Batch, InitializeAccount, InitializeAccount3, InitializeImmutableOwner, IntoBatch,
+    pinocchio_token_2022::instructions::{
+        Batch, CloseAccount, InitializeAccount, InitializeAccount3, InitializeImmutableOwner,
+        IntoBatch, TransferChecked,
     },
 };
 
-struct BatchLens {
-    data: usize,
-    accounts: usize,
-}
-
-const INIT_WITH_ACCOUNT: BatchLens = BatchLens {
-    data: Batch::header_data_len(2)
-        + InitializeImmutableOwner::DATA_LEN
-        + InitializeAccount::DATA_LEN,
-    accounts: InitializeImmutableOwner::ACCOUNTS_LEN + InitializeAccount::ACCOUNTS_LEN,
-};
-const INIT_WITH_ACCOUNT3: BatchLens = BatchLens {
-    data: Batch::header_data_len(2)
-        + InitializeImmutableOwner::DATA_LEN
-        + InitializeAccount3::DATA_LEN,
-    accounts: InitializeImmutableOwner::ACCOUNTS_LEN + InitializeAccount3::ACCOUNTS_LEN,
-};
-// TODO: `pinocchio-token` v0.6 provides a Batch builder but its `invoke()` method hardcodes
-//       SPL Token's program ID. `pinocchio-token-2022` does not yet offer its own batch builder.
-//       Once it does, this can be replaced.
 #[inline(always)]
 pub(crate) fn batch_init_and_lock_owner(
     token_program: &Address,
@@ -38,40 +19,78 @@ pub(crate) fn batch_init_and_lock_owner(
     owner: &AccountView,
     rent_sysvar: Option<&AccountView>,
 ) -> ProgramResult {
-    // `InitializeAccount3` has the larger data payload, `InitializeAccount` has
-    // the larger account list because it includes the rent sysvar.
-    let mut data = [const { MaybeUninit::<u8>::uninit() }; INIT_WITH_ACCOUNT3.data];
+    /// `InitializeAccount` requires more accounts than `InitializeAccount3`,
+    /// so the maximum is based on the former.
+    const MAX_ACCOUNTS_LEN: usize =
+        InitializeImmutableOwner::ACCOUNTS_LEN + InitializeAccount::ACCOUNTS_LEN;
+
+    /// `InitializeAccount3` requires more instruction data than `InitializeAccount`,
+    /// so the maximum is based on the former.
+    const MAX_DATA_LEN: usize = Batch::header_data_len(2)
+        + InitializeImmutableOwner::DATA_LEN
+        + InitializeAccount3::DATA_LEN;
+
+    let mut data = [const { MaybeUninit::<u8>::uninit() }; MAX_DATA_LEN];
     let mut instruction_accounts =
-        [const { MaybeUninit::<InstructionAccount>::uninit() }; INIT_WITH_ACCOUNT.accounts];
-    let mut cpi_accounts =
-        [const { MaybeUninit::<CpiAccount>::uninit() }; INIT_WITH_ACCOUNT.accounts];
+        [const { MaybeUninit::<InstructionAccount>::uninit() }; MAX_ACCOUNTS_LEN];
+    let mut cpi_accounts = [const { MaybeUninit::<CpiAccount>::uninit() }; MAX_ACCOUNTS_LEN];
 
     // Serialize both sub-instructions into the buffers
     let mut batch = Batch::new(&mut data, &mut instruction_accounts, &mut cpi_accounts)?;
+
     InitializeImmutableOwner::new(account).into_batch(&mut batch)?;
-    let lens = match rent_sysvar {
+
+    match rent_sysvar {
         Some(rent_sysvar) => {
             InitializeAccount::new(account, mint, owner, rent_sysvar).into_batch(&mut batch)?;
-            INIT_WITH_ACCOUNT
         }
         None => {
             InitializeAccount3::new(account, mint, owner.address()).into_batch(&mut batch)?;
-            INIT_WITH_ACCOUNT3
         }
     };
 
-    // Mirrors `Batch::invoke_signed()` but with a supplied program id:
-    // https://github.com/anza-xyz/pinocchio/blob/pinocchio-token%40v0.6.0/programs/token/src/instructions/batch.rs#L92-L105
-    unsafe {
-        invoke_unchecked(
-            &InstructionView {
-                program_id: token_program,
-                accounts: from_raw_parts(instruction_accounts.as_ptr() as _, lens.accounts),
-                data: from_raw_parts(data.as_ptr() as _, lens.data),
-            },
-            from_raw_parts(cpi_accounts.as_ptr().cast(), lens.accounts),
-        );
-    }
+    batch.invoke_with_unverified_program(token_program)
+}
 
-    Ok(())
+// This cannot be inlined because it makes the call site stack frame too large.
+pub(crate) fn batch_transfer_and_close(
+    token_program: &Address,
+    nested_ata: &AccountView,
+    nested_token_mint: &AccountView,
+    destination_ata: &AccountView,
+    owner_ata: &AccountView,
+    wallet: &AccountView,
+    amount: u64,
+    decimals: u8,
+    signer: &[Signer],
+) -> ProgramResult {
+    const MAX_ACCOUNTS_LEN: usize =
+        TransferChecked::MAX_ACCOUNTS_LEN + CloseAccount::MAX_ACCOUNTS_LEN;
+
+    const DATA_LEN: usize =
+        Batch::header_data_len(2) + TransferChecked::DATA_LEN + CloseAccount::DATA_LEN;
+
+    let mut data = [const { MaybeUninit::<u8>::uninit() }; DATA_LEN];
+    let mut instruction_accounts =
+        [const { MaybeUninit::<InstructionAccount>::uninit() }; MAX_ACCOUNTS_LEN];
+    let mut cpi_accounts = [const { MaybeUninit::<CpiAccount>::uninit() }; MAX_ACCOUNTS_LEN];
+
+    // Serialize both sub-instructions into the buffers
+    let mut batch = Batch::new(&mut data, &mut instruction_accounts, &mut cpi_accounts)?;
+
+    // Move all tokens from the nested ATA to the wallet's correct ATA
+    TransferChecked::new(
+        nested_ata,
+        nested_token_mint,
+        destination_ata,
+        owner_ata,
+        amount,
+        decimals,
+    )
+    .into_batch(&mut batch)?;
+
+    // Close the now-empty nested ATA and return its rent lamports to the wallet
+    CloseAccount::new(nested_ata, wallet, owner_ata).into_batch(&mut batch)?;
+
+    batch.invoke_signed_with_unverified_program(signer, token_program)
 }

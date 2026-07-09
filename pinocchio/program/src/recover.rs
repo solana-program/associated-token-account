@@ -1,15 +1,18 @@
 use {
-    crate::error::{
-        destination_associated_address_mismatch, missing_required_signature,
-        nested_associated_address_mismatch, nested_ata_illegal_owner, nested_ata_invalid_owner,
-        nested_mint_illegal_owner, not_enough_account_keys, not_enough_multisig_signers,
-        owner_associated_address_mismatch, owner_ata_illegal_owner, owner_ata_invalid_owner,
-        owner_mint_illegal_owner, uninitialized_account, wallet_missing_required_signature,
+    crate::{
+        batch::batch_transfer_and_close,
+        error::{
+            destination_associated_address_mismatch, missing_required_signature,
+            nested_associated_address_mismatch, nested_ata_illegal_owner, nested_ata_invalid_owner,
+            nested_mint_illegal_owner, not_enough_account_keys, not_enough_multisig_signers,
+            owner_associated_address_mismatch, owner_ata_illegal_owner, owner_ata_invalid_owner,
+            owner_mint_illegal_owner, uninitialized_account, wallet_missing_required_signature,
+        },
     },
     pinocchio::{AccountView, Address, ProgramResult, cpi::Signer, instruction::seeds},
     pinocchio_associated_token_account_interface::pda::AssociatedTokenPda,
     pinocchio_token_2022::{
-        instructions::{CloseAccount, MAX_MULTISIG_SIGNERS, TransferChecked},
+        instructions::MAX_MULTISIG_SIGNERS,
         state::{Account, Mint, Multisig, StateWithExtensions},
     },
 };
@@ -161,26 +164,17 @@ pub(crate) fn process_recover_nested(
         bump_ref
     );
 
-    // Move all tokens from the nested ATA to the wallet's correct ATA
-    TransferChecked {
-        from: nested_ata,
-        mint: nested_token_mint,
-        to: destination_ata,
-        authority: owner_ata,
+    batch_transfer_and_close(
+        nested_token_program.address(),
+        nested_ata,
+        nested_token_mint,
+        destination_ata,
+        owner_ata,
+        wallet,
         amount,
         decimals,
-        token_program: nested_token_program.address(),
-    }
-    .invoke_signed(&[Signer::from(&seeds)])?;
-
-    // Close the now-empty nested ATA and return its rent lamports to the wallet
-    CloseAccount {
-        account: nested_ata,
-        destination: wallet,
-        authority: owner_ata,
-        token_program: nested_token_program.address(),
-    }
-    .invoke_signed(&[Signer::from(&seeds)])
+        &[Signer::from(&seeds)],
+    )
 }
 
 #[cold]

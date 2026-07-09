@@ -57,12 +57,8 @@ fn get_account_data_size_cpi(
 ) -> Result<u64, ProgramError> {
     let token_program_address = token_program.address();
 
-    GetAccountDataSize {
-        mint,
-        extensions: &[ExtensionType::ImmutableOwner],
-        token_program: token_program_address,
-    }
-    .invoke()?;
+    GetAccountDataSize::new(mint, &[ExtensionType::ImmutableOwner])
+        .invoke_with_program(token_program_address)?;
 
     get_return_data()
         .ok_or_else(no_account_size_return_data)

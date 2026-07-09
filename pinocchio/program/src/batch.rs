@@ -53,6 +53,7 @@ pub(crate) fn batch_init_and_lock_owner(
 }
 
 // This cannot be inlined because it makes the call site stack frame too large.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn batch_transfer_and_close(
     token_program: &Address,
     nested_ata: &AccountView,

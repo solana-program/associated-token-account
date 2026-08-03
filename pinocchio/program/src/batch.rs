@@ -5,7 +5,7 @@ use {
         cpi::{CpiAccount, Signer},
         instruction::InstructionAccount,
     },
-    pinocchio_token_2022::instructions::{
+    pinocchio_token::instructions::{
         Batch, CloseAccount, InitializeAccount, InitializeAccount3, InitializeImmutableOwner,
         IntoBatch, TransferChecked,
     },
@@ -19,13 +19,14 @@ pub(crate) fn batch_init_and_lock_owner(
     owner: &AccountView,
     rent_sysvar: Option<&AccountView>,
 ) -> ProgramResult {
-    /// `InitializeAccount` requires more accounts than `InitializeAccount3`,
-    /// so the maximum is based on the former.
+    // `InitializeAccount` requires more accounts than `InitializeAccount3`,
+    // so the maximum is based on the former.
     const MAX_ACCOUNTS_LEN: usize =
         InitializeImmutableOwner::ACCOUNTS_LEN + InitializeAccount::ACCOUNTS_LEN;
 
-    /// `InitializeAccount3` requires more instruction data than `InitializeAccount`,
-    /// so the maximum is based on the former.
+    // `InitializeAccount3` requires more instruction data than `InitializeAccount`,
+    // so the maximum is based on the former and we have 2 inner instructions in
+    // the header.
     const MAX_DATA_LEN: usize = Batch::header_data_len(2)
         + InitializeImmutableOwner::DATA_LEN
         + InitializeAccount3::DATA_LEN;
@@ -68,6 +69,7 @@ pub(crate) fn batch_transfer_and_close(
     const MAX_ACCOUNTS_LEN: usize =
         TransferChecked::MAX_ACCOUNTS_LEN + CloseAccount::MAX_ACCOUNTS_LEN;
 
+    // We have 2 inner instructions in the header.
     const DATA_LEN: usize =
         Batch::header_data_len(2) + TransferChecked::DATA_LEN + CloseAccount::DATA_LEN;
 

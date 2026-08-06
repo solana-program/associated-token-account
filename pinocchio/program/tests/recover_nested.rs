@@ -20,6 +20,7 @@ const TEST_MINT_AMOUNT: u64 = 100;
 struct RecoverNestedSetup {
     harness: AtaTestHarness,
     wallet: Address,
+    owner_ata: Address,
     owner_mint: Address,
     nested_mint: Address,
     nested_ata: Address,
@@ -86,6 +87,7 @@ fn recover_nested_setup_for_wallet(
     RecoverNestedSetup {
         harness,
         wallet,
+        owner_ata,
         owner_mint,
         nested_mint,
         nested_ata,
@@ -613,4 +615,52 @@ fn success_extra_signer_accounts_ignored() {
         .is_signer = false;
 
     assert_recover_nested_success(setup, recover_instruction);
+}
+
+#[test]
+fn fail_unsupported_token_program() {
+    let setup = recover_nested_setup(spl_token_interface::id(), spl_token_interface::id());
+
+    let unsupported_token_program_id = Address::new_unique();
+
+    // `nested_mint` is created for the unsupported token program.
+    let nested_mint = setup.harness.insert_mint_account_for_token_program(
+        setup.wallet,
+        9,
+        unsupported_token_program_id,
+    );
+
+    // `destination_ata` is created for the unsupported token program.
+    setup
+        .harness
+        .insert_token_account_at_ata_address_for_token_program(
+            setup.wallet,
+            nested_mint,
+            setup.wallet,
+            unsupported_token_program_id,
+        );
+
+    // `nested_ata` is created for the unsupported token program.
+    setup
+        .harness
+        .insert_token_account_at_ata_address_for_token_program(
+            setup.owner_ata,
+            nested_mint,
+            setup.owner_ata,
+            unsupported_token_program_id,
+        );
+
+    let recover_instruction = build_recover_nested_instruction(
+        &setup.wallet,
+        &setup.owner_mint,
+        &nested_mint,
+        &spl_token_interface::id(),
+        &unsupported_token_program_id,
+        &[],
+    );
+
+    setup.harness.ctx.process_and_validate_instruction(
+        &recover_instruction,
+        &[Check::err(ProgramError::IncorrectProgramId)],
+    );
 }

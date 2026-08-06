@@ -536,16 +536,56 @@ impl AtaTestHarness {
     pub fn insert_token_account_at_ata_address(&self, owner: Pubkey) -> Pubkey {
         let wallet = self.wallet.as_ref().expect("Wallet must be set");
         let mint = self.mint.expect("Mint must be set");
+
+        self.insert_token_account_at_ata_address_for_token_program(
+            *wallet,
+            mint,
+            owner,
+            self.token_program_id,
+        )
+    }
+
+    /// Insert a token account directly at the canonical ATA address for the
+    /// specified token program.
+    pub fn insert_token_account_at_ata_address_for_token_program(
+        &self,
+        wallet: Pubkey,
+        mint: Pubkey,
+        owner: Pubkey,
+        token_program_id: Pubkey,
+    ) -> Pubkey {
         self.ensure_accounts_with_lamports(&[(owner, 1_000_000)]);
         let ata_address =
-            get_associated_token_address_with_program_id(wallet, &mint, &self.token_program_id);
+            get_associated_token_address_with_program_id(&wallet, &mint, &token_program_id);
         // Create token account with wrong owner at the ATA address
-        let token_account = AccountBuilder::token_account(&mint, &owner, 0, &self.token_program_id);
+        let token_account = AccountBuilder::token_account(&mint, &owner, 0, &token_program_id);
         self.ctx
             .account_store
             .borrow_mut()
             .insert(ata_address, token_account);
         ata_address
+    }
+
+    /// Insert a token account directly at the canonical ATA address for the
+    /// specified token program.
+    pub fn insert_mint_account_for_token_program(
+        &self,
+        mint_authority: Pubkey,
+        decimals: u8,
+        token_program_id: Pubkey,
+    ) -> Pubkey {
+        self.ensure_accounts_with_lamports(&[(mint_authority, 1_000_000)]);
+        let mint_address = Pubkey::new_unique();
+        let mint_account = AccountBuilder::mint_account_with_mint_authority(
+            &mint_authority,
+            decimals,
+            &token_program_id,
+        );
+        self.ctx
+            .account_store
+            .borrow_mut()
+            .insert(mint_address, mint_account);
+        mint_address
     }
 
     /// Execute an instruction with a modified account address (for testing non-ATA addresses)
@@ -789,10 +829,38 @@ impl AccountBuilder {
             close_authority: close_authority.into(),
         };
 
-        if *token_program == spl_token_2022_interface::id() {
+        let mut account = if *token_program == spl_token_2022_interface::id() {
             mollusk_svm_programs_token::token2022::create_account_for_token_account(account_data)
         } else {
             mollusk_svm_programs_token::token::create_account_for_token_account(account_data)
-        }
+        };
+        // Ensure the account is owned by specified token program. This supports testing scenarios
+        // where the account is created with a custom token program.
+        account.owner = *token_program;
+        account
+    }
+
+    pub fn mint_account_with_mint_authority(
+        mint_authority: &Pubkey,
+        decimals: u8,
+        token_program: &Pubkey,
+    ) -> Account {
+        let account_data = Mint {
+            decimals,
+            freeze_authority: COption::None,
+            mint_authority: COption::Some(*mint_authority),
+            is_initialized: true,
+            supply: 0,
+        };
+
+        let mut account = if *token_program == spl_token_2022_interface::id() {
+            mollusk_svm_programs_token::token2022::create_account_for_mint(account_data)
+        } else {
+            mollusk_svm_programs_token::token::create_account_for_mint(account_data)
+        };
+        // Ensure the account is owned by specified token program. This supports testing scenarios
+        // where the account is created with a custom token program.
+        account.owner = *token_program;
+        account
     }
 }

@@ -1,4 +1,4 @@
-#### 2026-07-09 02:06:36.402967 UTC
+#### 2026-08-05 23:59:47.670023 UTC
 
 Solana CLI Version: Unknown
 
@@ -22,10 +22,10 @@ Solana CLI Version: Unknown
 | create_with_args (prefunded, token-2022) | 5300 | +5 |
 | create (token-2022 known mint) | 6675 | +2 |
 | create_with_args (token-2022 extended mint) | 6116 | +5 |
-| recover_nested (owner=spl-token, nested=spl-token) | 4070 | -1,079 |
-| recover_nested (owner=token-2022, nested=token-2022) | 5517 | -1,496 |
-| recover_nested (owner=spl-token, nested=token-2022) | 8073 | -1,496 |
-| recover_nested (owner=token-2022, nested=spl-token) | 4440 | -1,079 |
+| recover_nested (owner=spl-token, nested=spl-token) | 4086 | -1,063 |
+| recover_nested (owner=token-2022, nested=token-2022) | 5536 | -1,477 |
+| recover_nested (owner=spl-token, nested=token-2022) | 8092 | -1,477 |
+| recover_nested (owner=token-2022, nested=spl-token) | 4456 | -1,063 |
 
 #### 2026-06-30 17:04:38.853839 UTC
 

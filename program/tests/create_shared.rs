@@ -7,7 +7,7 @@ use {
     solana_rent::Rent,
     spl_associated_token_account_interface::address::get_associated_token_address_with_program_id,
     spl_associated_token_account_mollusk_harness::{
-        AtaTestHarness, CreateAtaInstructionType, build_create_ata_instruction,
+        AccountBuilder, AtaTestHarness, CreateAtaInstructionType, build_create_ata_instruction,
         token_2022_immutable_owner_account_len, token_2022_immutable_owner_rent_exempt_balance,
         token_account_rent_exempt_balance,
     },
@@ -81,6 +81,38 @@ fn instruction_type(idempotent: bool) -> CreateAtaInstructionType {
     } else {
         CreateAtaInstructionType::Create
     }
+}
+
+#[test_matrix(
+    [spl_token_interface::id(), spl_token_2022_interface::id()],
+    [true, false]
+)]
+fn create_rejects_token_account_at_wrong_address(token_program_id: Pubkey, idempotent: bool) {
+    let harness = AtaTestHarness::new(&token_program_id).with_wallet_and_mint(1_000_000, 6);
+    let wallet = harness.wallet.unwrap();
+    let mint = harness.mint.unwrap();
+
+    // A token account at a non-canonical address with a mismatched stored
+    // owner. Expecting the address check must win with `InvalidSeeds`.
+    let wrong_address = Pubkey::new_unique();
+    harness.ctx.account_store.borrow_mut().insert(
+        wrong_address,
+        AccountBuilder::token_account(&mint, &Pubkey::new_unique(), 0, &token_program_id),
+    );
+
+    let instruction = build_create_ata_instruction(
+        spl_associated_token_account_interface::program::id(),
+        harness.payer,
+        wrong_address,
+        wallet,
+        mint,
+        token_program_id,
+        instruction_type(idempotent),
+    );
+
+    harness
+        .ctx
+        .process_and_validate_instruction(&instruction, &[Check::err(ProgramError::InvalidSeeds)]);
 }
 
 #[test_matrix(

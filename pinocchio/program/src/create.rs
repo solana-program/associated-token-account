@@ -49,13 +49,6 @@ pub(crate) fn process_create_associated_token_account(
             // Preexisting ATA cannot be in the uninitialized state
             if let Ok(account_state) = token_account.base.state() {
                 if account_state != AccountState::Uninitialized {
-                    // Must match the wallet and mint supplied
-                    if token_account.base.owner() != wallet.address() {
-                        return Err(invalid_owner());
-                    }
-                    if token_account.base.mint() != mint.address() {
-                        return Err(invalid_account_data());
-                    }
                     // Validate expected address, using bump hint if provided
                     let derived_ata_addr = if let Some(bump) = bump_hint {
                         // When a `bump` is provided, the address is derived directly without performing
@@ -80,6 +73,13 @@ pub(crate) fn process_create_associated_token_account(
                     };
                     if derived_ata_addr != *associated_token_account.address() {
                         return Err(invalid_seeds());
+                    }
+                    // Must match the wallet and mint supplied
+                    if token_account.base.owner() != wallet.address() {
+                        return Err(invalid_owner());
+                    }
+                    if token_account.base.mint() != mint.address() {
+                        return Err(invalid_account_data());
                     }
                     // Confirmed `CreateIdempotent` no-op
                     return Ok(());

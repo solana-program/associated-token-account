@@ -26,6 +26,10 @@ pub enum AssociatedTokenAccountInstruction {
     ///   5. `[]` SPL Token program
     #[cfg_attr(
         feature = "codama",
+        codama(display(
+            intent = "Create associated token account",
+            interpolated_intent = "Create the associated token account of ${accounts.wallet} for mint ${accounts.mint}"
+        )),
         codama(account(
             name = "funder",
             signer,
@@ -35,14 +39,16 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(
             name = "associated_token_account",
             writable,
-            docs = "Associated token account address to be created"
+            docs = "Associated token account address to be created",
+            display(label = "Token Account")
         )),
         codama(account(name = "wallet", docs = "Wallet address for the new associated token account")),
         codama(account(name = "mint", docs = "The token mint for the new associated token account")),
         codama(account(
             name = "system_program",
             docs = "System program",
-            default_value = program("system")
+            default_value = program("system"),
+            display(skip = always)
         )),
         codama(account(name = "token_program", docs = "SPL Token program"))
     )]
@@ -59,6 +65,10 @@ pub enum AssociatedTokenAccountInstruction {
     ///   5. `[]` SPL Token program
     #[cfg_attr(
         feature = "codama",
+        codama(display(
+            intent = "Create associated token account",
+            interpolated_intent = "Create the associated token account of ${accounts.wallet} for mint ${accounts.mint}"
+        )),
         codama(account(
             name = "funder",
             signer,
@@ -68,14 +78,16 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(
             name = "associated_token_account",
             writable,
-            docs = "Associated token account address to be created"
+            docs = "Associated token account address to be created",
+            display(label = "Token Account")
         )),
         codama(account(name = "wallet", docs = "Wallet address for the new associated token account")),
         codama(account(name = "mint", docs = "The token mint for the new associated token account")),
         codama(account(
             name = "system_program",
             docs = "System program",
-            default_value = program("system")
+            default_value = program("system"),
+            display(skip = always)
         )),
         codama(account(name = "token_program", docs = "SPL Token program"))
     )]
@@ -119,12 +131,17 @@ pub enum AssociatedTokenAccountInstruction {
     ///      wallet
     #[cfg_attr(
         feature = "codama",
+        codama(display(
+            intent = "Recover nested token account",
+            interpolated_intent = "Recover nested token account ${accounts.nestedAssociatedTokenAccount} to ${accounts.destinationAssociatedTokenAccount}"
+        )),
         codama(optional_account_strategy = omitted),
         codama(account(
             name = "nested_associated_token_account",
             writable,
             docs = "Nested associated token account, must be owned by \
-                    `owner_associated_token_account`"
+                    `owner_associated_token_account`",
+            display(label = "Nested Token Account")
         )),
         codama(account(
             name = "nested_mint",
@@ -133,11 +150,13 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(
             name = "destination_associated_token_account",
             writable,
-            docs = "Wallet's associated token account"
+            docs = "Wallet's associated token account",
+            display(label = "Destination Token Account")
         )),
         codama(account(
             name = "owner_associated_token_account",
-            docs = "Owner associated token account address, must be owned by `wallet`"
+            docs = "Owner associated token account address, must be owned by `wallet`",
+            display(label = "Owner Token Account")
         )),
         codama(account(
             name = "owner_mint",
@@ -173,6 +192,10 @@ pub enum AssociatedTokenAccountInstruction {
     ///   6. `[]` Optional rent sysvar
     #[cfg_attr(
         feature = "codama",
+        codama(display(
+            intent = "Create associated token account",
+            interpolated_intent = "Create the associated token account of ${accounts.wallet} for mint ${accounts.mint}"
+        )),
         codama(optional_account_strategy = omitted),
         codama(account(
             name = "funder",
@@ -183,31 +206,42 @@ pub enum AssociatedTokenAccountInstruction {
         codama(account(
             name = "associated_token_account",
             writable,
-            docs = "Associated token account address to be created"
+            docs = "Associated token account address to be created",
+            display(label = "Token Account")
         )),
         codama(account(name = "wallet", docs = "Wallet address for the new associated token account")),
         codama(account(name = "mint", docs = "The token mint for the new associated token account")),
         codama(account(
             name = "system_program",
             docs = "System program",
-            default_value = program("system")
+            default_value = program("system"),
+            display(skip = always)
         )),
         codama(account(name = "token_program", docs = "SPL Token program")),
         codama(account(
             name = "rent_sysvar",
             optional,
             default_value = sysvar("rent"),
-            docs = "Optional rent sysvar"
+            docs = "Optional rent sysvar",
+            display(skip = always)
         ))
     )]
     CreateWithArgs {
         /// Selects whether behaves like `Create` or `CreateIdempotent`.
         mode: CreateMode,
         /// The ATA PDA bump seed.
-        #[cfg_attr(feature = "codama", codama(type = number(u8)))]
+        #[cfg_attr(
+            feature = "codama",
+            codama(type = number(u8)),
+            codama(display(skip = always))
+        )]
         bump: MaybeNull<BumpSeedHint>,
         /// The account data length for the new ATA.
-        #[cfg_attr(feature = "codama", codama(type = number(u32)))]
+        #[cfg_attr(
+            feature = "codama",
+            codama(type = number(u32)),
+            codama(display(skip = always))
+        )]
         account_len: MaybeNull<AccountLenHint>,
     },
 }

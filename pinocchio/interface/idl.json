@@ -1,13 +1,12 @@
 {
   "kind": "rootNode",
   "standard": "codama",
-  "version": "1.0.0",
+  "version": "1.8.0",
   "program": {
     "kind": "programNode",
     "name": "pinocchioAssociatedTokenAccountInterface",
     "publicKey": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
     "version": "0.1.0",
-    "accounts": [],
     "instructions": [
       {
         "kind": "instructionNode",
@@ -29,7 +28,11 @@
             "isSigner": false,
             "docs": [
               "Associated token account address to be created"
-            ]
+            ],
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "label": "Token Account"
+            }
           },
           {
             "kind": "instructionAccountNode",
@@ -60,6 +63,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "11111111111111111111111111111111"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -85,6 +92,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 0
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -94,7 +105,12 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Create associated token account",
+          "interpolatedIntent": "Create the associated token account of ${accounts.wallet} for mint ${accounts.mint}"
+        }
       },
       {
         "kind": "instructionNode",
@@ -116,7 +132,11 @@
             "isSigner": false,
             "docs": [
               "Associated token account address to be created"
-            ]
+            ],
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "label": "Token Account"
+            }
           },
           {
             "kind": "instructionAccountNode",
@@ -147,6 +167,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "11111111111111111111111111111111"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -172,6 +196,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 1
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -181,7 +209,12 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Create associated token account",
+          "interpolatedIntent": "Create the associated token account of ${accounts.wallet} for mint ${accounts.mint}"
+        }
       },
       {
         "kind": "instructionNode",
@@ -195,7 +228,11 @@
             "isSigner": false,
             "docs": [
               "Nested associated token account, must be owned by `owner_associated_token_account`"
-            ]
+            ],
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "label": "Nested Token Account"
+            }
           },
           {
             "kind": "instructionAccountNode",
@@ -213,7 +250,11 @@
             "isSigner": false,
             "docs": [
               "Wallet's associated token account"
-            ]
+            ],
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "label": "Destination Token Account"
+            }
           },
           {
             "kind": "instructionAccountNode",
@@ -222,7 +263,11 @@
             "isSigner": false,
             "docs": [
               "Owner associated token account address, must be owned by `wallet`"
-            ]
+            ],
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "label": "Owner Token Account"
+            }
           },
           {
             "kind": "instructionAccountNode",
@@ -275,6 +320,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 2
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -284,7 +333,12 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Recover nested token account",
+          "interpolatedIntent": "Recover nested token account ${accounts.nestedAssociatedTokenAccount} to ${accounts.destinationAssociatedTokenAccount}"
+        }
       },
       {
         "kind": "instructionNode",
@@ -307,7 +361,11 @@
             "isSigner": false,
             "docs": [
               "Associated token account address to be created"
-            ]
+            ],
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "label": "Token Account"
+            }
           },
           {
             "kind": "instructionAccountNode",
@@ -338,6 +396,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "11111111111111111111111111111111"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -361,6 +423,10 @@
             "defaultValue": {
               "kind": "publicKeyValueNode",
               "publicKey": "SysvarRent111111111111111111111111111111111"
+            },
+            "display": {
+              "kind": "instructionAccountDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -377,6 +443,10 @@
             "defaultValue": {
               "kind": "numberValueNode",
               "number": 3
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -394,6 +464,10 @@
               "kind": "numberTypeNode",
               "format": "u8",
               "endian": "le"
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           },
           {
@@ -403,6 +477,10 @@
               "kind": "numberTypeNode",
               "format": "u32",
               "endian": "le"
+            },
+            "display": {
+              "kind": "structFieldDisplayNode",
+              "skip": "always"
             }
           }
         ],
@@ -412,7 +490,12 @@
             "name": "discriminator",
             "offset": 0
           }
-        ]
+        ],
+        "display": {
+          "kind": "instructionDisplayNode",
+          "intent": "Create associated token account",
+          "interpolatedIntent": "Create the associated token account of ${accounts.wallet} for mint ${accounts.mint}"
+        }
       }
     ],
     "definedTypes": [
@@ -470,7 +553,6 @@
         ]
       }
     ],
-    "events": [],
     "errors": [
       {
         "kind": "errorNode",
@@ -479,6 +561,5 @@
         "message": "Associated token account owner does not match address derivation"
       }
     ]
-  },
-  "additionalPrograms": []
+  }
 }

@@ -12,8 +12,4 @@ Generate the IDL from repo root:
 make generate-idl-pinocchio-interface
 ```
 
-This writes:
-
-```text
-pinocchio/interface/idl.json
-```
+This writes `idl.json` at the repo root.

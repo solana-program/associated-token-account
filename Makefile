@@ -26,7 +26,7 @@ generate-clients:
 
 generate-idl-%:
 	@cargo install --locked --version =0.11.0 codama-cli
-	codama-rs generate-idl $(call make-path,$*) -o $(call make-path,$*)/idl.json --pretty $(ARGS)
+	codama-rs generate-idl $(call make-path,$*) -o idl.json --pretty $(ARGS)
 
 audit:
 	cargo audit \

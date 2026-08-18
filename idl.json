@@ -4,7 +4,7 @@
   "version": "1.8.0",
   "program": {
     "kind": "programNode",
-    "name": "pinocchioAssociatedTokenAccountInterface",
+    "name": "associatedTokenAccount",
     "publicKey": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
     "version": "0.1.0",
     "instructions": [

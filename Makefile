@@ -25,7 +25,7 @@ generate-clients:
 	@echo "No JavaScript clients to generate"
 
 generate-idl-%:
-	@cargo install --locked --version =0.11.0 codama-cli
+	@cargo install --locked --version =0.13.0 codama-cli
 	codama-rs generate-idl $(call make-path,$*) -o idl.json --pretty $(ARGS)
 
 audit:

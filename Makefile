@@ -1,6 +1,6 @@
-RUST_TOOLCHAIN_NIGHTLY = nightly-2026-01-22
-SOLANA_CLI_VERSION = 3.1.8
-PLATFORM_TOOLS_VERSION = 1.54
+RUST_TOOLCHAIN_NIGHTLY = nightly-2026-09-21
+SOLANA_CLI_VERSION = 4.2.2
+PLATFORM_TOOLS_VERSION = 1.57
 
 nightly = +${RUST_TOOLCHAIN_NIGHTLY}
 
@@ -25,7 +25,7 @@ generate-clients:
 	@echo "No JavaScript clients to generate"
 
 generate-idl-%:
-	@cargo install --locked --version =0.13.0 codama-cli
+	@cargo install --locked --version =0.13.2 codama-cli
 	codama-rs generate-idl $(call make-path,$*) -o idl.json --pretty $(ARGS)
 
 audit:
@@ -93,7 +93,6 @@ mollusk run-test \
 endef
 
 regression-%:
-	cargo build-sbf --manifest-path $(call make-path,$*)/Cargo.toml --tools-version $(PLATFORM_TOOLS_VERSION)
 	$(call run-mollusk-regression,$*,program/tests/fixtures/spl_token_2022.so,pinocchio/program/fuzz/blob)
 	$(call run-mollusk-regression,$*,program/tests/fixtures/mock_token_program.so,pinocchio/program/fuzz/blob-mock)
 

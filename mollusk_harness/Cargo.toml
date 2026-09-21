@@ -26,7 +26,7 @@ solana-system-interface = { workspace = true, features = ["bincode"] }
 spl-associated-token-account-interface = { workspace = true }
 spl-token-interface = { workspace = true }
 spl-token-2022-interface = { workspace = true }
-wincode = { workspace = true }
+wincode = { workspace = true, features = ["alloc"] }
 
 [lints]
 workspace = true

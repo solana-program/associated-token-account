@@ -13,7 +13,11 @@ use {
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, SchemaRead, SchemaWrite)]
 #[wincode(tag_encoding = "u8")]
-#[cfg_attr(feature = "codama", derive(CodamaInstructions))]
+#[cfg_attr(
+    feature = "codama",
+    derive(CodamaInstructions),
+    allow(clippy::duplicated_attributes)
+)]
 pub enum AssociatedTokenAccountInstruction {
     /// Creates an associated token account for the given wallet address and
     /// token mint Returns an error if the account exists.

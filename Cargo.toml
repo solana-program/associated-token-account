@@ -5,10 +5,10 @@ members = ["interface", "program", "mollusk_harness", "pinocchio/interface", "pi
 [workspace.dependencies]
 codama = "0.13.2"
 codama-macros = "0.13.2"
-mollusk-svm = "0.15.1"
-mollusk-svm-bencher = "0.15.1"
-mollusk-svm-programs-token = "0.15.1"
-mollusk-svm-result = "0.15.1"
+mollusk-svm = { git = "https://github.com/anza-xyz/mollusk", rev = "f14a5ffc9f5c2c538cb32bcdada280dd75725bef" }
+mollusk-svm-bencher = { git = "https://github.com/anza-xyz/mollusk", rev = "f14a5ffc9f5c2c538cb32bcdada280dd75725bef" }
+mollusk-svm-programs-token = { git = "https://github.com/anza-xyz/mollusk", rev = "f14a5ffc9f5c2c538cb32bcdada280dd75725bef" }
+mollusk-svm-result = { git = "https://github.com/anza-xyz/mollusk", rev = "f14a5ffc9f5c2c538cb32bcdada280dd75725bef" }
 pinocchio = { version = "0.11.2", default-features = false }
 pinocchio-associated-token-account-interface = { path = "pinocchio/interface" }
 pinocchio-log = "0.5.1"

@@ -1580,8 +1580,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "mollusk-svm"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "283ff0ca84f639081a577c16d2bd705e6a45cce79428965860c5973aae6c2169"
+source = "git+https://github.com/anza-xyz/mollusk?rev=f14a5ffc9f5c2c538cb32bcdada280dd75725bef#f14a5ffc9f5c2c538cb32bcdada280dd75725bef"
 dependencies = [
  "bincode",
  "mollusk-svm-error",
@@ -1623,8 +1622,7 @@ dependencies = [
 [[package]]
 name = "mollusk-svm-bencher"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f04d7b1abed5db53e3d9536262a8b40c2f08e45a2370509f1b9a598371a1fa00"
+source = "git+https://github.com/anza-xyz/mollusk?rev=f14a5ffc9f5c2c538cb32bcdada280dd75725bef#f14a5ffc9f5c2c538cb32bcdada280dd75725bef"
 dependencies = [
  "chrono",
  "mollusk-svm",
@@ -1638,8 +1636,7 @@ dependencies = [
 [[package]]
 name = "mollusk-svm-error"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "557ec90b7648b8b1a17c63fcd353a8fcb520bfd8ed2796dcccc40c4338ff3dd1"
+source = "git+https://github.com/anza-xyz/mollusk?rev=f14a5ffc9f5c2c538cb32bcdada280dd75725bef#f14a5ffc9f5c2c538cb32bcdada280dd75725bef"
 dependencies = [
  "solana-pubkey 4.4.0",
  "thiserror 2.0.20",
@@ -1648,8 +1645,7 @@ dependencies = [
 [[package]]
 name = "mollusk-svm-programs-token"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a71fd6d8b0e97f080cc89a6267fcfe317fa45d6e26fe4cbd229ddf488e1281d6"
+source = "git+https://github.com/anza-xyz/mollusk?rev=f14a5ffc9f5c2c538cb32bcdada280dd75725bef#f14a5ffc9f5c2c538cb32bcdada280dd75725bef"
 dependencies = [
  "mollusk-svm",
  "mollusk-svm-programs-token-2022",
@@ -1664,8 +1660,7 @@ dependencies = [
 [[package]]
 name = "mollusk-svm-programs-token-2022"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7915f5f5032aa7b856575fdad6c2639a928fd40d41f052716b255f52b6a03f4"
+source = "git+https://github.com/anza-xyz/mollusk?rev=f14a5ffc9f5c2c538cb32bcdada280dd75725bef#f14a5ffc9f5c2c538cb32bcdada280dd75725bef"
 dependencies = [
  "mollusk-svm",
  "solana-account",
@@ -1678,8 +1673,7 @@ dependencies = [
 [[package]]
 name = "mollusk-svm-result"
 version = "0.15.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa04c37c77daa8cb23cdaa36d1924575ed14ea208376c8631d709417fc900b8"
+source = "git+https://github.com/anza-xyz/mollusk?rev=f14a5ffc9f5c2c538cb32bcdada280dd75725bef#f14a5ffc9f5c2c538cb32bcdada280dd75725bef"
 dependencies = [
  "solana-account",
  "solana-instruction 3.5.1",
@@ -2665,6 +2659,7 @@ dependencies = [
  "solana-sdk-ids",
  "solana-sdk-macro",
  "solana-sysvar-id",
+ "wincode",
 ]
 
 [[package]]
@@ -3004,6 +2999,7 @@ dependencies = [
  "cfg-if",
  "itertools 0.14.0",
  "log",
+ "qualifier_attr",
  "rand 0.9.5",
  "serde",
  "solana-account",
@@ -3016,6 +3012,7 @@ dependencies = [
  "solana-instruction 3.5.1",
  "solana-last-restart-slot",
  "solana-loader-v3-interface",
+ "solana-message",
  "solana-program-entrypoint",
  "solana-pubkey 4.4.0",
  "solana-rent",

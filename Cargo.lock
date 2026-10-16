@@ -1580,9 +1580,9 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mollusk-svm"
-version = "0.16.0"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f968591e7b535062b24019f0dd5a8cb7bcaf44deb7b3c2434c099f986cbc157e"
+checksum = "b6a5e8cab76a62dbf011db72d9fbdbb17af32adacaffb796e868dfde1402b466"
 dependencies = [
  "bincode",
  "mollusk-svm-error",
@@ -1639,9 +1639,9 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-error"
-version = "0.16.0"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "efe5233925a48b1e24549cb291f42e0e4291e291c64c5a6dbf7ed25bc0f1ea08"
+checksum = "4fd0b4364b2fe672cfc9fc7999a973104de9f21a76da04524d85d941f098d27b"
 dependencies = [
  "solana-pubkey 4.4.0",
  "thiserror 2.0.20",

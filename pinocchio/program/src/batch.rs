@@ -51,9 +51,10 @@ pub(crate) fn batch_init_and_lock_owner(
         }
     };
 
-    // The `token_program` address is verified by the caller. It is only used by
-    // `CreateAssociatedTokenAccount` processor.
-    batch.invoke_with_unverified_program(token_program)
+    // SAFETY: Accounts are not borrowed after `into_batch` calls. The `token_program`
+    // address is verified by the caller and it is only used by `CreateAssociatedTokenAccount`
+    // processor.
+    unsafe { batch.invoke_with_unverified_program_unchecked(token_program) }
 }
 
 // This cannot be inlined because it makes the call site stack frame too large.
@@ -98,5 +99,7 @@ pub(crate) fn batch_transfer_and_close(
     // Close the now-empty nested ATA and return its rent lamports to the wallet
     CloseAccount::new(nested_ata, wallet, owner_ata).into_batch(&mut batch)?;
 
-    batch.invoke_signed_with_program(signer, token_program)
+    // SAFETY: Accounts are not borrowed after `into_batch` calls. The `token_program`
+    // address is verified by the caller.
+    unsafe { batch.invoke_signed_with_program_unchecked(signer, token_program) }
 }

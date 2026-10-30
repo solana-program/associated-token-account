@@ -1959,9 +1959,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pinocchio"
-version = "0.11.2"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6cababcb62a2e739c7078ae16eda02789a6e3edd21bbdded864e85c38a7914d"
+checksum = "402c0799a02d9b979837f50cade9f758898813430873542b87a62aaa3d56022a"
 dependencies = [
  "solana-account-view",
  "solana-address 2.9.0",
@@ -1993,7 +1993,6 @@ dependencies = [
  "mollusk-svm-result",
  "pinocchio",
  "pinocchio-associated-token-account-interface",
- "pinocchio-log",
  "pinocchio-system",
  "pinocchio-token",
  "pinocchio-token-2022",
@@ -2002,6 +2001,7 @@ dependencies = [
  "solana-instruction 3.5.1",
  "solana-logger",
  "solana-program-error",
+ "solana-program-log",
  "solana-program-option",
  "solana-program-pack",
  "solana-rent",
@@ -2014,30 +2014,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "pinocchio-log"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd11022408f312e6179ece321c1f7dc0d1b2aa7765fddd39b2a7378d65a899e8"
-dependencies = [
- "pinocchio-log-macro",
-]
-
-[[package]]
-name = "pinocchio-log-macro"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69fb52edb3c5736b044cc462b0957b9767d0f574d138f4e2761438c498a4b467"
-dependencies = [
- "quote",
- "regex",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "pinocchio-system"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3ae2ee67b42e2ac797dd88312da473c895660e270d8093e0ba2749b885b5778"
+checksum = "436f1ab80f654fc35e24162bd610d86b5215d0b4265ee45479e70cea896f63fa"
 dependencies = [
  "pinocchio",
  "solana-address 2.9.0",
@@ -2045,9 +2025,9 @@ dependencies = [
 
 [[package]]
 name = "pinocchio-token"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "217e3259f93a1520e4692b18653dad4d29af54ffc8b3a09819808be85dada074"
+checksum = "8bb7dade00a30bd38a2081987c4990518dbe101ff1f36bcea10e6101238d5ce4"
 dependencies = [
  "solana-account-view",
  "solana-address 2.9.0",
@@ -2057,9 +2037,9 @@ dependencies = [
 
 [[package]]
 name = "pinocchio-token-2022"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a3c164973916f044bebff3c8cb4467088bafb13cbdb818522b9ca8782940d06"
+checksum = "81270f2cbbdaf774e4081943e280b25c5830943c1486b05f97a001cdc619427e"
 dependencies = [
  "pinocchio-token",
  "solana-account-view",
@@ -2577,9 +2557,9 @@ dependencies = [
 
 [[package]]
 name = "solana-account-view"
-version = "2.0.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc141b940560430425ebaadb7645496c45f6a10fad9911d719bd03eab7f4d422"
+checksum = "6d648359fbdc962a6d4435b8a05b6f4920fa9ea2c12bb92d0284c7eefb81551f"
 dependencies = [
  "solana-address 2.9.0",
  "solana-program-error",
@@ -2920,9 +2900,9 @@ dependencies = [
 
 [[package]]
 name = "solana-instruction-view"
-version = "2.1.0"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ab7a27d0c4214b9f7389c3dd00b68c93093a67f1dcc5b7893aebe299bbcbb47"
+checksum = "e145b112003bc400015bac7cc36196bd37404defb112daa9ac9ca7f47450ada8"
 dependencies = [
  "solana-account-view",
  "solana-address 2.9.0",
@@ -3145,6 +3125,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f04fa578707b3612b095f0c8e19b66a1233f7c42ca8082fcb3b745afcc0add6"
 dependencies = [
  "borsh",
+]
+
+[[package]]
+name = "solana-program-log"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffd48ddef444e6db138fb11bdb9ab8117bb830a78cef051a453454de5613039b"
+dependencies = [
+ "solana-define-syscall 5.3.0",
+ "solana-program-log-macro",
+]
+
+[[package]]
+name = "solana-program-log-macro"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73b234f83b71ba6b5d3236b69ba42ccb639907cb724bf58e94ce8398b51ac87c"
+dependencies = [
+ "quote",
+ "regex",
+ "syn 2.0.119",
 ]
 
 [[package]]

@@ -19,10 +19,10 @@ workspace = true
 [dependencies]
 pinocchio = { workspace = true, features = ["cpi"] }
 pinocchio-associated-token-account-interface = { workspace = true }
-pinocchio-log = { workspace = true, features = ["macro"] }
 pinocchio-system = { workspace = true }
 pinocchio-token = { workspace = true }
 pinocchio-token-2022 = { workspace = true }
+solana-program-log = { workspace = true }
 spl-token-2022-interface = { workspace = true }
 
 [dev-dependencies]

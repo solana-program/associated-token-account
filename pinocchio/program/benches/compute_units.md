@@ -1,4 +1,4 @@
-#### 2026-10-30 20:07:14.317029 UTC
+#### 2026-10-30 21:39:25.024372 UTC
 
 Solana CLI Version: solana-cli 4.3.0 (src:96abb0cc; feat:c9ad34d2, client:Agave)
 
@@ -20,12 +20,12 @@ Solana CLI Version: solana-cli 4.3.0 (src:96abb0cc; feat:c9ad34d2, client:Agave)
 | create_with_args (prefunded, spl-token) | 2757 | -68 |
 | create (prefunded, token-2022) | 5052 | -83 |
 | create_with_args (prefunded, token-2022) | 5211 | -99 |
-| create (token-2022 known mint) | 6604 | -83 |
+| create (token-2022 known mint) | 6598 | -89 |
 | create_with_args (token-2022 extended mint) | 6027 | -99 |
-| recover_nested (owner=spl-token, nested=spl-token) | 4009 | -68 |
-| recover_nested (owner=token-2022, nested=token-2022) | 5483 | -68 |
-| recover_nested (owner=spl-token, nested=token-2022) | 7977 | -74 |
-| recover_nested (owner=token-2022, nested=spl-token) | 4365 | -74 |
+| recover_nested (owner=spl-token, nested=spl-token) | 4008 | -69 |
+| recover_nested (owner=token-2022, nested=token-2022) | 5482 | -69 |
+| recover_nested (owner=spl-token, nested=token-2022) | 7976 | -75 |
+| recover_nested (owner=token-2022, nested=spl-token) | 4364 | -75 |
 
 #### 2026-10-02 16:19:40.478398 UTC
 

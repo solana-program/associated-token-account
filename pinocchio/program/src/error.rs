@@ -5,7 +5,7 @@
 use {
     pinocchio::error::ProgramError,
     pinocchio_associated_token_account_interface::error::AssociatedTokenAccountError,
-    pinocchio_log::log,
+    solana_program_log::log,
 };
 
 #[cold]

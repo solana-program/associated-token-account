@@ -30,7 +30,7 @@ solana-system-interface = "3.2.0"
 solana-zero-copy = "1.2.0"
 spl-associated-token-account-interface = { version = "2.0.0", path = "interface" }
 spl-associated-token-account-mollusk-harness = { version = "1.0.0", path = "mollusk_harness" }
-spl-token-2022-interface = "3.1.1"
+spl-token-2022-interface = "4.0.0"
 spl-token-interface = "2.0.0"
 test-case = "3.3.1"
 wincode = { version = "0.6.1", default-features = false }

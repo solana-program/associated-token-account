@@ -1726,9 +1726,9 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-bencher"
-version = "0.16.3"
+version = "0.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06df96d1331c3131509aa7a0c7a4c5c6750195686d665c39353f1c3644e4c84f"
+checksum = "5513062d55279e8223d4ff34350d1885049463d01da186e1017383908c49c826"
 dependencies = [
  "chrono",
  "mollusk-svm",

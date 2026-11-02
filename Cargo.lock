@@ -1751,9 +1751,9 @@ dependencies = [
 
 [[package]]
 name = "mollusk-svm-programs-token"
-version = "0.16.3"
+version = "0.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f036cba7c9cda97ece78660af56a0a978e0434444bb344c683e3403fa8c2cdb2"
+checksum = "39ee1ba6f645ed82638d5fa162a93890fafbc69418a4144be24045474accf3db"
 dependencies = [
  "mollusk-svm",
  "mollusk-svm-programs-token-2022",

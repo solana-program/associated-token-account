@@ -5,7 +5,7 @@ members = ["interface", "program", "mollusk_harness", "pinocchio/interface", "pi
 [workspace.dependencies]
 codama = "1.0.0"
 codama-macros = "1.0.0"
-mollusk-svm = "0.16"
+mollusk-svm = "0.17"
 mollusk-svm-bencher = "0.16"
 mollusk-svm-programs-token = "0.16"
 mollusk-svm-result = "0.16"

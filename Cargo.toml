@@ -6,7 +6,7 @@ members = ["interface", "program", "mollusk_harness", "pinocchio/interface", "pi
 codama = "1.0.0"
 codama-macros = "1.0.0"
 mollusk-svm = "0.16"
-mollusk-svm-bencher = "0.16"
+mollusk-svm-bencher = "0.17"
 mollusk-svm-programs-token = "0.16"
 mollusk-svm-result = "0.16"
 pinocchio = { version = "0.12", default-features = false }

@@ -3,7 +3,7 @@ resolver = "2"
 members = ["interface", "program", "mollusk_harness", "pinocchio/interface", "pinocchio/program"]
 
 [workspace.dependencies]
-codama = "0.13.2"
+codama = "1.0.0"
 codama-macros = "0.13.2"
 mollusk-svm = "0.16"
 mollusk-svm-bencher = "0.16"

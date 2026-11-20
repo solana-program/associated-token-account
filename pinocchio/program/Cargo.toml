@@ -33,6 +33,7 @@ mollusk-svm-result = { workspace = true, features = ["inner-instructions"] }
 solana-account = { workspace = true }
 solana-address = { workspace = true }
 solana-instruction = { workspace = true }
+solana-instruction-error = { workspace = true }
 solana-logger = { workspace = true }
 solana-program-error = { workspace = true }
 solana-program-option = { workspace = true }
